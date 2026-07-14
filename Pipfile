@@ -8,6 +8,7 @@ sqlalchemy = "*"
 alembic = "*"
 asyncpg = "*"
 python-dotenv = "*"
+psycopg2-binary = "*"
 
 [dev-packages]
 

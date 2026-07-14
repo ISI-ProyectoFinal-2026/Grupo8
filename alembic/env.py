@@ -12,6 +12,13 @@ config = context.config
 import os
 from dotenv import load_dotenv
 
+# Importaciones de los archivos
+from core.database import Base
+from models.user import User
+from models.reserva import Reserva
+from models.ingreso_fisico import IngresoFisico
+from models.configuracion import ConfiguracionCamping
+
 # Cargar las variables del archivo .env
 load_dotenv()
 
@@ -21,8 +28,8 @@ DB_PASS = os.getenv("POSTGRES_PASSWORD")
 DB_NAME = os.getenv("POSTGRES_DB")
 DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 
-# Construir la URL de conexión asíncrona con asyncpg
-DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@localhost:{DB_PORT}/{DB_NAME}"
+# Construir la URL de conexión síncrona (sacamos el +asyncpg para una conexión sincronica por Alembic)
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@127.0.0.1:{DB_PORT}/{DB_NAME}"
 
 # Sobrescribir la configuración vacía de alembic.ini
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
@@ -36,7 +43,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = None
+target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
