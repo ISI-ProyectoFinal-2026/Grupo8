@@ -15,6 +15,6 @@ class IngresoFisico(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     reserva_id = Column(UUID(as_uuid=True), ForeignKey("reservas.id"), nullable=True)
-    fecha_hora_ingreso = Column(DateTime, default=datetime.utcnow, nullable=False)
+    fecha_hora_ingreso = Column(DateTime, default=datetime.utcnow, index=True, nullable=False)
     tipo_ingreso = Column(Enum(TipoIngresoEnum), nullable=False)
     sincronizado_offline = Column(Boolean, default=False)
