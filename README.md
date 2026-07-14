@@ -34,3 +34,9 @@ Asegurate de estar dentro del entorno virtual (`pipenv shell`) y tener Docker co
 
 **Para generar una nueva migración (Solo cuando se modifican los modelos en core/models):**
 `alembic revision --autogenerate -m "Descripción de los cambios"`
+
+## Seeding de Datos
+Para limpiar la base de datos y cargar los datos de prueba iniciales:
+1. Asegurate de que **Docker esté corriendo** y el contenedor de la base de datos esté activo.
+2. Ejecutá en la terminal:
+   `python seed.py`
