@@ -15,7 +15,7 @@ class Reserva(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
-    fecha_reserva = Column(DateTime, nullable=False)
+    fecha_reserva = Column(DateTime, index=True, nullable=False)
     cantidad_personas = Column(Integer, nullable=False)
     estado_pago = Column(Enum(EstadoPagoEnum), default=EstadoPagoEnum.PENDIENTE, nullable=False)
     
