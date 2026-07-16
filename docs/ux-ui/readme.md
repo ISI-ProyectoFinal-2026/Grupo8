@@ -115,3 +115,82 @@ Además del flujo principal de reserva, el sistema contempla las siguientes pant
 - Mis reservas
 
 Estas vistas forman parte de la navegación del portal y fueron consideradas durante el diseño de la arquitectura de información. Sin embargo, no fueron prototipadas en esta iteración, ya que el objetivo del Sprint 1 fue priorizar el diseño del flujo crítico de reserva y acceso definido en los criterios de aceptación de la Issue 3. Su diseño visual será abordado en futuras iteraciones sin afectar la experiencia principal del usuario.
+
+---
+
+## 3.3 PWA de acceso
+
+### Flujo diseñado
+
+```text
+Login
+   │
+Pantalla principal (Escáner)
+   │
+   ├── Escanear QR
+   │      │
+   │      ├── QR válido → Mostrar "Acceso permitido" → Registrar ingreso
+   │      ├── QR duplicado → Mostrar "Acceso rechazado"
+   │      ├── QR cancelado → Mostrar "Acceso rechazado"
+   │      └── QR inválido/firma incorrecta → Mostrar "Acceso rechazado"
+   │
+   ├── Registro manual
+   │      └── Confirmación del ingreso
+   │
+   ├── Historial
+   └── Estado de sincronización
+```
+
+### Pantallas 
+
+**Pantallas diseñadas**
+
+- Inicio de sesión
+- Escaner
+- Acceso permitido
+- Acceso rechazado
+- Registro manual
+- Confirmación de registro
+- Historial
+- Estado de sincronización - conectado
+- Estado de sincronización - no conectado
+- Cerrar sesión
+
+## 3.4 Dashboard administrativo
+
+### Flujo diseñado
+
+```text
+Login
+   │
+Inicio (Dashboard)
+   │
+   ├── Reservas
+   │      └── Ver detalle
+   │
+   ├── Historial
+   │
+   ├── Configuración
+   │      └── Guardar cambios
+   │
+   └── Menú de usuario
+          ├── Cambiar contraseña
+          └── Cerrar sesión
+```
+
+### Pantallas 
+
+**Pantallas diseñadas**
+
+- Inicio de sesión
+- Inicio (dashboard)
+- Gestión de reservas
+- Historial de ingresos
+- Configuración
+
+**Pantallas contempladas**
+
+- Menú de usuario
+- Modo offline
+
+El diseño de estas pantallas fue omitido por seguir patrones de interfaz estándar y no requerir validación en esta etapa del proyecto.
