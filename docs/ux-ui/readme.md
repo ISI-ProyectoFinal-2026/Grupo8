@@ -155,3 +155,42 @@ Pantalla principal (Escáner)
 - Estado de sincronización - conectado
 - Estado de sincronización - no conectado
 - Cerrar sesión
+
+## 3.4 Dashboard administrativo
+
+### Flujo diseñado
+
+```text
+Login
+   │
+Inicio (Dashboard)
+   │
+   ├── Reservas
+   │      └── Ver detalle
+   │
+   ├── Historial
+   │
+   ├── Configuración
+   │      └── Guardar cambios
+   │
+   └── Menú de usuario
+          ├── Cambiar contraseña
+          └── Cerrar sesión
+```
+
+### Pantallas 
+
+**Pantallas diseñadas**
+
+- Inicio de sesión
+- Inicio (dashboard)
+- Gestión de reservas
+- Historial de ingresos
+- Configuración
+
+**Pantallas contempladas**
+
+- Menú de usuario
+- Modo offline
+
+El diseño de estas pantallas fue omitido por seguir patrones de interfaz estándar y no requerir validación en esta etapa del proyecto.
