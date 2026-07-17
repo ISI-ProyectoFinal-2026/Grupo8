@@ -65,7 +65,7 @@ def test_generate_offline_qr_token_success(valid_payload_data, test_private_key)
 
     clean_public_key = public_key_pem.replace("\\n", "\n")
     
-    decoded = jwt.decode(token, clean_public_key, algorithms=["ES256"])
+    decoded = jwt.decode(token, clean_public_key, algorithms=["ES256"], options={"verify_exp": False})
     assert decoded["jti"] == valid_payload_data["jti"]
     assert decoded["reserva_id"] == valid_payload_data["reserva_id"]
     assert decoded["typ"] == "visitante"

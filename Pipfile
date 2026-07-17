@@ -9,8 +9,14 @@ alembic = "*"
 asyncpg = "*"
 python-dotenv = "*"
 psycopg2-binary = "*"
+fastapi = "*"
+uvicorn = "*"
+cryptography = "*"
+pyjwt = {extras = ["crypto"], version = "*"}
+pydantic-settings = "*"
 
 [dev-packages]
+pytest = "*"
 
 [requires]
 python_version = "3.11"
