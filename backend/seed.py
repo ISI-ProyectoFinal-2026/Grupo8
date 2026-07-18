@@ -1,6 +1,6 @@
-from core.database import SessionLocal, Base, engine
-from models.user import User, RoleEnum
-from models.reserva import Reserva, EstadoPagoEnum
+from backend.core.database import SessionLocal, Base, engine
+from backend.models.user import User, RoleEnum
+from backend.models.reserva import Reserva, EstadoPagoEnum
 from datetime import datetime, timedelta
 import uuid
 

@@ -1,7 +1,7 @@
 import jwt
 from typing import Optional
-from config import settings
-from schemas import JWTPayloadSchema
+from backend.security.config import settings
+from backend.security.schemas import JWTPayloadSchema
 
 class SecurityService:
     """

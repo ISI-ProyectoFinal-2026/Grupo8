@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, Enum, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 
-from core.database import Base
+from backend.core.database import Base
 
 class TipoIngresoEnum(enum.Enum):
     WEB = "Web"

@@ -3,9 +3,9 @@ from pydantic import ValidationError
 import jwt
 from cryptography.hazmat.primitives import serialization
 
-from services import SecurityService
-from schemas import JWTPayloadSchema
-from config import settings
+from backend.security.services import SecurityService
+from backend.security.schemas import JWTPayloadSchema
+from backend.security.config import settings
 
 # --- Fixtures para Reutilización de Datos (DRY) ---
 

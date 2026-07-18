@@ -4,7 +4,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 # Importamos nuestro script
-import generate_keys
+import backend.security.generate_keys as generate_keys
 
 def test_generacion_e_integridad_es256(tmp_path, monkeypatch):
     """
