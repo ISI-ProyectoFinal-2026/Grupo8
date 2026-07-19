@@ -18,10 +18,10 @@ jobs:
     - name: Checkout del código
       uses: actions/checkout@v4
 
-    - name: Configurar Python 3.11
+    - name: Configurar Python 3.13
       uses: actions/setup-python@v5
       with:
-        python-version: "3.11"
+        python-version: "3.13"
 
     - name: Instalar Pipenv y dependencias
       run: |
