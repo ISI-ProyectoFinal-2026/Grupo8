@@ -5,7 +5,7 @@ from sqlalchemy import Column, String, Boolean, DateTime, Enum
 from sqlalchemy.dialects.postgresql import UUID
 
 # Importamos la clase Base que creaste en la Sub-issue 1.2
-from backend.core.database import Base
+from core.database import Base
 
 # 1. Definimos los roles exactos mediante un Enum
 class RoleEnum(enum.Enum):

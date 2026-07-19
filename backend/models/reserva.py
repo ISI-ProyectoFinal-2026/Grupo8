@@ -3,7 +3,7 @@ import enum
 from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 
-from backend.core.database import Base
+from core.database import Base
 
 class EstadoPagoEnum(enum.Enum):
     PENDIENTE = "Pendiente"

@@ -2,7 +2,7 @@ import uuid
 from sqlalchemy import Column, Integer, Float, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
-from backend.core.database import Base
+from core.database import Base
 
 class ConfiguracionCamping(Base):
     __tablename__ = "configuracion_camping"
