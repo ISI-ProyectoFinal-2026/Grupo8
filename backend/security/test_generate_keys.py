@@ -1,10 +1,9 @@
 # test_generate_keys.py
-import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
 # Importamos nuestro script
-import generate_keys
+import security.generate_keys as generate_keys
 
 def test_generacion_e_integridad_es256(tmp_path, monkeypatch):
     """
@@ -27,8 +26,8 @@ def test_generacion_e_integridad_es256(tmp_path, monkeypatch):
     
     # 4. Extracción de las claves simulando cómo las leerá FastAPI/Vite
     lines = content.split('\n')
-    private_str = [l for l in lines if l.startswith('JWT_PRIVATE_KEY=')][0].split('"')[1].replace('\\n', '\n')
-    public_str = [l for l in lines if l.startswith('VITE_PUBLIC_KEY=')][0].split('"')[1].replace('\\n', '\n')
+    private_str = [line for line in lines if line.startswith('JWT_PRIVATE_KEY=')][0].split('"')[1].replace('\\n', '\n')
+    public_str = [line for line in lines if line.startswith('VITE_PUBLIC_KEY=')][0].split('"')[1].replace('\\n', '\n')
     
     # 5. Verificación Criptográfica: Si cryptography puede cargarlas sin error,
     # significa que el formato PEM y la curva matemática son perfectos.

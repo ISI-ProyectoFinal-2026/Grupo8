@@ -1,0 +1,17 @@
+[tool.ruff]
+line-length = 88
+exclude = ["alembic"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+exclude = ["alembic"]
+explicit_package_bases = true
+disable_error_code = [
+    "no-untyped-def",
+    "no-untyped-call",
+    "misc",
+    "var-annotated",
+    "call-arg",
+    "assignment"
+]

@@ -1,8 +1,7 @@
-from core.database import SessionLocal, Base, engine
+from core.database import SessionLocal
 from models.user import User, RoleEnum
 from models.reserva import Reserva, EstadoPagoEnum
 from datetime import datetime, timedelta
-import uuid
 
 # Creamos la sesión
 db = SessionLocal()

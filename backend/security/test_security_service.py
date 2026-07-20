@@ -3,9 +3,9 @@ from pydantic import ValidationError
 import jwt
 from cryptography.hazmat.primitives import serialization
 
-from services import SecurityService
-from schemas import JWTPayloadSchema
-from config import settings
+from security.services import SecurityService
+from security.schemas import JWTPayloadSchema
+from security.config import settings
 
 # --- Fixtures para Reutilización de Datos (DRY) ---
 
@@ -56,7 +56,6 @@ def test_generate_offline_qr_token_success(valid_payload_data, test_private_key)
     public_key_pem = settings.model_dump().get("vite_public_key") or settings.model_dump().get("vite_public_key")
     if not public_key_pem:
         # Fallback dinámico: extraemos clave pública de la privada para el test
-        from cryptography.hazmat.primitives.asymmetric import ec
         priv_key_obj = serialization.load_pem_private_key(test_private_key.replace("\\n", "\n").encode(), password=None)
         public_key_pem = priv_key_obj.public_key().public_bytes(
             encoding=serialization.Encoding.PEM,
