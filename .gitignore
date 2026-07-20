@@ -1,14 +1,22 @@
 # Ambientes virtuales
 venv/
 env/
+.venv/
 __pycache__/
 
 # Variables de entorno y secretos
 .env
+.env.local
+.env.*
 *.pem
 *.key
 
-# Node / Frontend (para cuando sumemos React)
+# Node y Frontend (PWA)
 node_modules/
 dist/
-.env.local
+dist-ssr/
+
+# Testing y Calidad (Pytest / Vitest / ESLint)
+.pytest_cache/
+coverage/
+.eslintcache
