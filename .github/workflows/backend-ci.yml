@@ -32,3 +32,5 @@ jobs:
     - name: Ejecutar tests y control de calidad
       run: |
         pipenv run python -m pytest
+      env: 
+        JWT_PRIVATE_KEY: "clave_secreta_falsa_para_el_ci_de_github"
