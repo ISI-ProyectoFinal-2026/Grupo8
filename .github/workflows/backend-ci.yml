@@ -46,4 +46,6 @@ jobs:
     - name: Ejecutar tests y control de calidad
       run: |
         pipenv run python security/generate_keys.py
+        [ -f ../.env ] && cp ../.env .env || true
+        echo 'DATABASE_URL="postgresql://usuario_admin:admin123@localhost:5435/camping_db"' >> .env
         pipenv run python -m pytest
