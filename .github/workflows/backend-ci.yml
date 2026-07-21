@@ -31,4 +31,4 @@ jobs:
 
     - name: Ejecutar tests y control de calidad
       run: |
-        pipenv run pytest
+        pipenv run python -m pytest
