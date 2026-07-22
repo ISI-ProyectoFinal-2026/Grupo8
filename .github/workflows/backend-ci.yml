@@ -10,6 +10,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: usuario_admin
+          POSTGRES_PASSWORD: admin123
+          POSTGRES_DB: camping_db
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: ./backend
@@ -31,4 +45,7 @@ jobs:
 
     - name: Ejecutar tests y control de calidad
       run: |
-        pipenv run pytest
+        pipenv run python security/generate_keys.py
+        [ -f ../.env ] && cp ../.env .env || true
+        echo 'DATABASE_URL="postgresql://usuario_admin:admin123@localhost:5435/camping_db"' >> .env
+        pipenv run python -m pytest
