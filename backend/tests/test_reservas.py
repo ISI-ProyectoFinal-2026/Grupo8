@@ -1,6 +1,13 @@
 from fastapi.testclient import TestClient
 from main import app
 
+# NUEVAS IMPORTACIONES PARA LA BASE DE DATOS
+from core.database import engine, Base
+from models.reserva import Reserva 
+
+# Le decimos a SQLAlchemy que cree todas las tablas antes de probar (crea la tabla solo si no existe)
+Base.metadata.create_all(bind=engine)
+
 # Creamos un cliente de prueba basado en tu aplicación
 client = TestClient(app)
 
