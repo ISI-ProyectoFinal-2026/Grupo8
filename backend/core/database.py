@@ -12,3 +12,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Clase base para los modelos
 Base = declarative_base()
+
+# Dependencia para obtener la sesión de la base de datos en los endpoints
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

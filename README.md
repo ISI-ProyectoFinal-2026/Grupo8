@@ -39,7 +39,7 @@ Abre una nueva terminal para mantener el ecosistema separado del backend y naveg
 **2. Instalar dependencias de Node**
 `npm install`
 
-**3. Configruar avariables de entorno del Frontend**
+**3. Configurar avariables de entorno del Frontend**
 Crea un archivo .env dentro de la carpeta del frontend y pega la clave pública que se generó en el paso 5.
 `VITE_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"`
 
@@ -70,3 +70,8 @@ Verifica los servicios de encriptación, validación de schemas y emisión de JW
 **test del frontend (vitest)**:
 Verifica el comportamiento de la Web Crypto API (librería jose) para la desencriptación offline y los bloqueos de la barrera. Desde la carpeta del frontend:
 `npm run test`
+
+## Documentación de la API
+
+Una vez que el servidor backend esté en ejecución, puedes probar todos los endpoints y ver sus requerimientos accediendo a la documentación interactiva (Swagger UI) desde tu navegador:
+- **Local:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
