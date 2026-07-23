@@ -6,6 +6,9 @@ from sqlalchemy import text
 from core.database import SessionLocal
 from core.config import settings
 
+# Importamos el nuevo router de reservas
+from api.reservas import router as reservas_router
+
 # Configuración básica del logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,6 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Conectamos el router a la aplicación
+app.include_router(reservas_router)
+
 # Middleware para loggeo de errores (Requisito del DoD)
 @app.middleware("http")
 async def log_errors_middleware(request: Request, call_next):
@@ -31,6 +37,11 @@ async def log_errors_middleware(request: Request, call_next):
     except Exception as e:
         logger.error(f"Error no manejado en la ruta {request.url.path}: {str(e)}")
         raise e
+
+# Endpoint de bienvenida
+@app.get("/")
+def root():
+    return {"message": "Bienvenido a la API del Sistema de Accesos - Grupo 8"}
 
 # Endpoint de prueba que verifica la base de datos (Requisito del DoD)
 @app.get("/health")
