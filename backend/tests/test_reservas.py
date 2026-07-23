@@ -1,3 +1,7 @@
+import uuid
+from core.dependencies import get_current_user
+from models.user import User, RoleEnum
+
 from fastapi.testclient import TestClient
 from main import app
 
@@ -11,6 +15,16 @@ Base.metadata.create_all(bind=engine)
 
 # Creamos un cliente de prueba basado en tu aplicación
 client = TestClient(app)
+
+# --- LLAVE MAESTRA PARA LOS TESTS ---
+def override_get_current_user():
+    return User(
+        id=uuid.uuid4(), 
+        email="admin_test@grupo8.com", 
+        rol=RoleEnum.ADMIN
+    )
+
+app.dependency_overrides[get_current_user] = override_get_current_user
 
 def test_obtener_reservas():
     # Simulamos una petición GET al endpoint con paginación por defecto

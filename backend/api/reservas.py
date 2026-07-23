@@ -1,3 +1,7 @@
+# Importaciones nuevas para la seguridad
+from models.user import User, RoleEnum
+from core.dependencies import get_current_user, require_role
+
 from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -55,7 +59,8 @@ def obtener_reservas(
     limit: int = Query(10, le=100, description="Límite de registros a devolver (Paginación)"),
     estado: Optional[EstadoPagoEnum] = Query(None, description="Filtrar por estado de pago"),
     fecha_desde: Optional[datetime] = Query(None, description="Filtrar por reservas a partir de esta fecha"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.ADMIN)) #candado administrativo
 ):
     # Iniciamos la consulta base
     query = db.query(Reserva)
