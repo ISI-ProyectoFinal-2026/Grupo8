@@ -17,9 +17,9 @@ pydantic-settings = "*"
 
 [dev-packages]
 pytest = "*"
-httpx = "*"
 ruff = "*"
 mypy = "*"
+httpx = "*"
 
 [requires]
 python_version = "3.13.7"
