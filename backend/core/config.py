@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     CAMPING_TOTAL_CAPACITY: int = 50
     CAMPING_OFFLINE_BUFFER: int = 5
 
+    # --- Tarifas (Sub-issue 5.4) ---
+    PRECIO_BASE_POR_PERSONA: float = 5000.0
+    PORCENTAJE_DESCUENTO_SOCIO: float = 0.20
+
     # Esta es la forma nueva y recomendada en Pydantic v2
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
