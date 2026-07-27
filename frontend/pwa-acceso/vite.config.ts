@@ -33,5 +33,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}']
       }
     })
-  ]
+  ],
+  // AQUÍ SE AGREGA LA CONFIGURACIÓN PARA EL SERVIDOR DE PREVIEW
+  preview: {
+    allowedHosts: ['.carnival-front-unwed.ngrok-free.dev', 'all'] 
+  }
 });
