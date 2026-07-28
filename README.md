@@ -71,6 +71,27 @@ Verifica los servicios de encriptación, validación de schemas y emisión de JW
 Verifica el comportamiento de la Web Crypto API (librería jose) para la desencriptación offline y los bloqueos de la barrera. Desde la carpeta del frontend:
 `npm run test`
 
+## Probar la PWA
+### 3. Compilar y levantar la versión de producción para probar la PWA
+Situados en la carpeta `frontend/pwa-acceso`
+- `npm run build`
+- `npm run preview`
+### 📱 4. Tips para probar la PWA (Caché e Instalación)
+La tecnología PWA utiliza "Service Workers" que guardan la aplicación en la memoria del navegador para que funcione sin internet. Esto puede hacer que no veamos nuestros últimos cambios inmediatamente.
+
+Si hacen cambios y no se reflejan (ej. íconos o colores):
+
+Recarguen la página forzando la limpieza del caché apretando Ctrl + F5 (o Shift + F5).
+
+Si el problema persiste, abran el Inspector (F12) > pestaña Application (Aplicación) > menú izquierdo Service workers > hagan clic en Unregister (Anular registro).
+
+¿Cómo instalar la aplicación localmente?
+Al levantar el proyecto en http://localhost:4173/, pueden instalar la app en su computadora de dos maneras:
+
+Opción A: En la barra de direcciones del navegador (donde escriben la URL), busquen del lado derecho un ícono gris con forma de monitor pequeño y una flecha hacia abajo.
+
+Opción B: Abran el menú del navegador (los tres puntitos verticales arriba a la derecha) y hagan clic en la opción que dice "Instalar Sistema de Acceso - Grupo 8...".
+
 ## Documentación de la API
 
 Una vez que el servidor backend esté en ejecución, puedes probar todos los endpoints y ver sus requerimientos accediendo a la documentación interactiva (Swagger UI) desde tu navegador:

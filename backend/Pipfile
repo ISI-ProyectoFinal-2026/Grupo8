@@ -14,6 +14,8 @@ uvicorn = "*"
 cryptography = "*"
 pyjwt = {extras = ["crypto"], version = "*"}
 pydantic-settings = "*"
+qrcode = "*"
+pillow = "*"
 
 [dev-packages]
 pytest = "*"
