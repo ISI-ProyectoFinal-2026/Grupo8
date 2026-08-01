@@ -67,14 +67,29 @@ export const dbService = {
   },
 
   async obtenerPendientesSincronizacion() {
-    // Busca rápidamente todos los registros que aún no se mandaron a FastAPI
+    // Usamos .filter() porque Dexie/IndexedDB no permite indexar booleanos directamente
     return await db.ingresos_pendientes
-      .where('sincronizado')
-      .equals('false') // Dexie optimiza esta búsqueda gracias al índice
+      .filter(ingreso => ingreso.sincronizado === false)
       .toArray();
   },
 
   async marcarComoSincronizado(id: number): Promise<void> {
     await db.ingresos_pendientes.update(id, { sincronizado: true });
+  },
+
+  async obtenerIngresosPendientes() {
+    return await db.ingresos_pendientes
+      .filter(ingreso => ingreso.sincronizado === false)
+      .toArray();
+  },
+
+  async marcarComoSincronizados(jtisSincronizados: string[]) {
+    // Puedes borrarlos para ahorrar espacio, o marcarlos como true.
+    // Para un MVP, borrarlos es lo más limpio:
+    await db.ingresos_pendientes
+      .where('jti')
+      .anyOf(jtisSincronizados)
+      .delete();
   }
+
 };

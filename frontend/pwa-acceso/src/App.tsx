@@ -3,6 +3,7 @@ import { dbService } from './services/dbService';
 import { ScannerQR } from './components/ScannerQR';
 import { verifyQRToken } from './utils/security';
 import type { IJwtPayload } from './types/security';
+import { syncService } from './services/syncService';
 
 function App() {
 
@@ -37,10 +38,15 @@ function App() {
         setOcupacion(ocupacionActual);
         setCapacidadMaxima(max);
 
+        // INICIAMOS LA SINCRONIZACIÓN EN SEGUNDO PLANO
+        // Una vez que la DB está lista, prendemos el "radar" de internet
+        await syncService.iniciarBackgroundSync();
+
       } catch (error) {
         console.error('❌ Error al inicializar IndexedDB:', error);
       }
     };
+    
     inicializarDB();
   }, []);
 

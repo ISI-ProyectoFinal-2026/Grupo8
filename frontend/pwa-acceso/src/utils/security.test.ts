@@ -20,8 +20,8 @@ describe('Security Service: verifyQRToken', () => {
     const now = Math.floor(Date.now() / 1000);
     testPayload = {
       jti: 'test-uuid-123',
-      reserva_id: 99,
-      camping_id: 1,
+      reserva_id: "f2003696-be77-42d9-b63f-066adf8419da",
+      camping_id: "CAMP-01",
       iat: now,
       cantidad_personas: 2,
       typ: 'visitante',
