@@ -13,10 +13,10 @@ from security.config import settings
 def valid_payload_data():
     """Retorna un diccionario de datos válidos alineados con JWTPayloadSchema."""
     return {
-        "jti": "550e8400-e29b-41d4-a716-446655440000",
-        "reserva_id": 104,
-        "camping_id": 1,
-        "iat": 1783962000,
+        'jti': '550e8400-e29b-41d4-a716-446655440000', 
+        'reserva_id': "104",  # O un UUID como "f2003696-be77..."
+        'camping_id': "CAMP-01", # O simplemente "1"
+        'iat': 1783962000,
         "cantidad_personas": 4,
         "typ": "visitante",
         "exp": 1784048400,

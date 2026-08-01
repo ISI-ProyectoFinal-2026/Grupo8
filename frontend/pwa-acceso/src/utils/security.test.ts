@@ -43,7 +43,7 @@ describe('Security Service: verifyQRToken', () => {
     const result = await verifyQRToken(validToken);
 
     expect(result).not.toBeNull();
-    expect(result?.reserva_id).toBe(99);
+    expect(result?.reserva_id).toBe('f2003696-be77-42d9-b63f-066adf8419da');;
     expect(result?.typ).toBe('visitante');
   });
 
