@@ -34,6 +34,14 @@ export default defineConfig({
       }
     })
   ],
+  server: {
+    host: true, // Importante para que escuche conexiones externas de ngrok
+    port: 5173,
+    allowedHosts: [
+      '.carnival-front-unwed.ngrok-free.dev',
+      'all'
+    ]
+  },
   // AQUÍ SE AGREGA LA CONFIGURACIÓN PARA EL SERVIDOR DE PREVIEW
   preview: {
     allowedHosts: ['.carnival-front-unwed.ngrok-free.dev', 'all'] 

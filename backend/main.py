@@ -8,6 +8,7 @@ from core.config import settings
 
 # Importamos el nuevo router de reservas
 from api.reservas import router as reservas_router
+from api.ingresos import router as ingresos_router
 
 # Configuración básica del logger
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +28,7 @@ app.add_middleware(
 
 # Conectamos el router a la aplicación
 app.include_router(reservas_router)
+app.include_router(ingresos_router)
 
 # Middleware para loggeo de errores (Requisito del DoD)
 @app.middleware("http")

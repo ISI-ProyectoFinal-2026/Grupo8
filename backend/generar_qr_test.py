@@ -16,14 +16,14 @@ def generar_qr_prueba():
     fecha_actual = int(time.time())
     
     datos_reserva = {
-        "jti": str(uuid.uuid4()), # ID único de reserva dinámico para evitar duplicados
-        "reserva_id": 104,
-        "camping_id": 1,
+        "jti": str(uuid.uuid4()), 
+        "reserva_id": "6cad7a24-0843-4326-bfd9-f909182b9d4a", # Un UUID de prueba válido
+        "camping_id": "CAMP-01", # Ahora es un string
         "iat": fecha_actual,
         "cantidad_personas": 4,
         "typ": "visitante",
-        "exp": fecha_actual + (60 * 60 * 24), # Expira en 24 horas a partir de ahora
-        "dat": "2026-07-27"
+        "exp": fecha_actual + (60 * 60 * 24),
+        "dat": "2026-07-30" 
     }
     
     try:

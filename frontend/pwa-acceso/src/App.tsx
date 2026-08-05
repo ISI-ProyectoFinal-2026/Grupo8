@@ -3,8 +3,14 @@ import { dbService } from './services/dbService';
 import { ScannerQR } from './components/ScannerQR';
 import { verifyQRToken } from './utils/security';
 import type { IJwtPayload } from './types/security';
+import { syncService } from './services/syncService';
 
 function App() {
+
+  // Estado nuevo: Indicadores de infraestructura
+  const [ocupacion, setOcupacion] = useState<number>(0);
+  const [capacidadMaxima, setCapacidadMaxima] = useState<number>(500);
+
   // Estado para controlar la visibilidad del componente de la cámara
   const [escaneando, setEscaneando] = useState<boolean>(false);
   
@@ -21,10 +27,26 @@ function App() {
       try {
         // Aseguramos que la estructura de IndexedDB esté lista
         await dbService.guardarConfiguracion('version_app', '1.0.0');
+
+        // Inicializamos los valores por defecto si no existen
+        await dbService.guardarConfiguracion('capacidad_maxima', '500');
+        
+        // Cargamos los datos actuales para mostrarlos en la UI
+        const ocupacionActual = await dbService.obtenerOcupacion();
+        const max = await dbService.obtenerCapacidadMaxima();
+        
+        setOcupacion(ocupacionActual);
+        setCapacidadMaxima(max);
+
+        // INICIAMOS LA SINCRONIZACIÓN EN SEGUNDO PLANO
+        // Una vez que la DB está lista, prendemos el "radar" de internet
+        await syncService.iniciarBackgroundSync();
+
       } catch (error) {
         console.error('❌ Error al inicializar IndexedDB:', error);
       }
     };
+    
     inicializarDB();
   }, []);
 
@@ -56,12 +78,16 @@ function App() {
       // Registramos el ingreso en IndexedDB. Si el 'jti' ya existe, arrojará error.
       await dbService.registrarIngresoOffline(payload.jti, payload);
 
-      // 4. Éxito: Autorizamos el acceso y preparamos el payload para la vista
+      // ÉXITO (DoD Criterio 4 y 3)
+      // Si la transacción pasó sin lanzar error, actualizamos la interfaz sumando las personas
+      setOcupacion(prev => prev + payload.cantidad_personas);
+
       setResultadoValidacion({
         exito: true,
-        mensaje: `✅ Acceso Permitido (${payload.typ.toUpperCase()})`,
+        mensaje: `✅ INGRESO CONFIRMADO (${payload.typ.toUpperCase()})`,
         payload: payload
       });
+
 
     } catch (error: any) {
       // Capturamos violaciones de reglas de negocio (ej. QR ya utilizado)
@@ -72,25 +98,51 @@ function App() {
     }
   };
 
-  return (
+  // Cálculo rápido para la UI
+  const lugaresDisponibles = capacidadMaxima - ocupacion;
+  const porcentajeOcupacion = (ocupacion / capacidadMaxima) * 100;
+
+return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
       <h1 style={{ textAlign: 'center' }}>Sistema de Acceso - Grupo 8</h1>
       
-      {/* Panel de Control Central */}
+      {/* Panel de Estadísticas en Tiempo Real */}
+      <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px', border: '1px solid #dee2e6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <p style={{ margin: 0, fontSize: '14px', color: '#6c757d' }}>Capacidad Disponible</p>
+          <h2 style={{ margin: '5px 0 0 0', color: lugaresDisponibles < 20 ? '#dc3545' : '#28a745' }}>
+            {lugaresDisponibles} <span style={{ fontSize: '16px' }}>/ {capacidadMaxima}</span>
+          </h2>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <p style={{ margin: 0, fontSize: '14px', color: '#6c757d' }}>Ocupación</p>
+          <p style={{ margin: '5px 0 0 0', fontWeight: 'bold' }}>{porcentajeOcupacion.toFixed(1)}%</p>
+        </div>
+      </div>
+      
       <div style={{ textAlign: 'center', marginTop: '30px' }}>
         {!escaneando ? (
-          // Estado de Reposo: Muestra botón para iniciar escaneo
           <button 
             onClick={() => {
-              setResultadoValidacion(null); // Limpiamos alertas previas
+              setResultadoValidacion(null);
               setEscaneando(true);
             }}
-            style={{ padding: '15px 30px', fontSize: '18px', backgroundColor: '#0056b3', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+            
+            disabled={lugaresDisponibles <= 0} // Deshabilitamos si el camping está lleno
+            style={{ 
+              padding: '15px 30px', 
+              fontSize: '18px', 
+              backgroundColor: lugaresDisponibles <= 0 ? '#6c757d' : '#0056b3', 
+              color: 'white', border: 'none', borderRadius: '8px', 
+              cursor: lugaresDisponibles <= 0 ? 'not-allowed' : 'pointer', 
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+              width: '100%'
+            }}
+            
           >
-            📸 Escanear QR
+            {lugaresDisponibles <= 0 ? '🛑 CAMPING LLENO' : '📸 Escanear QR'}
           </button>
         ) : (
-          // Estado Activo: Muestra el visor de la cámara
           <div>
             <h3 style={{ marginBottom: '15px' }}>Apunte al código del visitante</h3>
             <ScannerQR onScanSuccess={procesarQR} />
@@ -104,7 +156,6 @@ function App() {
         )}
       </div>
 
-      {/* Retroalimentación Visual (Alertas Dinámicas) */}
       {resultadoValidacion && (
         <div style={{ 
           marginTop: '30px', 
@@ -117,7 +168,6 @@ function App() {
         }}>
           <h2>{resultadoValidacion.mensaje}</h2>
           
-          {/* Si fue un escaneo exitoso, renderizamos los detalles de la reserva extraídos del JWT */}
           {resultadoValidacion.exito && resultadoValidacion.payload && (
             <div style={{ fontSize: '15px', marginTop: '15px', textAlign: 'left', display: 'inline-block', backgroundColor: 'rgba(255,255,255,0.5)', padding: '10px', borderRadius: '8px' }}>
               <p><strong>N° Reserva:</strong> {resultadoValidacion.payload.reserva_id}</p>

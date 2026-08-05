@@ -1,13 +1,14 @@
 from pydantic import BaseModel, Field
 from typing import Literal
+from uuid import UUID
 
 class JWTPayloadSchema(BaseModel):
     """
     Esquema estricto para el payload del código QR offline.
     """
     jti: str = Field(..., description="UUID único del token para evitar escaneos duplicados en la barrera")
-    reserva_id: int = Field(..., description="ID de la reserva")
-    camping_id: int = Field(..., description="ID del camping (útil para el panel multi-camping)")
+    reserva_id: str = Field(..., description="ID de la reserva")
+    camping_id: str = Field(..., description="ID del camping (ej: CAMP-MENDOZA-01)")
     iat: int = Field(..., description="Timestamp UNIX de cuándo se generó")
     cantidad_personas: int = Field(..., description="Cantidad de personas autorizadas")
     #Literal asegura que solo viajen estos dos valores exactos
