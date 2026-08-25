@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { dbService } from './services/dbService';
 import { ScannerQR } from './components/ScannerQR';
-import { verifyQRToken } from './utils/security';
-import type { IJwtPayload } from './types/security';
+import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
+import type { IJwtPayload } from './types/security';
+import { verifyQRToken } from './utils/security';
 
 function App() {
 
@@ -21,25 +21,22 @@ function App() {
     payload?: IJwtPayload;
   } | null>(null);
 
+  // NUEVO ESTADO ISSUE 7.1: Para probar la lapicera en el panel de pruebas
+  const [idABloquear, setIdABloquear] = useState('');
+
   // Inicialización de la infraestructura offline al montar la aplicación
   useEffect(() => {
     const inicializarDB = async () => {
       try {
-        // Aseguramos que la estructura de IndexedDB esté lista
         await dbService.guardarConfiguracion('version_app', '1.0.0');
-
-        // Inicializamos los valores por defecto si no existen
         await dbService.guardarConfiguracion('capacidad_maxima', '500');
         
-        // Cargamos los datos actuales para mostrarlos en la UI
         const ocupacionActual = await dbService.obtenerOcupacion();
         const max = await dbService.obtenerCapacidadMaxima();
         
         setOcupacion(ocupacionActual);
         setCapacidadMaxima(max);
 
-        // INICIAMOS LA SINCRONIZACIÓN EN SEGUNDO PLANO
-        // Una vez que la DB está lista, prendemos el "radar" de internet
         await syncService.iniciarBackgroundSync();
 
       } catch (error) {
@@ -50,21 +47,14 @@ function App() {
     inicializarDB();
   }, []);
 
-  /**
-   * Orquesta el flujo de validación cuando la cámara detecta un código QR.
-   * Ejecuta validación criptográfica y persistencia de forma 100% offline.
-   * 
-   * @param token - El string JWT escaneado.
-   */
   const procesarQR = async (token: string) => {
-    // 1. Feedback UX: Vibración háptica al detectar el código
+    // 1. Feedback UX
     navigator.vibrate?.(200); 
     setEscaneando(false); 
     
-    // 2. Validación Criptográfica (Firma y Expiración temporal)
+    // 2. Validación Criptográfica
     const payload = await verifyQRToken(token);
 
-    // Fail-Fast: Si la validación falla, detenemos el flujo y notificamos
     if (!payload) {
       setResultadoValidacion({
         exito: false,
@@ -74,12 +64,25 @@ function App() {
     }
 
     try {
-      // 3. Validación de Negocio y Persistencia: 
-      // Registramos el ingreso en IndexedDB. Si el 'jti' ya existe, arrojará error.
+      // ==========================================
+      // NUEVO ISSUE 7.1: Validación de Lista Negra (Lupa)
+      // ==========================================
+      // Le pasamos el ID de la reserva escaneada para ver si fue cancelada
+      const estaRevocado = await dbService.verificarAccesoRevocado(payload.reserva_id.toString());
+      
+      if (estaRevocado) {
+        // Criterio de Aceptación Cumplido: Mensaje exacto denegando acceso
+        setResultadoValidacion({
+          exito: false,
+          mensaje: '⚠️ Reserva Cancelada / Acceso Revocado'
+        });
+        return; // Cortamos la ejecución acá, no lo dejamos pasar
+      }
+      // ==========================================
+
+      // 3. Validación de Negocio y Persistencia
       await dbService.registrarIngresoOffline(payload.jti, payload);
 
-      // ÉXITO (DoD Criterio 4 y 3)
-      // Si la transacción pasó sin lanzar error, actualizamos la interfaz sumando las personas
       setOcupacion(prev => prev + payload.cantidad_personas);
 
       setResultadoValidacion({
@@ -88,9 +91,7 @@ function App() {
         payload: payload
       });
 
-
     } catch (error: any) {
-      // Capturamos violaciones de reglas de negocio (ej. QR ya utilizado)
       setResultadoValidacion({
         exito: false,
         mensaje: `❌ Acceso Denegado: ${error.message}`
@@ -98,11 +99,10 @@ function App() {
     }
   };
 
-  // Cálculo rápido para la UI
   const lugaresDisponibles = capacidadMaxima - ocupacion;
   const porcentajeOcupacion = (ocupacion / capacidadMaxima) * 100;
 
-return (
+  return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
       <h1 style={{ textAlign: 'center' }}>Sistema de Acceso - Grupo 8</h1>
       
@@ -127,8 +127,7 @@ return (
               setResultadoValidacion(null);
               setEscaneando(true);
             }}
-            
-            disabled={lugaresDisponibles <= 0} // Deshabilitamos si el camping está lleno
+            disabled={lugaresDisponibles <= 0} 
             style={{ 
               padding: '15px 30px', 
               fontSize: '18px', 
@@ -138,7 +137,6 @@ return (
               boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
               width: '100%'
             }}
-            
           >
             {lugaresDisponibles <= 0 ? '🛑 CAMPING LLENO' : '📸 Escanear QR'}
           </button>
@@ -178,6 +176,34 @@ return (
           )}
         </div>
       )}
+
+      {/* ========================================== */}
+      {/* NUEVO ISSUE 7.1: PANEL DE PRUEBAS PARA QA */}
+      {/* ========================================== */}
+      <div style={{ marginTop: '50px', padding: '15px', border: '2px dashed #ccc', borderRadius: '8px', backgroundColor: '#fdfdfd' }}>
+        <h4 style={{ margin: '0 0 10px 0', color: '#666' }}>🛠️ Panel de Pruebas (Issue 7.1)</h4>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <input 
+            type="text" 
+            placeholder="N° de reserva a bloquear..." 
+            value={idABloquear}
+            onChange={(e) => setIdABloquear(e.target.value)}
+            style={{ padding: '8px', flex: 1 }}
+          />
+          <button 
+            onClick={async () => {
+              if(!idABloquear) return;
+              await dbService.agregarABlacklist(idABloquear);
+              alert(`¡Reserva ${idABloquear} agregada a la libreta negra!`);
+              setIdABloquear('');
+            }}
+            style={{ padding: '8px 15px', backgroundColor: '#ff4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          >
+            Bloquear Reserva
+          </button>
+        </div>
+      </div>
+      
     </div>
   );
 }
