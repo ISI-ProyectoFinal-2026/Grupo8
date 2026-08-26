@@ -25,6 +25,11 @@ function App() {
   const [formAcompanantes, setFormAcompanantes] = useState(0);
   const [formTipo, setFormTipo] = useState('Espontaneo');
 
+  // ==========================================
+  // PANEL QA
+  // ==========================================
+  const [idABloquear, setIdABloquear] = useState('');
+
   useEffect(() => {
     const inicializarDB = async () => {
       try {
@@ -36,6 +41,7 @@ function App() {
         
         setOcupacion(ocupacionActual);
         setCapacidadMaxima(max);
+
         await syncService.iniciarBackgroundSync();
       } catch (error) {
         console.error('❌ Error al inicializar IndexedDB:', error);
@@ -47,6 +53,7 @@ function App() {
   const procesarQR = async (token: string) => {
     navigator.vibrate?.(200); 
     setEscaneando(false); 
+    
     const payload = await verifyQRToken(token);
 
     if (!payload) {
@@ -55,6 +62,19 @@ function App() {
     }
 
     try {
+      // ==========================================
+      // Validación de Lista Negra (Lupa)
+      // ==========================================
+      const estaRevocado = await dbService.verificarAccesoRevocado(payload.reserva_id.toString());
+      if (estaRevocado) {
+        setResultadoValidacion({
+          exito: false,
+          mensaje: '⚠️ Reserva Cancelada / Acceso Revocado'
+        });
+        return; 
+      }
+
+      // 3. Validación de Negocio y Persistencia
       await dbService.registrarIngresoOffline(payload.jti, payload);
       setOcupacion(prev => prev + payload.cantidad_personas);
       setResultadoValidacion({
@@ -68,23 +88,20 @@ function App() {
   };
 
   // ==========================================
-  // PROCESAR FORMULARIO
+  // PROCESAR FORMULARIO MANUAL
   // ==========================================
   const handleIngresoManual = async (e: FormEvent) => {
-    e.preventDefault(); // Evita que la página se recargue al mandar el form
+    e.preventDefault(); 
     
-    // 1. Validación de datos obligatorios (DoD)
     if (!formDni.trim() || !formNombre.trim()) {
       alert("⚠️ Por favor, complete el DNI y Nombre del visitante.");
       return;
     }
 
     try {
-      // 2. Guardamos en la base de datos (IndexDB)
       await dbService.registrarIngresoManual(formDni, formNombre, formAcompanantes, formTipo);
       
-      // 3. Si pasa el control de capacidad local, actualizamos la UI
-      const totalIngresan = formAcompanantes + 1; // Titular + Acompañantes
+      const totalIngresan = formAcompanantes + 1; 
       setOcupacion(prev => prev + totalIngresan);
       
       setResultadoValidacion({
@@ -93,7 +110,6 @@ function App() {
         payload: { dni: formDni, nombre: formNombre, cantidad_personas: totalIngresan }
       });
 
-      // 4. Limpiamos el formulario y lo cerramos
       setFormDni('');
       setFormNombre('');
       setFormAcompanantes(0);
@@ -101,7 +117,6 @@ function App() {
       setMostrarFormulario(false);
 
     } catch (error: any) {
-      // Capturamos si la capacidad máxima es excedida
       setResultadoValidacion({
         exito: false,
         mensaje: `❌ Error de ingreso: ${error.message}`
@@ -130,7 +145,7 @@ function App() {
       </div>
       
       <div style={{ textAlign: 'center', marginTop: '30px' }}>
-        {/* Renderizado condicional: Mostramos los botones si no estamos escaneando ni llenando el form */}
+        {/* Renderizado condicional combinado */}
         {!escaneando && !mostrarFormulario ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <button 
@@ -141,7 +156,6 @@ function App() {
               {lugaresDisponibles <= 0 ? '🛑 CAMPING LLENO' : '📸 Escanear QR'}
             </button>
             
-            {/* NUEVO BOTÓN 7.3 */}
             <button 
               onClick={() => { setResultadoValidacion(null); setMostrarFormulario(true); }}
               disabled={lugaresDisponibles <= 0} 
@@ -157,9 +171,6 @@ function App() {
             <button onClick={() => setEscaneando(false)} style={{ marginTop: '20px', padding: '10px 20px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '8px' }}>Cancelar</button>
           </div>
         ) : (
-          /* ========================================== */
-          /* FORMULARIO ISSUE 7.3 */
-          /* ========================================== */
           <form onSubmit={handleIngresoManual} style={{ textAlign: 'left', backgroundColor: '#fdfdfd', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
             <h3 style={{ marginTop: 0 }}>Registro Manual de Ingreso</h3>
             
@@ -207,6 +218,34 @@ function App() {
           )}
         </div>
       )}
+
+      /* ========================================== */
+      /* PANEL DE PRUEBAS PARA QA */
+      /* ========================================== */
+      <div style={{ marginTop: '50px', padding: '15px', border: '2px dashed #ccc', borderRadius: '8px', backgroundColor: '#fdfdfd' }}>
+        <h4 style={{ margin: '0 0 10px 0', color: '#666' }}>🛠️ Panel de Pruebas (Issue 7.1)</h4>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <input 
+            type="text" 
+            placeholder="N° de reserva a bloquear..." 
+            value={idABloquear}
+            onChange={(e) => setIdABloquear(e.target.value)}
+            style={{ padding: '8px', flex: 1 }}
+          />
+          <button 
+            onClick={async () => {
+              if(!idABloquear) return;
+              await dbService.agregarABlacklist(idABloquear);
+              alert(`¡Reserva ${idABloquear} agregada a la libreta negra!`);
+              setIdABloquear('');
+            }}
+            style={{ padding: '8px 15px', backgroundColor: '#ff4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          >
+            Bloquear Reserva
+          </button>
+        </div>
+      </div>
+      
     </div>
   );
 }
