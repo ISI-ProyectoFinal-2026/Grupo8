@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import { dbService } from './services/dbService';
 import { ScannerQR } from './components/ScannerQR';
-import { verifyQRToken } from './utils/security';
-import type { IJwtPayload } from './types/security';
+import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
+import type { IJwtPayload } from './types/security';
+import { verifyQRToken } from './utils/security';
 
 function App() {
-
   // Estado nuevo: Indicadores de infraestructura
   const [ocupacion, setOcupacion] = useState<number>(0);
   const [capacidadMaxima, setCapacidadMaxima] = useState<number>(500);
@@ -21,27 +20,25 @@ function App() {
     payload?: IJwtPayload;
   } | null>(null);
 
+  // ==========================================
+  // NUEVO ESTADO ISSUE 7.4: Indicador de Sincronización
+  // ==========================================
+  const [syncStatus, setSyncStatus] = useState<{ estado: string; mensaje: string } | null>(null);
+
   // Inicialización de la infraestructura offline al montar la aplicación
   useEffect(() => {
     const inicializarDB = async () => {
       try {
-        // Aseguramos que la estructura de IndexedDB esté lista
         await dbService.guardarConfiguracion('version_app', '1.0.0');
-
-        // Inicializamos los valores por defecto si no existen
         await dbService.guardarConfiguracion('capacidad_maxima', '500');
         
-        // Cargamos los datos actuales para mostrarlos en la UI
         const ocupacionActual = await dbService.obtenerOcupacion();
         const max = await dbService.obtenerCapacidadMaxima();
         
         setOcupacion(ocupacionActual);
         setCapacidadMaxima(max);
 
-        // INICIAMOS LA SINCRONIZACIÓN EN SEGUNDO PLANO
-        // Una vez que la DB está lista, prendemos el "radar" de internet
         await syncService.iniciarBackgroundSync();
-
       } catch (error) {
         console.error('❌ Error al inicializar IndexedDB:', error);
       }
@@ -50,21 +47,47 @@ function App() {
     inicializarDB();
   }, []);
 
-  /**
-   * Orquesta el flujo de validación cuando la cámara detecta un código QR.
-   * Ejecuta validación criptográfica y persistencia de forma 100% offline.
-   * 
-   * @param token - El string JWT escaneado.
-   */
+  // ==========================================
+  // NUEVO EFFECT ISSUE 7.4: Escuchador del Motor de Sincronización
+  // ==========================================
+  useEffect(() => {
+    const handleSyncEvent = (e: any) => {
+      const { estado, detalles } = e.detail;
+      
+      if (estado === 'iniciando' || estado === 'reintentando') {
+        setSyncStatus({ 
+          estado: 'warning', 
+          mensaje: `⏳ Sincronizando ${detalles.cantidad} registros pendientes...` 
+        });
+      } else if (estado === 'completado') {
+        setSyncStatus({ 
+          estado: 'success', 
+          mensaje: `✅ ¡Datos Actualizados! (${detalles.cantidad} enviados)` 
+        });
+        // El cartel verde desaparece solo a los 4 segundos
+        setTimeout(() => setSyncStatus(null), 4000); 
+      } else if (estado === 'error') {
+        setSyncStatus({ 
+          estado: 'error', 
+          mensaje: `⚠️ ${detalles.mensaje}` 
+        });
+        setTimeout(() => setSyncStatus(null), 5000);
+      }
+    };
+
+    // Prendemos la oreja para escuchar al syncService
+    window.addEventListener('sync-status', handleSyncEvent);
+    
+    // Limpieza de memoria (buena práctica en React)
+    return () => window.removeEventListener('sync-status', handleSyncEvent);
+  }, []);
+
   const procesarQR = async (token: string) => {
-    // 1. Feedback UX: Vibración háptica al detectar el código
     navigator.vibrate?.(200); 
     setEscaneando(false); 
     
-    // 2. Validación Criptográfica (Firma y Expiración temporal)
     const payload = await verifyQRToken(token);
 
-    // Fail-Fast: Si la validación falla, detenemos el flujo y notificamos
     if (!payload) {
       setResultadoValidacion({
         exito: false,
@@ -74,23 +97,14 @@ function App() {
     }
 
     try {
-      // 3. Validación de Negocio y Persistencia: 
-      // Registramos el ingreso en IndexedDB. Si el 'jti' ya existe, arrojará error.
       await dbService.registrarIngresoOffline(payload.jti, payload);
-
-      // ÉXITO (DoD Criterio 4 y 3)
-      // Si la transacción pasó sin lanzar error, actualizamos la interfaz sumando las personas
       setOcupacion(prev => prev + payload.cantidad_personas);
-
       setResultadoValidacion({
         exito: true,
         mensaje: `✅ INGRESO CONFIRMADO (${payload.typ.toUpperCase()})`,
         payload: payload
       });
-
-
     } catch (error: any) {
-      // Capturamos violaciones de reglas de negocio (ej. QR ya utilizado)
       setResultadoValidacion({
         exito: false,
         mensaje: `❌ Acceso Denegado: ${error.message}`
@@ -98,14 +112,32 @@ function App() {
     }
   };
 
-  // Cálculo rápido para la UI
   const lugaresDisponibles = capacidadMaxima - ocupacion;
   const porcentajeOcupacion = (ocupacion / capacidadMaxima) * 100;
 
-return (
+  return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
       <h1 style={{ textAlign: 'center' }}>Sistema de Acceso - Grupo 8</h1>
       
+      {/* ========================================== */}
+      {/* NUEVO CARTEL ISSUE 7.4 (Bloqueo visual discreto) */}
+      {/* ========================================== */}
+      {syncStatus && (
+        <div style={{ 
+          backgroundColor: syncStatus.estado === 'warning' ? '#fff3cd' : syncStatus.estado === 'success' ? '#d4edda' : '#f8d7da',
+          color: syncStatus.estado === 'warning' ? '#856404' : syncStatus.estado === 'success' ? '#155724' : '#721c24',
+          padding: '12px', 
+          borderRadius: '5px', 
+          textAlign: 'center', 
+          marginBottom: '15px', 
+          fontWeight: 'bold', 
+          border: '1px solid',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+          {syncStatus.mensaje}
+        </div>
+      )}
+
       {/* Panel de Estadísticas en Tiempo Real */}
       <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px', border: '1px solid #dee2e6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -127,8 +159,7 @@ return (
               setResultadoValidacion(null);
               setEscaneando(true);
             }}
-            
-            disabled={lugaresDisponibles <= 0} // Deshabilitamos si el camping está lleno
+            disabled={lugaresDisponibles <= 0} 
             style={{ 
               padding: '15px 30px', 
               fontSize: '18px', 
@@ -138,7 +169,6 @@ return (
               boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
               width: '100%'
             }}
-            
           >
             {lugaresDisponibles <= 0 ? '🛑 CAMPING LLENO' : '📸 Escanear QR'}
           </button>
