@@ -17,7 +17,7 @@ function App() {
   } | null>(null);
 
   // ==========================================
-  // INGRESO MANUAL
+  // ESTADOS ISSUE 7.3: INGRESO MANUAL
   // ==========================================
   const [mostrarFormulario, setMostrarFormulario] = useState<boolean>(false);
   const [formDni, setFormDni] = useState('');
@@ -26,9 +26,14 @@ function App() {
   const [formTipo, setFormTipo] = useState('Espontaneo');
 
   // ==========================================
-  // PANEL QA
+  // ESTADO ISSUE 7.1: PANEL QA
   // ==========================================
   const [idABloquear, setIdABloquear] = useState('');
+
+  // ==========================================
+  // ESTADO ISSUE 7.4: INDICADOR DE SINCRONIZACIÓN
+  // ==========================================
+  const [syncStatus, setSyncStatus] = useState<{ estado: string; mensaje: string } | null>(null);
 
   useEffect(() => {
     const inicializarDB = async () => {
@@ -50,6 +55,37 @@ function App() {
     inicializarDB();
   }, []);
 
+  // ==========================================
+  // ISSUE 7.4: ESCUCHADOR DEL MOTOR DE SINCRONIZACIÓN
+  // ==========================================
+  useEffect(() => {
+    const handleSyncEvent = (e: any) => {
+      const { estado, detalles } = e.detail;
+      
+      if (estado === 'iniciando' || estado === 'reintentando') {
+        setSyncStatus({ 
+          estado: 'warning', 
+          mensaje: `⏳ Sincronizando ${detalles.cantidad} registros pendientes...` 
+        });
+      } else if (estado === 'completado') {
+        setSyncStatus({ 
+          estado: 'success', 
+          mensaje: `✅ ¡Datos Actualizados! (${detalles.cantidad} enviados)` 
+        });
+        setTimeout(() => setSyncStatus(null), 4000); 
+      } else if (estado === 'error') {
+        setSyncStatus({ 
+          estado: 'error', 
+          mensaje: `⚠️ ${detalles.mensaje}` 
+        });
+        setTimeout(() => setSyncStatus(null), 5000);
+      }
+    };
+
+    window.addEventListener('sync-status', handleSyncEvent);
+    return () => window.removeEventListener('sync-status', handleSyncEvent);
+  }, []);
+
   const procesarQR = async (token: string) => {
     navigator.vibrate?.(200); 
     setEscaneando(false); 
@@ -63,7 +99,7 @@ function App() {
 
     try {
       // ==========================================
-      // Validación de Lista Negra (Lupa)
+      // ISSUE 7.1: Validación de Lista Negra (Lupa)
       // ==========================================
       const estaRevocado = await dbService.verificarAccesoRevocado(payload.reserva_id.toString());
       if (estaRevocado) {
@@ -74,7 +110,6 @@ function App() {
         return; 
       }
 
-      // 3. Validación de Negocio y Persistencia
       await dbService.registrarIngresoOffline(payload.jti, payload);
       setOcupacion(prev => prev + payload.cantidad_personas);
       setResultadoValidacion({
@@ -88,7 +123,7 @@ function App() {
   };
 
   // ==========================================
-  // PROCESAR FORMULARIO MANUAL
+  // ISSUE 7.3: PROCESAR FORMULARIO MANUAL
   // ==========================================
   const handleIngresoManual = async (e: FormEvent) => {
     e.preventDefault(); 
@@ -131,6 +166,25 @@ function App() {
     <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
       <h1 style={{ textAlign: 'center' }}>Sistema de Acceso - Grupo 8</h1>
       
+      {/* ========================================== */}
+      {/* ISSUE 7.4: CARTEL DE SINCRONIZACIÓN */}
+      {/* ========================================== */}
+      {syncStatus && (
+        <div style={{ 
+          backgroundColor: syncStatus.estado === 'warning' ? '#fff3cd' : syncStatus.estado === 'success' ? '#d4edda' : '#f8d7da',
+          color: syncStatus.estado === 'warning' ? '#856404' : syncStatus.estado === 'success' ? '#155724' : '#721c24',
+          padding: '12px', 
+          borderRadius: '5px', 
+          textAlign: 'center', 
+          marginBottom: '15px', 
+          fontWeight: 'bold', 
+          border: '1px solid',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+          {syncStatus.mensaje}
+        </div>
+      )}
+
       <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px', border: '1px solid #dee2e6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <p style={{ margin: 0, fontSize: '14px', color: '#6c757d' }}>Capacidad Disponible</p>
@@ -219,9 +273,9 @@ function App() {
         </div>
       )}
 
-      /* ========================================== */
-      /* PANEL DE PRUEBAS PARA QA */
-      /* ========================================== */
+      {/* ========================================== */}
+      {/* ISSUE 7.1: PANEL DE PRUEBAS PARA QA */}
+      {/* ========================================== */}
       <div style={{ marginTop: '50px', padding: '15px', border: '2px dashed #ccc', borderRadius: '8px', backgroundColor: '#fdfdfd' }}>
         <h4 style={{ margin: '0 0 10px 0', color: '#666' }}>🛠️ Panel de Pruebas (Issue 7.1)</h4>
         <div style={{ display: 'flex', gap: '10px' }}>

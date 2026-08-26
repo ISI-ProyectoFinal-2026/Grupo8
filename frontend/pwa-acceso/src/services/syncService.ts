@@ -2,65 +2,88 @@ import { dbService } from './dbService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+// Función para emitir señales que nuestra pantalla de React va a escuchar (DoD 7.4)
+const notificarUI = (estado: 'iniciando' | 'completado' | 'error' | 'reintentando', detalles?: any) => {
+  window.dispatchEvent(new CustomEvent('sync-status', { detail: { estado, detalles } }));
+};
+
 export const syncService = {
-  async sincronizarIngresosPendientes() {
+  // Candado para evitar envíos duplicados si la red parpadea
+  isSyncing: false,
+
+  // Motor con Backoff Exponencial incorporado
+  async sincronizarIngresosPendientes(intento = 1, delay = 5000) {
+    if (this.isSyncing && intento === 1) return; 
+    this.isSyncing = true;
+
     try {
+      // 1. Lectura FIFO (First In, First Out)
       const pendientes = await dbService.obtenerPendientesSincronizacion();
       
       if (pendientes.length === 0) {
-        console.log('✅ No hay ingresos pendientes por sincronizar.');
+        this.isSyncing = false;
         return;
       }
 
-      // 👇 ALERTA 1: Confirmamos que hay datos para enviar
-      alert(`Debug: Iniciando sync de ${pendientes.length} registros...`);
+      // 2. Notificamos a la UI para el bloqueo visual discreto
+      if (intento === 1) {
+        notificarUI('iniciando', { cantidad: pendientes.length });
+      } else {
+        notificarUI('reintentando', { intento, cantidad: pendientes.length });
+      }
 
+      // Empaquetamos manteniendo el orden cronológico
       const payload = {
         ingresos: pendientes.map(p => ({
           jti: p.jti,
-          reserva_id: p.qr_payload.reserva_id,
-          fecha_escaneo: p.fecha_escaneo.toISOString()
+          reserva_id: p.qr_payload?.reserva_id || null, 
+          fecha_escaneo: p.fecha_escaneo.toISOString(),
+          tipo_ingreso: p.qr_payload?.tipo_ingreso || 'QR',
+          cantidad_personas: p.qr_payload?.cantidad_personas || 1
         }))
       };
 
-      // 👇 ALERTA 2: Verificamos qué URL armó exactamente Vite (CRÍTICO)
-      alert(`Debug: Enviando fetch a ${API_URL}/api/ingresos/sync`);
-
+      // 3. Intento de envío al servidor
       const response = await fetch(`${API_URL}/api/ingresos/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) {
-        throw new Error(`Error del servidor HTTP: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Falla HTTP: ${response.status}`);
 
       const data = await response.json(); 
 
+      // 4. Éxito: Limpiamos la cola y avisamos a la interfaz
       if (data.sincronizados && data.sincronizados.length > 0) {
         await dbService.marcarComoSincronizados(data.sincronizados);
-        
-        // 👇 ALERTA 3: Todo salió perfecto
-        alert(`Debug: ¡ÉXITO! ${data.sincronizados.length} registros guardados en Postgres.`);
+        notificarUI('completado', { cantidad: data.sincronizados.length });
       }
 
-      if (data.errores && data.errores.length > 0) {
-        // 👇 ALERTA 4: El backend rechazó algunos datos
-        alert(`Debug Error del Backend: ${JSON.stringify(data.errores)}`);
-      }
+      this.isSyncing = false;
 
     } catch (error: any) {
-      // 👇 ALERTA 5: La petición falló antes de llegar, o el backend dio error crítico
-      alert(`Debug Error Catch: ${error.message}`);
+      console.error(`[SyncQueue] Falla en intento ${intento}:`, error.message);
+      
+      // 5. Política de Reintentos: Backoff Exponencial (5s -> 15s -> 45s)
+      if (intento <= 3) {
+        setTimeout(() => {
+          this.sincronizarIngresosPendientes(intento + 1, delay * 3);
+        }, delay);
+      } else {
+        this.isSyncing = false;
+        notificarUI('error', { mensaje: 'Sincronización pausada. Se reintentará al detectar red.' });
+      }
     }
   },
 
   iniciarBackgroundSync() {
+    // Escucha el evento nativo del navegador cuando vuelve el WiFi/4G
     window.addEventListener('online', () => {
       this.sincronizarIngresosPendientes();
     });
 
+    // Contingencia: Intentar limpiar la cola cada 5 minutos si hay red
     setInterval(() => {
       if (navigator.onLine) {
         this.sincronizarIngresosPendientes();
