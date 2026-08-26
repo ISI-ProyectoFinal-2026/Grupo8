@@ -13,6 +13,7 @@ export const dbService = {
     const config = await db.configuracion.get(clave);
     return config?.valor;
   },
+  
   // Nuevos métodos para manejar la ocupación local (DoD Criterio 3)
   async obtenerOcupacion(): Promise<number> {
     const ocupacion = await db.configuracion.get('ocupacion_actual');
@@ -69,7 +70,7 @@ export const dbService = {
   async obtenerPendientesSincronizacion() {
     // Usamos .filter() porque Dexie/IndexedDB no permite indexar booleanos directamente
     return await db.ingresos_pendientes
-      .filter(ingreso => ingreso.sincronizado === false)
+      .filter((ingreso: any) => ingreso.sincronizado === false)
       .toArray();
   },
 
@@ -79,7 +80,7 @@ export const dbService = {
 
   async obtenerIngresosPendientes() {
     return await db.ingresos_pendientes
-      .filter(ingreso => ingreso.sincronizado === false)
+      .filter((ingreso: any) => ingreso.sincronizado === false)
       .toArray();
   },
 
@@ -90,6 +91,25 @@ export const dbService = {
       .where('jti')
       .anyOf(jtisSincronizados)
       .delete();
+  }, // <-- Acá está la coma mágica que agregamos para no romper el objeto
+
+  // ==========================================
+  // LISTA DE REVOCACIÓN (BLACKLIST)
+  // ==========================================
+  
+  // Herramienta 1: Guarda un ID en la lista negra (Lapicera)
+  async agregarABlacklist(idAEliminar: string): Promise<void> {
+    await db.blacklist.put({
+      id: idAEliminar,
+      fechaCancelacion: new Date().toISOString()
+    });
+  },
+
+  // Herramienta 2: Verifica si el ID está bloqueado antes de abrir la puerta (Lupa)
+  // Criterio de Aceptación: Modificación del flujo de validación offline
+  async verificarAccesoRevocado(idEscaneado: string): Promise<boolean> {
+    const registro = await db.blacklist.get(idEscaneado);
+    return registro !== undefined; // Si encuentra datos, devuelve true
   }
 
 };

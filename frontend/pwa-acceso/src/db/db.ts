@@ -21,22 +21,32 @@ export interface HistorialIngreso {
   estado: string;
 }
 
+// Interfaz para la Blacklist (DoD Issue 7.1)
+export interface BlacklistEntry {
+  id: string;             // ID de la reserva o usuario revocado
+  fechaCancelacion: string; // Fecha en la que se bloqueó
+}
+
 // 2. Extendemos la clase de Dexie
 class SgicDatabase extends Dexie {
   configuracion!: EntityTable<Configuracion, 'clave'>;
   ingresos_pendientes!: EntityTable<IngresoPendiente, 'id'>;
   historial!: EntityTable<HistorialIngreso, 'id'>;
+  
+  // NUEVO: Declaramos la tabla blacklist a Dexie
+  blacklist!: EntityTable<BlacklistEntry, 'id'>;
 
   constructor() {
     // Nombre de la base de datos local
     super('SgicOfflineDB');
     
     // 3. Definimos el esquema
-    // OJO: En IndexedDB solo declaras la Primary Key y los campos por los que vas a querer filtrar/buscar.
-    this.version(1).stores({
-      configuracion: 'clave', // 'clave' es la Primary Key
-      ingresos_pendientes: '++id, jti, sincronizado', // ++id significa autoincremental
-      historial: '++id, reserva_id, fecha_ingreso'
+    // Subimos a version(2) y agregamos la blacklist buscando por 'id'
+    this.version(2).stores({
+      configuracion: 'clave',
+      ingresos_pendientes: '++id, jti, sincronizado',
+      historial: '++id, reserva_id, fecha_ingreso',
+      blacklist: 'id' 
     });
   }
 }
