@@ -273,12 +273,12 @@ function App() {
         </div>
       )}
 
-      {/* ========================================== */}
-      {/* ISSUE 7.1: PANEL DE PRUEBAS PARA QA */}
+{/* ========================================== */}
+      {/* PANEL DE PRUEBAS PARA QA (AMPLIADO 7.6) */}
       {/* ========================================== */}
       <div style={{ marginTop: '50px', padding: '15px', border: '2px dashed #ccc', borderRadius: '8px', backgroundColor: '#fdfdfd' }}>
-        <h4 style={{ margin: '0 0 10px 0', color: '#666' }}>🛠️ Panel de Pruebas (Issue 7.1)</h4>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <h4 style={{ margin: '0 0 10px 0', color: '#666' }}>🛠️ Panel de Pruebas QA</h4>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
           <input 
             type="text" 
             placeholder="N° de reserva a bloquear..." 
@@ -296,6 +296,33 @@ function App() {
             style={{ padding: '8px 15px', backgroundColor: '#ff4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
           >
             Bloquear Reserva
+          </button>
+        </div>
+
+        <hr style={{ border: '1px solid #eee', marginBottom: '15px' }} />
+        <p style={{ fontSize: '13px', color: '#666', marginTop: 0 }}>Simulador de Cámara (Bypass QR sin webcam):</p>
+        
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={async () => {
+            const estaRevocado = await dbService.verificarAccesoRevocado('9999');
+            if (estaRevocado) {
+              setResultadoValidacion({ exito: false, mensaje: '⚠️ Reserva Cancelada / Acceso Revocado' });
+            } else {
+              await dbService.registrarIngresoOffline('mock-jti-9999', { reserva_id: 9999, cantidad_personas: 1, typ: 'qr' });
+              setOcupacion(prev => prev + 1);
+              setResultadoValidacion({ exito: true, mensaje: `✅ INGRESO SIMULADO (QR 9999)`, payload: { reserva_id: 9999, cantidad_personas: 1 } });
+            }
+          }} style={{ flex: 1, padding: '8px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+            Simular QR (Reserva 9999)
+          </button>
+
+          <button onClick={async () => {
+            const jti = `mock-jti-${Date.now()}`;
+            await dbService.registrarIngresoOffline(jti, { reserva_id: 1234, cantidad_personas: 2, typ: 'qr' });
+            setOcupacion(prev => prev + 2);
+            setResultadoValidacion({ exito: true, mensaje: `✅ INGRESO SIMULADO (QR Válido)`, payload: { reserva_id: 1234, cantidad_personas: 2 } });
+          }} style={{ flex: 1, padding: '8px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+            Simular QR (Válido)
           </button>
         </div>
       </div>
