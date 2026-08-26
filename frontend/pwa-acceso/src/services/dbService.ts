@@ -90,6 +90,28 @@ export const dbService = {
       .where('jti')
       .anyOf(jtisSincronizados)
       .delete();
+  },
+
+  // ==========================================
+  // INGRESO MANUAL Y ESPONTÁNEO
+  // ==========================================
+  
+  async registrarIngresoManual(dni: string, nombre: string, acompanantes: number, tipoIngreso: string): Promise<void> {
+    // 1. Generamos un identificador único simulado (JTI) para evitar colisiones offline
+    const jtiSimulado = `manual-${Date.now()}-${dni}`;
+    
+    // 2. Empaquetamos los datos como si fueran un QR escaneado
+    const payloadManual = {
+      dni: dni,
+      nombre: nombre,
+      tipo_ingreso: tipoIngreso,
+      // Sumamos el titular + los acompañantes para el cálculo de capacidad
+      cantidad_personas: acompanantes + 1, 
+      typ: "manual"
+    };
+
+    // 3. Reutilizamos el motor ACID (de la Issue 7.1) que controla la ocupación
+    await this.registrarIngresoOffline(jtiSimulado, payloadManual);
   }
 
 };
