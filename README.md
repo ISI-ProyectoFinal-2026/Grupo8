@@ -26,8 +26,8 @@ Crear un archivo `.env` en la raíz del proyecto tomando como referencia el arch
 *(Para apagar y borrar los datos locales, utilizar: `docker-compose down -v`)*
 
 **5. Generacion de claves criptográficas (Seguridad QR - Offline First)**
-- Para que el sistema de emisión y validación de QRs funcione, debes generar el par de claves matemáticas (ES256) iniciales. Dentro del entorno virtual (pipenv shell), ejecuta:
-`python modules/security/generate_keys.py`
+- Para que el sistema de emisión y validación de QRs funcione, debes generar el par de claves matemáticas (ES256) iniciales. Dentro del entorno virtual (pipenv shell), desde la carpeta backend, ejecuta:
+`python security/generate_keys.py`
 *Nota: Este script es seguro e idempotente. Inyectará la PRIVATE_KEY en tu .env del backend y te imprimirá por consola la PUBLIC_KEY necesaria para el frontend.
 
 ## Instalación y Configuración Local (Frontend)
@@ -68,7 +68,7 @@ Verifica los servicios de encriptación, validación de schemas y emisión de JW
 `pipenv run pytest -v`
 
 **test del frontend (vitest)**:
-Verifica el comportamiento de la Web Crypto API (librería jose) para la desencriptación offline y los bloqueos de la barrera. Desde la carpeta del frontend:
+Verifica el comportamiento de la Web Crypto API (librería jose) para la desencriptación offline y los bloqueos de la barrera. Desde la carpeta `frontend/pwa-acceso`:
 `npm run test`
 
 ## Probar la PWA
