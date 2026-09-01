@@ -11,11 +11,11 @@ python-dotenv = "*"
 psycopg2-binary = "*"
 fastapi = "*"
 uvicorn = "*"
-cryptography = "*"
 pyjwt = {extras = ["crypto"], version = "*"}
 pydantic-settings = "*"
 qrcode = "*"
 pillow = "*"
+cryptography = "*"
 
 [dev-packages]
 pytest = "*"
