@@ -7,6 +7,7 @@ import type { IJwtPayload } from '../types/security';
  * * @param token - El string JWT escaneado desde el código QR.
  * @returns El payload decodificado si es válido, o null si fue manipulado/expirado.
  */
+
 export async function verifyQRToken(
   token: string
 ): Promise<IJwtPayload | null> {
@@ -34,7 +35,7 @@ export async function verifyQRToken(
   } catch (error) {
     // Encapsulamos el error para no romper la UI del escáner.
     // Retornar null indica explícitamente a la vista que el acceso es denegado.
-    console.error('❌ QR Rechazado (Firma inválida o token expirado):', error);
+    console.error('QR Rechazado (Firma inválida o token expirado):', error);
     return null;
   }
 }
