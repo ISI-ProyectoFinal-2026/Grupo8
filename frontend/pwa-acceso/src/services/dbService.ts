@@ -58,9 +58,18 @@ export const dbService = {
   },
 
   async obtenerPendientesSincronizacion() {
-    return await db.ingresos_pendientes
+    const pendientes = await db.ingresos_pendientes
       .filter((ingreso: any) => ingreso.sincronizado === false)
       .toArray();
+
+    // Orden FIFO por timestamp de negocio (Issue 8.3): Dexie no garantiza
+    // que table.filter() devuelva los registros ordenados por
+    // fecha_escaneo (solo respeta el orden físico de la clave primaria),
+    // así que se ordena explícitamente en memoria por orden cronológico
+    // ascendente antes de devolver la cola.
+    return pendientes.sort(
+      (a, b) => a.fecha_escaneo.getTime() - b.fecha_escaneo.getTime()
+    );
   },
 
   async marcarComoSincronizado(id: number): Promise<void> {
@@ -68,9 +77,13 @@ export const dbService = {
   },
 
   async obtenerIngresosPendientes() {
-    return await db.ingresos_pendientes
+    const pendientes = await db.ingresos_pendientes
       .filter((ingreso: any) => ingreso.sincronizado === false)
       .toArray();
+
+    return pendientes.sort(
+      (a, b) => a.fecha_escaneo.getTime() - b.fecha_escaneo.getTime()
+    );
   },
 
   async marcarComoSincronizados(jtisSincronizados: string[]) {
@@ -111,5 +124,4 @@ export const dbService = {
     const registro = await db.blacklist.get(idEscaneado);
     return registro !== undefined; 
   }
-
 };
