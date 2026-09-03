@@ -36,3 +36,22 @@ def test_generacion_e_integridad_es256(tmp_path, monkeypatch):
     
     public_key = serialization.load_pem_public_key(public_str.encode('utf-8'))
     assert isinstance(public_key, ec.EllipticCurvePublicKey)
+
+def test_generacion_es_idempotente_no_sobrescribe_claves_existentes(tmp_path, monkeypatch, capsys):
+    """
+    Verifica la rama de idempotencia del script: si el .env ya contiene
+    las claves, debe abortar sin sobrescribirlas.
+    """
+    temp_env = tmp_path / ".env"
+    monkeypatch.setattr(generate_keys, "ENV_PATH", temp_env)
+
+    generate_keys.generate_es256_keys()
+    contenido_original = temp_env.read_text(encoding="utf-8")
+
+    # Segunda ejecución: debe detectar que las claves ya existen y abortar
+    generate_keys.generate_es256_keys()
+    contenido_despues = temp_env.read_text(encoding="utf-8")
+
+    salida = capsys.readouterr().out
+    assert "ya existen" in salida
+    assert contenido_original == contenido_despues
