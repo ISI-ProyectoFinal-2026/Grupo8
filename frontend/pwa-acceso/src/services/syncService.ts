@@ -65,13 +65,16 @@ export const syncService = {
     } catch (error: any) {
       console.error(`[SyncQueue] Falla en intento ${intento}:`, error.message);
       
+      // SOLUCIÓN AL BUG DE LA ISSUE 8.4: 
+      // Liberamos el candado inmediatamente para no bloquear nuevos eventos 'online'
+      this.isSyncing = false;
+      
       // 5. Política de Reintentos: Backoff Exponencial (5s -> 15s -> 45s)
       if (intento <= 3) {
         setTimeout(() => {
           this.sincronizarIngresosPendientes(intento + 1, delay * 3);
         }, delay);
       } else {
-        this.isSyncing = false;
         notificarUI('error', { mensaje: 'Sincronización pausada. Se reintentará al detectar red.' });
       }
     }
