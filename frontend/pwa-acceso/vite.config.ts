@@ -1,20 +1,21 @@
-import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
+import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate', // Actualiza la PWA automáticamente si hay nueva versión
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'], // Archivos estáticos
+      registerType: 'autoUpdate', 
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'], 
       manifest: {
         name: 'SGIC - Control de Accesos',
         short_name: 'SGIC Accesos',
         description: 'Aplicación Offline-First para validación de ingresos al camping',
         theme_color: '#ffffff',
         background_color: '#ffffff',
-        display: 'standalone', // Esto oculta la barra de navegación del navegador (parece app nativa)
+        display: 'standalone', 
         icons: [
           {
             src: '/pwa-192x192.png',
@@ -29,20 +30,23 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // Cache-First strategy para archivos de interfaz
         globPatterns: ['**/*.{js,css,html,ico,png,svg}']
       }
     })
   ],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
   server: {
-    host: true, // Importante para que escuche conexiones externas de ngrok
+    host: true, 
     port: 5173,
     allowedHosts: [
       '.carnival-front-unwed.ngrok-free.dev',
       'all'
     ]
   },
-  // AQUÍ SE AGREGA LA CONFIGURACIÓN PARA EL SERVIDOR DE PREVIEW
   preview: {
     allowedHosts: ['.carnival-front-unwed.ngrok-free.dev', 'all'] 
   }
