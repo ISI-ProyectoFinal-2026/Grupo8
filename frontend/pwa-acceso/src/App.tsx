@@ -6,6 +6,8 @@ import ControlAcceso from "./pages/ControlAcceso"; // Importamos la app
 import Disponibilidad from "./pages/Disponibilidad";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import MisReservas from "./pages/MisReservas";
+import Perfil from "./pages/Perfil";
 import Reservas from "./pages/Reservas";
 
 function App() {
@@ -23,6 +25,8 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/reservas" element={<Reservas />} />
         <Route path="/beneficios" element={<Beneficios />} />
+        <Route path="/perfil" element={<Perfil />} />
+        <Route path="/mis-reservas" element={<MisReservas />} />
         
         {/* Ruta Oculta para Guardaparques (Issue 7) */}
         <Route path="/acceso" element={<ControlAcceso />} />
