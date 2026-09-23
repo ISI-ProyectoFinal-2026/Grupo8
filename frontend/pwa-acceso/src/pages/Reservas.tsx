@@ -1,0 +1,1 @@
+export default function Reservas() { return <h1>Consulta de Disponibilidad y Reservas</h1>; }

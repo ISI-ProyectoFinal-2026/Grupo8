@@ -1,0 +1,1 @@
+export default function Beneficios() { return <h1>Beneficios para Socios</h1>; }
