@@ -1,6 +1,8 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { Footer } from "./components/layout/Footer";
+import { Header } from "./components/layout/Header";
 import Beneficios from "./pages/Beneficios";
-import ControlAcceso from "./pages/ControlAcceso"; // Importamos la app de guardaparques
+import ControlAcceso from "./pages/ControlAcceso"; // Importamos la app
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Reservas from "./pages/Reservas";
@@ -8,6 +10,11 @@ import Reservas from "./pages/Reservas";
 function App() {
   return (
     <BrowserRouter>
+    {/* El Header se renderiza en todas las páginas, y queda fijo arriba */}
+      <Header />
+      
+      {/* Main envuelve el contenido central para que empuje al footer hacia abajo si hay poco contenido */}
+      <main className="min-h-[calc(100vh-4rem-15rem)]">
       <Routes>
         {/* Rutas Públicas para Visitantes (Issue 9) */}
         <Route path="/" element={<Home />} />
@@ -18,6 +25,10 @@ function App() {
         {/* Ruta Oculta para Guardaparques (Issue 7) */}
         <Route path="/acceso" element={<ControlAcceso />} />
       </Routes>
+      </main>
+
+      {/* El Footer se renderiza al fondo de todas las páginas */}
+      <Footer />
     </BrowserRouter>
   );
 }
