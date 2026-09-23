@@ -1,7 +1,9 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Footer } from "./components/layout/Footer";
 import { Header } from "./components/layout/Header";
+import Acerca from "./pages/Acerca";
 import Beneficios from "./pages/Beneficios";
+import Contacto from "./pages/Contacto";
 import ControlAcceso from "./pages/ControlAcceso"; // Importamos la app
 import Disponibilidad from "./pages/Disponibilidad";
 import Home from "./pages/Home";
@@ -27,6 +29,8 @@ function App() {
         <Route path="/beneficios" element={<Beneficios />} />
         <Route path="/perfil" element={<Perfil />} />
         <Route path="/mis-reservas" element={<MisReservas />} />
+        <Route path="/acerca" element={<Acerca />} />
+        <Route path="/contacto" element={<Contacto />} />
         
         {/* Ruta Oculta para Guardaparques (Issue 7) */}
         <Route path="/acceso" element={<ControlAcceso />} />
