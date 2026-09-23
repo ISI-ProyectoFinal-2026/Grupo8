@@ -3,6 +3,7 @@ import { Footer } from "./components/layout/Footer";
 import { Header } from "./components/layout/Header";
 import Beneficios from "./pages/Beneficios";
 import ControlAcceso from "./pages/ControlAcceso"; // Importamos la app
+import Disponibilidad from "./pages/Disponibilidad";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Reservas from "./pages/Reservas";
@@ -18,6 +19,7 @@ function App() {
       <Routes>
         {/* Rutas Públicas para Visitantes (Issue 9) */}
         <Route path="/" element={<Home />} />
+        <Route path="/disponibilidad" element={<Disponibilidad />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reservas" element={<Reservas />} />
         <Route path="/beneficios" element={<Beneficios />} />
