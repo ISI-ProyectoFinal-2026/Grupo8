@@ -73,7 +73,10 @@ export default function Disponibilidad() {
                 <p className="text-sm text-zinc-500 mb-1">Precio estimado por persona</p>
                 <p className="text-3xl font-bold text-zinc-900">${precio.toLocaleString('es-AR')}</p>
               </div>
-              <Button className="w-full bg-green-600 hover:bg-green-700 h-12 text-md">
+              <Button 
+                className="w-full bg-green-600 hover:bg-green-700 h-12 text-md"
+                onClick={() => navigate("/reservas", { state: { fecha, personas, tipo, precio } })}
+              >
                 Proceder a Reservar
               </Button>
             </CardContent>
