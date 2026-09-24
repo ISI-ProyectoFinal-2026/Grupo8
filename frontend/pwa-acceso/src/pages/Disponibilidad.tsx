@@ -22,12 +22,21 @@ export default function Disponibilidad() {
       return;
     }
 
-    const consultarBackend = async () => {
+  const consultarBackend = async () => {
+      // TEMPORAL PARA PROBAR LA PANTALLA DE RESERVAS. COMENTAR CUANDO EL BACKEND ESTÉ LISTO Y DESCOMENTAR FUNCIÓN DE ABAJO.
+      setTimeout(() => {
+        setHayDisponibilidad(true); 
+        setPrecio(tipo === 'cabana' ? 25000 : 5000);
+        setCargando(false);
+      }, 800);
+    };
+
+    /*const consultarBackend = async () => {
   try {
-    /* 
-      ATENCIÓN: Reemplazar 'http://localhost:8000/api/reservas/disponibilidad' 
-      por la URL exacta y el puerto que use el backend.
-    */
+    
+      // ATENCIÓN: Reemplazar 'http://localhost:8000/api/reservas/disponibilidad' 
+      // por la URL exacta y el puerto que use el backend.
+    
     const url = `http://localhost:8000/api/reservas/disponibilidad?fecha=${fecha}&tipo=${tipo}&personas=${personas}`;
     
     const respuesta = await fetch(url);
@@ -48,7 +57,7 @@ export default function Disponibilidad() {
   } finally {
     setCargando(false);
   }
-};
+};*/
 
     consultarBackend();
   }, [fecha, tipo, personas, navigate]);
