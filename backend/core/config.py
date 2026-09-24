@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     PRECIO_BASE_POR_PERSONA: float = 5000.0
     PORCENTAJE_DESCUENTO_SOCIO: float = 0.20
 
+    # --- Pasarela de Pagos (Mercado Pago) ---
+    MERCADOPAGO_ACCESS_TOKEN: str = ""
+    MERCADOPAGO_PUBLIC_KEY: str = ""
+
     # Esta es la forma nueva y recomendada en Pydantic v2
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
