@@ -11,6 +11,7 @@ from core.config import settings
 from api.reservas import router as reservas_router
 from api.ingresos import router as ingresos_router
 from api.sincronizacion import router as sincronizacion_router # Importamos el router que vamos a crear
+from api.payments import router as payments_router
 
 # Configuración básica del logger
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +37,7 @@ app.add_middleware(
 app.include_router(reservas_router)
 app.include_router(ingresos_router)
 app.include_router(sincronizacion_router) # Conectamos endpoint a la app
+app.include_router(payments_router)
 
 # Middleware para loggeo de errores (Requisito del DoD)
 @app.middleware("http")

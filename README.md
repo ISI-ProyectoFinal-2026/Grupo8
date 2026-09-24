@@ -64,8 +64,12 @@ Para limpiar la base de datos y cargar los datos de prueba iniciales:
 Este proyecto cuenta con una arquitectura de pruebas robusta para garantizar la seguridad del sistema de accesos.
 
 **Test del backend (pytest)**:
-Verifica los servicios de encriptación, validación de schemas y emisión de JWT. Desde la raíz del proyecto (Grupo8):
+Verifica los servicios de encriptación, validación de schemas y emisión de JWT. Desde la carpeta del backend (`cd backend`):
 `pipenv run pytest -v`
+
+> **💡 Nota (Solución de errores):** 
+> Si al ejecutar el comando anterior te aparece un error como `ModuleNotFoundError` o `ERROR collecting`, significa que Python no está reconociendo las rutas relativas. Para solucionarlo, ingresá a la carpeta del backend (`cd backend`) y ejecutá:
+> `pipenv run python -m pytest -v`
 
 **test del frontend (vitest)**:
 Verifica el comportamiento de la Web Crypto API (librería jose) para la desencriptación offline y los bloqueos de la barrera. Desde la carpeta `frontend/pwa-acceso`:
