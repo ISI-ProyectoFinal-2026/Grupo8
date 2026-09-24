@@ -6,7 +6,7 @@ export function Footer() {
         <div>
           <h3 className="text-white text-lg font-semibold mb-4">Ubicación y Horarios</h3>
           <p className="text-sm mb-2">📍 San Rafael, Mendoza</p>
-          <p className="text-sm">🕒 Lunes a Domingos: 08:00 a 22:00 hs</p>
+          <p className="text-sm">🕒 Lunes a Sábados: 08:00 a 20:00 hs</p>
         </div>
 
         {/* Contacto */}
