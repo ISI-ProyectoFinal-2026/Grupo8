@@ -15,6 +15,17 @@ interface Visitante {
   dni: string;
 }
 
+// --- DICCIONARIO DECLARADO AFUERA DEL COMPONENTE ---
+const formatearTipo = (tipoCrudo: string) => {
+  const nombres: Record<string, string> = {
+    "cabana": "Cabaña",
+    "entrada_general": "Entrada General",
+    "carpa": "Parcela para Carpa"
+  };
+  return nombres[tipoCrudo] || (tipoCrudo ? tipoCrudo.replace('_', ' ') : 'Reserva General');
+};
+// ---------------------------------------------------
+
 export default function Reservas() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -66,9 +77,41 @@ export default function Reservas() {
     setVisitantes(nuevosVisitantes);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert("Redirigiendo a Mercado Pago..."); 
+    
+    if (!emailContacto) {
+      alert("Por favor ingresa un email de contacto.");
+      return;
+    }
+
+    try {
+      // 1. Llamamos a nuestro backend (FastAPI)
+      const response = await fetch("http://127.0.0.1:8000/api/payments/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          // --- ACÁ USAMOS LA FUNCIÓN PARA TRADUCIR EL TÍTULO ---
+          title: `${formatearTipo(tipo)} - ${cantidadPersonas} personas`,
+          unit_price: total,
+          payer_email: emailContacto
+        }),
+      });
+
+      const data = await response.json();
+
+      // 2. Si el backend nos devuelve el link, redirigimos al usuario
+      if (response.ok && data.init_point) {
+        window.location.href = data.init_point;
+      } else {
+        alert("Error al conectar con Mercado Pago. Intentá nuevamente.");
+      }
+    } catch (error) {
+      console.error("Error en el pago:", error);
+      alert("Ocurrió un error de red. Verificá que el servidor backend esté encendido.");
+    }
   };
 
   if (!fecha) return null;
@@ -168,8 +211,8 @@ export default function Reservas() {
               </div>
               <div className="flex justify-between text-zinc-600">
                 <span>Tipo de reserva</span>
-                <span className="font-medium text-zinc-900 capitalize">
-                  {tipo ? tipo.replace('_', ' ') : 'General'}
+                <span className="font-medium text-zinc-900">
+                  {formatearTipo(tipo)}
                 </span>
               </div>
               
