@@ -77,6 +77,43 @@ export default function Reservas() {
     setVisitantes(nuevosVisitantes);
   };
 
+  // const handleSubmit = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+    
+  //   if (!emailContacto) {
+  //     alert("Por favor ingresa un email de contacto.");
+  //     return;
+  //   }
+
+  //   try {
+  //     // 1. Llamamos a nuestro backend (FastAPI)
+  //     const response = await fetch("http://127.0.0.1:8000/api/payments/create", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //       },
+  //       body: JSON.stringify({
+  //         // --- ACÁ USAMOS LA FUNCIÓN PARA TRADUCIR EL TÍTULO ---
+  //         title: `${formatearTipo(tipo)} - ${cantidadPersonas} personas`,
+  //         unit_price: total,
+  //         payer_email: emailContacto
+  //       }),
+  //     });
+
+  //     const data = await response.json();
+
+  //     // 2. Si el backend nos devuelve el link, redirigimos al usuario
+  //     if (response.ok && data.init_point) {
+  //       window.location.href = data.init_point;
+  //     } else {
+  //       alert("Error al conectar con Mercado Pago. Intentá nuevamente.");
+  //     }
+  //   } catch (error) {
+  //     console.error("Error en el pago:", error);
+  //     alert("Ocurrió un error de red. Verificá que el servidor backend esté encendido.");
+  //   }
+  // };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -85,31 +122,53 @@ export default function Reservas() {
       return;
     }
 
+    // EL ID DEL USUARIO QUE OBTUVISTE EN EL PASO 1
+    const USER_ID_PRUEBA = "09d7e06d-bf6f-41c7-8bf5-4bb5f1bc07d8";
+
     try {
-      // 1. Llamamos a nuestro backend (FastAPI)
-      const response = await fetch("http://127.0.0.1:8000/api/payments/create", {
+      // 1. PRIMERO: Guardamos la reserva en la base de datos
+      const reservaResponse = await fetch("http://127.0.0.1:8000/reservas/", { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fecha_reserva: new Date(fecha).toISOString(),
+          cantidad_personas: cantidadPersonas,
+          user_id: USER_ID_PRUEBA
+        })
+      });
+
+      if (!reservaResponse.ok) {
+         alert("Error al guardar la reserva en la base de datos.");
+         return;
+      }
+
+      const reservaData = await reservaResponse.json();
+      const reservaId = reservaData.id; // ¡Este es el ID que generó PostgreSQL!
+
+      // 2. SEGUNDO: Llamamos a Mercado Pago pasándole el ID de la reserva
+      const paymentResponse = await fetch("http://127.0.0.1:8000/api/payments/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          // --- ACÁ USAMOS LA FUNCIÓN PARA TRADUCIR EL TÍTULO ---
           title: `${formatearTipo(tipo)} - ${cantidadPersonas} personas`,
           unit_price: total,
-          payer_email: emailContacto
+          payer_email: emailContacto,
+          reserva_id: reservaId // <- EL PUENTE HACIA TU WEBHOOK
         }),
       });
 
-      const data = await response.json();
+      const paymentData = await paymentResponse.json();
 
-      // 2. Si el backend nos devuelve el link, redirigimos al usuario
-      if (response.ok && data.init_point) {
-        window.location.href = data.init_point;
+      // 3. TERCERO: Redirigimos al usuario a pagar
+      if (paymentResponse.ok && paymentData.init_point) {
+        window.location.href = paymentData.init_point;
       } else {
         alert("Error al conectar con Mercado Pago. Intentá nuevamente.");
       }
     } catch (error) {
-      console.error("Error en el pago:", error);
+      console.error("Error en el proceso:", error);
       alert("Ocurrió un error de red. Verificá que el servidor backend esté encendido.");
     }
   };
