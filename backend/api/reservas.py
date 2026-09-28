@@ -46,12 +46,14 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
         db.commit()               # Se ejecuta la transacción
         db.refresh(nueva_reserva) # Traemos los datos frescos (como el ID autogenerado)
         return nueva_reserva
+    
     except Exception as e:
         db.rollback()             # Si algo falla arriba, se revierte todo de forma segura
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al procesar la reserva. Intente nuevamente."
         )
+  
 
 @router.get("/", response_model=List[ReservaResponse])
 def obtener_reservas(

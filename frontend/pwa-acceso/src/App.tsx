@@ -11,6 +11,8 @@ import Login from "./pages/Login";
 import MisReservas from "./pages/MisReservas";
 import Perfil from "./pages/Perfil";
 import Reservas from "./pages/Reservas";
+import PagoExito from "./pages/PagoExito";
+import PagoRechazado from "./pages/PagoRechazado";
 
 function App() {
   return (
@@ -31,6 +33,8 @@ function App() {
         <Route path="/mis-reservas" element={<MisReservas />} />
         <Route path="/acerca" element={<Acerca />} />
         <Route path="/contacto" element={<Contacto />} />
+        <Route path="/pago/exito" element={<PagoExito />} />
+        <Route path="/pago/rechazado" element={<PagoRechazado />} />
         
         {/* Ruta Oculta para Guardaparques (Issue 7) */}
         <Route path="/acceso" element={<ControlAcceso />} />
