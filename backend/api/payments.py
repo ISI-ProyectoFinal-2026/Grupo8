@@ -29,13 +29,14 @@ async def create_payment_preference(request: PaymentRequest):
             }
         ],
         "back_urls": {
-            "success": "http://localhost:5173/mis-reservas",
-            "failure": "http://localhost:5173/",
-            "pending": "http://localhost:5173/mis-reservas"
+            "success": "http://localhost:5173/pago/exito",
+            "failure": "http://localhost:5173/pago/rechazado",
+            "pending": "http://localhost:5173/pago/pendiente"
         },
 
-        # Descomentar auto_return cuando se suba a producción, Mercado Pago no permite la función auto_return con dominios locales
-        # "auto_return": "approved",
+        # Descomentar auto_return cuando se suba a producción, Mercado Pago no permite la función auto_return con dominios locales.
+        # Pasa lo mismo con querer hacer el flujo completo con las back_urls. MP no permite redireccionar a direcciones tipo localhost. En producción deberian andar bien (pq no va a hacer localhost, va a ser una https).
+        #"auto_return": "approved",
         
         "external_reference": request.reserva_id,
 
