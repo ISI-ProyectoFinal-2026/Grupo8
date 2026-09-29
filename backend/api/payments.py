@@ -113,3 +113,53 @@ async def payment_webhook(request: Request, db: Session = Depends(get_db)):
 def get_test_user(db: Session = Depends(get_db)):
     resultado = db.execute(text("SELECT id FROM usuarios LIMIT 1")).fetchone()
     return {"user_id": str(resultado[0]) if resultado else "No hay usuarios"}
+
+
+# Subissue 10.5 :) 
+@router.get("/reconcile/{reserva_id}", summary="Reconciliar operación huérfana manual")
+def reconciliar_pago(reserva_id: str, db: Session = Depends(get_db)):
+    # 1. Buscamos la reserva en tu base de datos local
+    reserva = db.query(Reserva).filter(Reserva.id == reserva_id).first()
+    
+    if not reserva:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada en la base de datos.")
+
+    # Si la reserva ya fue pagada o cancelada, frenamos el proceso para no hacer peticiones innecesarias
+    if reserva.estado_pago != EstadoPagoEnum.PENDIENTE:
+        return {"status": "ok", "message": f"La reserva ya se encuentra en estado: {reserva.estado_pago.value}"}
+
+    try:
+        # 2. Le preguntamos a Mercado Pago si existe algún cobro para este ID de reserva
+        filtros_busqueda = {
+            "external_reference": str(reserva_id)
+        }
+        
+        # El SDK busca todos los intentos de pago asociados a ese external_reference
+        respuesta_mp = payment_service.mp.payment().search(filtros_busqueda)
+        pagos_encontrados = respuesta_mp.get("response", {}).get("results", [])
+
+        # 3. Filtramos a ver si al menos uno de esos intentos fue exitoso
+        pago_aprobado = next((pago for pago in pagos_encontrados if pago.get("status") == "approved"), None)
+
+        if pago_aprobado:
+            # Reconciliación exitosa: MP dice que se pagó, actualizamos nuestra BD
+            reserva.estado_pago = EstadoPagoEnum.PAGADO
+            db.commit()
+            
+            return {
+                "status": "reconciliado",
+                "message": "Se encontró el pago en Mercado Pago. Reserva actualizada a PAGADO.",
+                "pago_id_mp": pago_aprobado.get("id")
+            }
+        else:
+            # MP no registra pagos exitosos para esta reserva
+            return {
+                "status": "pendiente",
+                "message": "No se encontraron pagos aprobados en Mercado Pago para esta reserva."
+            }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error de red al intentar consultar a Mercado Pago: {str(e)}"
+        )
