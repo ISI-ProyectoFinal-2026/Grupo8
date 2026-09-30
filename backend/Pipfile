@@ -11,15 +11,19 @@ python-dotenv = "*"
 psycopg2-binary = "*"
 fastapi = "*"
 uvicorn = "*"
-cryptography = "*"
 pyjwt = {extras = ["crypto"], version = "*"}
 pydantic-settings = "*"
+qrcode = "*"
+pillow = "*"
+cryptography = "*"
+mercadopago = "*"
 
 [dev-packages]
 pytest = "*"
 ruff = "*"
 mypy = "*"
 httpx = "*"
+pytest-cov = "*"
 
 [requires]
 python_version = "3.13.7"

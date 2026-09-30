@@ -37,7 +37,11 @@ async def get_bootstrap_data(
             "buffer_seguridad": settings.CAMPING_OFFLINE_BUFFER
         },
         # Usamos la clave secreta definida para el backend
+<<<<<<< HEAD
         "clave_publica": settings.JWT_PUBLIC_KEY,
+=======
+        "clave_publica": settings.JWT_SECRET_KEY,
+>>>>>>> origin/main
         "pagina_actual": page,
         "tiene_mas_paginas": tiene_mas_paginas
     }

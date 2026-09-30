@@ -1,17 +1,32 @@
-[tool.ruff]
-line-length = 88
-exclude = ["alembic"]
+ [tool.mypy]
+ python_version = "3.11"
+ ignore_missing_imports = true
+ exclude = ["alembic"]
+ explicit_package_bases = true
+ disable_error_code = [
+     "no-untyped-def",
+     "no-untyped-call",
+     "misc",
+     "var-annotated",
+     "call-arg",
+     "assignment"
+ ]
 
-[tool.mypy]
-python_version = "3.11"
-ignore_missing_imports = true
-exclude = ["alembic"]
-explicit_package_bases = true
-disable_error_code = [
-    "no-untyped-def",
-    "no-untyped-call",
-    "misc",
-    "var-annotated",
-    "call-arg",
-    "assignment"
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "alembic/*",
+    "seed.py",
+    "seed_qr.py",
+    "generar_qr_test.py",
+    "tests/*",
+    "*/test_*.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
 ]

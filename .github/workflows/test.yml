@@ -1,0 +1,82 @@
+name: Test Suite (Backend + Frontend)
+
+on:
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+  backend-tests:
+    name: Backend (pytest + coverage)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: usuario_admin
+          POSTGRES_PASSWORD: admin123
+          POSTGRES_DB: camping_db
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.7"
+
+      - name: Instalar Pipenv y dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install pipenv
+          pipenv install --dev
+
+      - name: Generar claves y configurar variables de entorno
+        run: |
+          pipenv run python security/generate_keys.py
+          [ -f ../.env ] && cp ../.env .env || true
+          echo 'DATABASE_URL="postgresql://usuario_admin:admin123@localhost:5435/camping_db"' >> .env
+
+      - name: Ejecutar tests con cobertura (mínimo 80%)
+        run: |
+          pipenv run python -m pytest \
+            --cov=. \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+  frontend-tests:
+    name: Frontend (Vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend/pwa-acceso
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: 'npm'
+          cache-dependency-path: frontend/pwa-acceso/package-lock.json
+
+      - name: Instalar dependencias (npm ci)
+        run: npm ci
+
+      - name: Compilar el proyecto (validación de TypeScript)
+        run: npm run build
+
+      - name: Ejecutar tests (Vitest) — JWT/QR (8.1), IndexedDB (8.3), offline/online (8.4)
+        run: npm run test
