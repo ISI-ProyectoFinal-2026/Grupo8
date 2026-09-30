@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     
     # --- Criptografía QRs Offline ---
     JWT_PRIVATE_KEY: str
-    JWT_PUBLIC_KEY: str
+    VITE_PUBLIC_KEY: str
     
     # --- Reglas de Negocio del Camping ---
     CAMPING_TOTAL_CAPACITY: int = 50
