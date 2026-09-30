@@ -48,6 +48,11 @@ jobs:
           echo 'DATABASE_URL="postgresql://usuario_admin:admin123@localhost:5435/camping_db"' >> .env
 
       - name: Ejecutar tests con cobertura (mínimo 80%)
+        env:
+          AUTH_SECRET_KEY: "clave_falsa_para_tests"
+          MERCADOPAGO_ACCESS_TOKEN: "test_token"
+          MERCADOPAGO_PUBLIC_KEY: "test_key"
+          RESEND_API_KEY: "test_resend_key"
         run: |
           pipenv run python -m pytest \
             --cov=. \
