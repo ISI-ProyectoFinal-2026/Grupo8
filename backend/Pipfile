@@ -17,6 +17,8 @@ qrcode = "*"
 pillow = "*"
 cryptography = "*"
 mercadopago = "*"
+jinja2 = "*"
+resend = "*"
 
 [dev-packages]
 pytest = "*"
@@ -26,4 +28,4 @@ httpx = "*"
 pytest-cov = "*"
 
 [requires]
-python_version = "3.13.7"
+python_version = "3.13"
