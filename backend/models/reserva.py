@@ -12,6 +12,8 @@ class EstadoPagoEnum(enum.Enum):
 
 class Reserva(Base):
     __tablename__ = "reservas"
+    
+    # no hay nombre, puede que falten datos, revisar (Att: Ivan)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
