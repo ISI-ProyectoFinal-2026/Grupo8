@@ -1,10 +1,15 @@
 from sqlalchemy import text
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from services.payment_service import payment_service
+from services.email_service import email_service
 from core.database import get_db
 from models.reserva import Reserva, EstadoPagoEnum
+from security.services import SecurityService # Ajusta la ruta si es necesario
+from security.schemas import JWTPayloadSchema # Ajusta la ruta si es necesario
+import uuid
+import time
 
 router = APIRouter(
     prefix="/api/payments",
@@ -58,7 +63,7 @@ async def create_payment_preference(request: PaymentRequest):
 
 
 @router.post("/webhook", summary="Recibir notificaciones de Mercado Pago")
-async def payment_webhook(request: Request, db: Session = Depends(get_db)):
+async def payment_webhook(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     try:
         body = await request.json()
         print("====== AVISO DE MERCADO PAGO RECIBIDO ======")
@@ -96,6 +101,37 @@ async def payment_webhook(request: Request, db: Session = Depends(get_db)):
                                 print(f"¡Éxito! Reserva {reserva_id} actualizada a PAGADO en PostgreSQL.")
                                 
                                 # TODO: Acá iría la llamada a la función que manda el QR por mail
+                                
+                                # ==========================================
+                                # AUTOMATIZACIÓN DE CORREOS (Issue 11.4)
+                                # ==========================================
+                                # 1. Mapear los datos reales de la base de datos para la plantilla
+                                datos_html = {
+                                    "nombre_cliente": reserva.user_id,
+                                    "reserva_id": str(reserva.id),
+                                    "fecha_ingreso": str(reserva.fecha_reserva),
+                                    "cantidad_personas": reserva.cantidad_personas 
+                                }
+                                
+                                # 2. Generar el JWT real y único para esta reserva
+                                # Usamos el esquema que ya tenías definido en tu módulo de seguridad
+                                payload_data = {
+                                    "jti": str(uuid.uuid4()), # ID único para este token
+                                    "reserva_id": str(reserva.id), # Recuerda que Pydantic exigía string
+                                    "camping_id": str(reserva.camping_id), # Ajusta al campo real de tu modelo
+                                    "iat": int(time.time())
+                                }
+                                
+                                # Llamamos a la función que testeaste al principio (la de ES256)
+                                jwt_generado = SecurityService.generate_offline_qr_token(payload_data)
+                                
+                                # 3. Despachar el correo en un hilo secundario sin bloquear la respuesta a MP
+                                background_tasks.add_task(
+                                    email_service.enviar_confirmacion_async,
+                                    destinatario=reserva.payer_email, # Ajusta al campo de email de tu modelo
+                                    datos_reserva=datos_html,
+                                    jwt_token=jwt_generado
+                                )
                         else:
                             print(f"Alerta: No se encontró la reserva {reserva_id} en la BD.")
                             
