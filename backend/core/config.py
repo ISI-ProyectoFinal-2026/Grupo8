@@ -3,6 +3,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "API Sistema de Accesos - Grupo 8"
     DATABASE_URL: str
+
+    # "development" (default) | "production". En producción se deshabilitan
+    # los endpoints auxiliares de desarrollo (ej: GET /usuarios/prueba).
+    ENVIRONMENT: str = "development"
     
     # --- Autenticación Web (Login) ---
     AUTH_SECRET_KEY: str

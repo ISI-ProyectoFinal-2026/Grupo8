@@ -15,6 +15,9 @@ interface Visitante {
   dni: string;
 }
 
+// URL base del backend (se puede sobreescribir con VITE_API_URL en el .env del frontend)
+const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
+
 // --- DICCIONARIO DECLARADO AFUERA DEL COMPONENTE ---
 const formatearTipo = (tipoCrudo: string) => {
   const nombres: Record<string, string> = {
@@ -86,18 +89,24 @@ export default function Reservas() {
       return;
     }
 
-    // EL ID DEL USUARIO QUE OBTUVISTE EN EL PASO 1
-    const USER_ID_PRUEBA = "09d7e06d-bf6f-41c7-8bf5-4bb5f1bc07d8";
-
     try {
+      // 0. Obtenemos un usuario que exista en la base de datos ACTUAL.
+      // (Temporal: cuando haya login real, el user_id saldrá del usuario autenticado.)
+      const usuarioResponse = await fetch(`${API_URL}/usuarios/prueba`);
+      if (!usuarioResponse.ok) {
+        alert("No se pudo obtener un usuario válido para crear la reserva.");
+        return;
+      }
+      const { user_id: userId } = await usuarioResponse.json();
+
       // 1. PRIMERO: Guardamos la reserva en la base de datos
-      const reservaResponse = await fetch("http://127.0.0.1:8000/reservas/", { 
+      const reservaResponse = await fetch(`${API_URL}/reservas/`, { 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fecha_reserva: new Date(fecha).toISOString(),
           cantidad_personas: cantidadPersonas,
-          user_id: USER_ID_PRUEBA
+          user_id: userId
         })
       });
 
@@ -110,7 +119,7 @@ export default function Reservas() {
       const reservaId = reservaData.id; // ¡Este es el ID que generó PostgreSQL!
 
       // 2. SEGUNDO: Llamamos a Mercado Pago pasándole el ID de la reserva
-      const paymentResponse = await fetch("http://127.0.0.1:8000/api/payments/create", {
+      const paymentResponse = await fetch(`${API_URL}/api/payments/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -50,6 +50,14 @@ Limpia y carga los datos de prueba iniciales:
 ```bash
 python seed.py
 ```
+> ⚠️ `seed.py` (y `seed_qr.py`) **borran** todos los usuarios y reservas antes de cargar los datos.
+
+**Usuario de prueba para crear reservas (no destructivo):**
+El frontend ya no lleva ningún UUID de usuario hardcodeado (:D) : al reservar, pide el `user_id` a `GET /usuarios/prueba`, que devuelve un usuario existente en *tu* base local (lo crea si no existe). Si querés crearlo de forma explícita:
+```bash
+python seed_usuario_prueba.py
+```
+Este script se puede ejecutar todas las veces que quieras: no elimina ni modifica datos existentes. El endpoint queda deshabilitado si `ENVIRONMENT=production`.
 
 ---
 
