@@ -6,7 +6,8 @@ from fastapi.testclient import TestClient
 from main import app
 from core.database import SessionLocal, engine, Base
 from models.user import User
-from models.reserva import Reserva, EstadoPagoEnum
+from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
+from services.camping_service import obtener_o_crear_camping
 from models.ingreso_fisico import IngresoFisico, TipoIngresoEnum
 
 # Aseguramos que las tablas existan, siguiendo el mismo patrón que
@@ -31,10 +32,18 @@ def _crear_reserva_de_prueba() -> str:
         db.commit()
         db.refresh(usuario)
 
+        camping = obtener_o_crear_camping(db)
+        manana = (datetime.now(timezone.utc) + timedelta(days=1)).date()
         reserva = Reserva(
             user_id=usuario.id,
-            fecha_reserva=datetime.now(timezone.utc) + timedelta(days=1),
+            camping_id=camping.camping_id,
+            fecha_ingreso=manana,
+            fecha_egreso=manana,
             cantidad_personas=2,
+            monto_total=10000.0,
+            titular=usuario.nombre,
+            email=usuario.email,
+            estado_reserva=EstadoReservaEnum.CONFIRMADA,
             estado_pago=EstadoPagoEnum.PAGADO,
         )
         db.add(reserva)

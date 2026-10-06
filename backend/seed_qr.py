@@ -6,7 +6,9 @@ import qrcode
 
 from core.database import SessionLocal
 from models.user import User, RoleEnum
-from models.reserva import Reserva, EstadoPagoEnum
+from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
+from services.camping_service import obtener_o_crear_camping
+from services.pricing_service import PricingService
 from security.services import SecurityService
 from security.schemas import JWTPayloadSchema
 from security.config import settings
@@ -46,13 +48,23 @@ def run_seed_con_qrs():
     db.commit()
 
     # 4. Crear reservas (10 pasadas, 5 futuras)
+    # Las reservas necesitan que el camping exista en configuracion_camping
+    camping = obtener_o_crear_camping(db)
     reservas = []
     for i in range(15):
         fecha = datetime.utcnow() - timedelta(days=10-i) if i < 10 else datetime.utcnow() + timedelta(days=i)
+        usuario = usuarios[i % 5]
         r = Reserva(
-            user_id=usuarios[i % 5].id, 
-            fecha_reserva=fecha, 
+            user_id=usuario.id, 
+            camping_id=camping.camping_id,
+            fecha_ingreso=fecha.date(), 
+            fecha_egreso=fecha.date(), 
             cantidad_personas=2,
+            monto_total=PricingService.calcular_precio(2, usuario.is_socio),
+            titular=usuario.nombre,
+            email=usuario.email,
+            telefono="2604000000",
+            estado_reserva=EstadoReservaEnum.CONFIRMADA,
             estado_pago=EstadoPagoEnum.PAGADO
         )
         reservas.append(r)
@@ -81,12 +93,12 @@ def run_seed_con_qrs():
         datos_reserva = {
             "jti": str(uuid.uuid4()), 
             "reserva_id": str(reserva.id), # UUID real obtenido de la BD
-            "camping_id": "CAMP-01", 
+            "camping_id": reserva.camping_id, 
             "iat": fecha_actual,
             "cantidad_personas": reserva.cantidad_personas,
             "typ": "visitante",
             "exp": fecha_actual + (60 * 60 * 24), # Expira en 24 horas
-            "dat": reserva.fecha_reserva.strftime("%Y-%m-%d") 
+            "dat": reserva.fecha_ingreso.strftime("%Y-%m-%d") 
         }
         
         try:

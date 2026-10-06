@@ -1,16 +1,15 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, timedelta
 
 from main import app
 from core.database import SessionLocal
 from models.user import User
 
-pytestmark = pytest.mark.anyio
+pytestmark = [pytest.mark.anyio, pytest.mark.usefixtures("camping_de_prueba")]
 
-# 1. Solucionamos el Warning usando timezone.utc
-FECHA_MAÑANA = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+FECHA_MAÑANA = (date.today() + timedelta(days=1)).isoformat()
 
 # 2. Creamos una función auxiliar para inyectar un usuario real y evitar el Error 500 de Clave Foránea
 def crear_usuario_prueba():
@@ -39,8 +38,12 @@ async def test_flujo_exitoso_crear_reserva():
         
         payload = {
             "user_id": user_id_real,
-            "fecha_reserva": FECHA_MAÑANA,
-            "cantidad_personas": 2
+            "fecha_ingreso": FECHA_MAÑANA,
+            "fecha_egreso": FECHA_MAÑANA,
+            "cantidad_personas": 2,
+            "titular": "Usuario Test",
+            "email": "usuario.test@grupo8.com",
+            "telefono": "2604000000"
         }
         
         response = await ac.post("/reservas/", json=payload)
@@ -60,8 +63,12 @@ async def test_limite_de_capacidad():
         
         payload = {
             "user_id": user_id_real,
-            "fecha_reserva": FECHA_MAÑANA,
-            "cantidad_personas": 60
+            "fecha_ingreso": FECHA_MAÑANA,
+            "fecha_egreso": FECHA_MAÑANA,
+            "cantidad_personas": 60,
+            "titular": "Usuario Test",
+            "email": "usuario.test@grupo8.com",
+            "telefono": "2604000000"
         }
         
         response = await ac.post("/reservas/", json=payload)
