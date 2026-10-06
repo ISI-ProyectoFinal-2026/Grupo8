@@ -59,7 +59,29 @@ python seed_usuario_prueba.py
 ```
 Este script se puede ejecutar todas las veces que quieras: no elimina ni modifica datos existentes. El endpoint queda deshabilitado si `ENVIRONMENT=production`.
 
+**
 ---
+
+## Configuración de correos con Resend
+Qamp usa Resend para enviar el correo de confirmación de reserva con el QR de acceso. Este documento explica cómo generar la API key y dejar el envío funcionando.
+> **Importante:** sin una API key real de Resend, el correo **no se envía**. 
+
+- 1. Crea la cuenta en **https://resend.com**
+- 2. Genera la API Key
+- 3. Pega la clave en el archivo '.env'
+
+### Aclaración: Remitente - modo prueba vs. producción
+
+Para enviar, el campo `from` debe ser una dirección que te pertenezca. Resend ofrece dos caminos:
+#### Modo prueba: `onboarding@resend.dev`
+- Es un remitente que Resend presta, sin configuración.
+- **Solo podés enviar al correo con el que creaste tu cuenta de Resend.**
+- Si el destinatario es otro, Resend rechaza el envío con un error 403.
+
+Para probar, la reserva tiene que tener como email el mismo con el que te registraste.
+
+Cuando pasemos a producción, podemos agregar un dominio propio donde resend te da un DNS.
+
 
 ## 📱 Entorno Frontend (PWA)
 

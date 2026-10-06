@@ -11,7 +11,8 @@ from security.services import SecurityService # Ajusta la ruta si es necesario
 from security.schemas import JWTPayloadSchema # Ajusta la ruta si es necesario
 import uuid
 import time
-from datetime import datetime, time as hora, timedelta, timezone
+from datetime import datetime, time as dtime, timedelta
+from zoneinfo import ZoneInfo
 
 router = APIRouter(
     prefix="/api/payments",
@@ -113,8 +114,9 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                                 # 1. Mapear los datos reales de la base de datos para la plantilla
                                 # El nombre sale del titular de la reserva, no del user_id
                                 datos_html = {
-                                    "nombre_cliente": reserva.titular,
                                     "reserva_id": str(reserva.id),
+                                    "nombre_cliente": reserva.titular,
+                                    "email": reserva.email,
                                     "fecha_ingreso": str(reserva.fecha_ingreso),
                                     "cantidad_personas": reserva.cantidad_personas 
                                 }
@@ -122,7 +124,9 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                                 # 2. Generar el JWT real y único para esta reserva
                                 usuario = db.query(User).filter(User.id == reserva.user_id).first()
                                 # El QR vence al terminar el día de egreso
-                                vencimiento = datetime.combine(reserva.fecha_egreso + timedelta(days=1), hora.min, tzinfo=timezone.utc)
+                                AR = ZoneInfo("America/Argentina/Buenos_Aires")
+                                vencimiento = datetime.combine(reserva.fecha_egreso + timedelta(days=1), dtime.min, tzinfo=AR)
+                                
                                 payload = JWTPayloadSchema(
                                     jti=str(uuid.uuid4()), # ID único para este token
                                     reserva_id=str(reserva.id),
@@ -134,12 +138,12 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                                     dat=reserva.fecha_ingreso.isoformat()
                                 )
                                 
-                                # Llamamos a la función que testeaste al principio (la de ES256)
+                                # Llamamos a la funcion que genera el QR de fomra offline
                                 jwt_generado = SecurityService().generate_offline_qr_token(payload)
                                 
                                 # 3. Despachar el correo en un hilo secundario sin bloquear la respuesta a MP
                                 background_tasks.add_task(
-                                    email_service.enviar_confirmacion_async,
+                                    email_service.enviar_confirmacion_sync,
                                     destinatario=reserva.email, # email del titular de la reserva
                                     datos_reserva=datos_html,
                                     jwt_token=jwt_generado
