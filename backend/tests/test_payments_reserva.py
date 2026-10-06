@@ -59,8 +59,12 @@ class SecurityServiceFalso:
 class EmailServiceFalso:
     enviados = []
 
-    def enviar_confirmacion_async(self, **kwargs):
-        EmailServiceFalso.enviados.append(kwargs)
+    def enviar_confirmacion_sync(self, destinatario, datos_reserva, jwt_token):  # <-- mismo nombre que usa payments.py
+        EmailServiceFalso.enviados.append({
+            "destinatario": destinatario,
+            "datos_reserva": datos_reserva,
+            "jwt_token": jwt_token,
+        })
 
 
 @pytest.fixture

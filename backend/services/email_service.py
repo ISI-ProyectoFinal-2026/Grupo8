@@ -3,16 +3,22 @@ from core.config import settings
 from jinja2 import Environment, FileSystemLoader
 from services.qr_service import qr_service
 import logging
+from pathlib import Path
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 logger = logging.getLogger(__name__)
 resend.api_key = settings.RESEND_API_KEY
 
-# Inicializamos Jinja2 apuntando a la carpeta que creaste en la 11.3
-template_env = Environment(loader=FileSystemLoader("../templates/emails"))
+TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "emails" 
+
+template_env = Environment(
+    loader=FileSystemLoader(str(TEMPLATES_DIR)),
+    autoescape=select_autoescape(["html"]),  # evita inyección HTML con datos como el titular
+)
 
 class EmailService:
     @staticmethod
-    def enviar_confirmacion_async(destinatario: str, datos_reserva: dict, jwt_token: str):
+    def enviar_confirmacion_sync(destinatario: str, datos_reserva: dict, jwt_token: str):
         """
         Renderiza la plantilla HTML, genera el QR y despacha el correo.
         Diseñada para ejecutarse en segundo plano (BackgroundTasks).
@@ -35,7 +41,8 @@ class EmailService:
                     {
                         "filename": f"QR_Acceso_{datos_reserva.get('reserva_id', 'Qamp')}.png",
                         # El SDK de Resend en Python requiere convertir los bytes a una lista de enteros
-                        "content": list(qr_bytes) 
+                        "content": list(qr_bytes),
+                        "content_id": "qr_code",
                     }
                 ]
             }
