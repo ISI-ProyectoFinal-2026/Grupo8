@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     VITE_PUBLIC_KEY: str
     
     # --- Reglas de Negocio del Camping ---
+    # Id del camping al que se asocian las reservas (tiene que existir en configuracion_camping)
+    CAMPING_ID: str = "CAMP-MENDOZA-01"
     CAMPING_TOTAL_CAPACITY: int = 50
     CAMPING_OFFLINE_BUFFER: int = 5
 

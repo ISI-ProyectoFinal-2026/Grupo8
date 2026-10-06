@@ -39,8 +39,12 @@ def test_obtener_reservas():
 def test_crear_reserva_sin_datos_completos():
     # Simulamos enviar una reserva pero "olvidando" el user_id
     payload_incompleto = {
-        "fecha_reserva": "2026-12-31T10:00:00",
-        "cantidad_personas": 4
+        "fecha_ingreso": "2026-12-31",
+        "fecha_egreso": "2026-12-31",
+        "cantidad_personas": 4,
+        "titular": "Ana Pérez",
+        "email": "ana@test.com",
+        "telefono": "2604000000"
         # Falta el user_id intencionalmente
     }
     

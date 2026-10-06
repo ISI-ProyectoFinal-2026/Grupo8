@@ -15,13 +15,14 @@ import { useNavigate } from "react-router-dom";
 export default function Home() {
   const navigate = useNavigate();
   const [fecha, setFecha] = useState("");
+  const [fechaEgreso, setFechaEgreso] = useState("");
   const [personas, setPersonas] = useState("");
   const [tipo, setTipo] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // Pasamos los parámetros de búsqueda a la pantalla de disponibilidad
-    navigate("/disponibilidad", { state: { fecha, personas, tipo } });
+    navigate("/disponibilidad", { state: { fecha, fechaEgreso, personas, tipo } });
   };
 
   return (
@@ -50,7 +51,22 @@ export default function Home() {
                   type="date" 
                   required 
                   value={fecha}
-                  onChange={(e) => setFecha(e.target.value)}
+                  onChange={(e) => {
+                    setFecha(e.target.value);
+                    // Si el egreso quedó antes del ingreso (o vacío), lo igualamos: pasar el día
+                    if (!fechaEgreso || fechaEgreso < e.target.value) setFechaEgreso(e.target.value);
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fechaEgreso">Fecha de egreso</Label>
+                <Input 
+                  id="fechaEgreso" 
+                  type="date" 
+                  required 
+                  min={fecha}
+                  value={fechaEgreso}
+                  onChange={(e) => setFechaEgreso(e.target.value)}
                 />
               </div>
               <div className="space-y-2">

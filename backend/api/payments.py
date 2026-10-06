@@ -6,10 +6,12 @@ from services.payment_service import payment_service
 from services.email_service import email_service
 from core.database import get_db
 from models.reserva import Reserva, EstadoPagoEnum
+from models.user import User
 from security.services import SecurityService # Ajusta la ruta si es necesario
 from security.schemas import JWTPayloadSchema # Ajusta la ruta si es necesario
 import uuid
 import time
+from datetime import datetime, time as hora, timedelta, timezone
 
 router = APIRouter(
     prefix="/api/payments",
@@ -18,18 +20,21 @@ router = APIRouter(
 
 class PaymentRequest(BaseModel):
     title: str
-    unit_price: float
-    payer_email: str
-    reserva_id: str # id reserva
+    reserva_id: uuid.UUID # id reserva
 
 @router.post("/create", summary="Crear preferencia de pago")
-async def create_payment_preference(request: PaymentRequest):
+async def create_payment_preference(request: PaymentRequest, db: Session = Depends(get_db)):
+    # El monto sale de la reserva guardada, no de lo que mande el cliente
+    reserva = db.query(Reserva).filter(Reserva.id == request.reserva_id).first()
+    if not reserva:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada en la base de datos.")
+
     preference_data = {
         "items": [
             {
                 "title": request.title,
                 "quantity": 1,
-                "unit_price": request.unit_price,
+                "unit_price": reserva.monto_total,
                 "currency_id": "ARS"
             }
         ],
@@ -43,7 +48,7 @@ async def create_payment_preference(request: PaymentRequest):
         # Pasa lo mismo con querer hacer el flujo completo con las back_urls. MP no permite redireccionar a direcciones tipo localhost. En producción deberian andar bien (pq no va a hacer localhost, va a ser una https).
         #"auto_return": "approved",
         
-        "external_reference": request.reserva_id,
+        "external_reference": str(reserva.id),
 
         # le pasamos la url directamente a Mercado Pago
         "notification_url": "https://party-unhook-ambiguous.ngrok-free.dev/api/payments/webhook"
@@ -96,7 +101,7 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                                 print(f"La reserva {reserva_id} ya figuraba como PAGADA. Ignorando aviso duplicado.")
                             else:
                                 # 3. ACTUALIZAR (DoD 2): La pasamos a Pagada y guardamos
-                                reserva.estado_pago = EstadoPagoEnum.PAGADO
+                                reserva.marcar_como_pagada()
                                 db.commit()
                                 print(f"¡Éxito! Reserva {reserva_id} actualizada a PAGADO en PostgreSQL.")
                                 
@@ -106,29 +111,36 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                                 # AUTOMATIZACIÓN DE CORREOS (Issue 11.4)
                                 # ==========================================
                                 # 1. Mapear los datos reales de la base de datos para la plantilla
+                                # El nombre sale del titular de la reserva, no del user_id
                                 datos_html = {
-                                    "nombre_cliente": reserva.user_id,
+                                    "nombre_cliente": reserva.titular,
                                     "reserva_id": str(reserva.id),
-                                    "fecha_ingreso": str(reserva.fecha_reserva),
+                                    "fecha_ingreso": str(reserva.fecha_ingreso),
                                     "cantidad_personas": reserva.cantidad_personas 
                                 }
                                 
                                 # 2. Generar el JWT real y único para esta reserva
-                                # Usamos el esquema que ya tenías definido en tu módulo de seguridad
-                                payload_data = {
-                                    "jti": str(uuid.uuid4()), # ID único para este token
-                                    "reserva_id": str(reserva.id), # Recuerda que Pydantic exigía string
-                                    "camping_id": str(reserva.camping_id), # Ajusta al campo real de tu modelo
-                                    "iat": int(time.time())
-                                }
+                                usuario = db.query(User).filter(User.id == reserva.user_id).first()
+                                # El QR vence al terminar el día de egreso
+                                vencimiento = datetime.combine(reserva.fecha_egreso + timedelta(days=1), hora.min, tzinfo=timezone.utc)
+                                payload = JWTPayloadSchema(
+                                    jti=str(uuid.uuid4()), # ID único para este token
+                                    reserva_id=str(reserva.id),
+                                    camping_id=reserva.camping_id,
+                                    iat=int(time.time()),
+                                    cantidad_personas=reserva.cantidad_personas,
+                                    typ="socio" if usuario and usuario.is_socio else "visitante",
+                                    exp=int(vencimiento.timestamp()),
+                                    dat=reserva.fecha_ingreso.isoformat()
+                                )
                                 
                                 # Llamamos a la función que testeaste al principio (la de ES256)
-                                jwt_generado = SecurityService.generate_offline_qr_token(payload_data)
+                                jwt_generado = SecurityService().generate_offline_qr_token(payload)
                                 
                                 # 3. Despachar el correo en un hilo secundario sin bloquear la respuesta a MP
                                 background_tasks.add_task(
                                     email_service.enviar_confirmacion_async,
-                                    destinatario=reserva.payer_email, # Ajusta al campo de email de tu modelo
+                                    destinatario=reserva.email, # email del titular de la reserva
                                     datos_reserva=datos_html,
                                     jwt_token=jwt_generado
                                 )
@@ -179,7 +191,7 @@ def reconciliar_pago(reserva_id: str, db: Session = Depends(get_db)):
 
         if pago_aprobado:
             # Reconciliación exitosa: MP dice que se pagó, actualizamos nuestra BD
-            reserva.estado_pago = EstadoPagoEnum.PAGADO
+            reserva.marcar_como_pagada()
             db.commit()
             
             return {

@@ -1,5 +1,7 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+
+import pytest
+from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -14,6 +16,9 @@ from services.usuario_prueba_service import EMAIL_USUARIO_PRUEBA
 Base.metadata.create_all(bind=engine)
 
 client = TestClient(app)
+
+# Las reservas necesitan el camping cargado
+pytestmark = pytest.mark.usefixtures("camping_de_prueba")
 
 
 def test_usuario_prueba_devuelve_un_usuario_existente_en_la_bd():
@@ -62,8 +67,12 @@ def test_se_puede_crear_una_reserva_con_el_usuario_de_prueba(monkeypatch):
         "/reservas/",
         json={
             "user_id": user_id,
-            "fecha_reserva": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            "fecha_ingreso": (date.today() + timedelta(days=1)).isoformat(),
+            "fecha_egreso": (date.today() + timedelta(days=1)).isoformat(),
             "cantidad_personas": 1,
+            "titular": "Cliente de Prueba",
+            "email": EMAIL_USUARIO_PRUEBA,
+            "telefono": "2604000000",
         },
     )
 

@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { formatearFecha } from "@/lib/fechas";
 import { CalendarDays, CreditCard, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -34,7 +35,7 @@ export default function Reservas() {
   const navigate = useNavigate();
   
   // Rescatamos los datos que vienen del buscador y la disponibilidad con valores por defecto
-  const { fecha, personas, tipo, precio } = location.state || {};
+  const { fecha, fechaEgreso, personas, tipo, precio } = location.state || {};
   const precioBase = precio || 5000; // Valor de respaldo por seguridad
 
   // Si no hay fecha, redirigimos al inicio para evitar pantallas en blanco
@@ -53,6 +54,7 @@ export default function Reservas() {
   );
   
   const [emailContacto, setEmailContacto] = useState("");
+  const [telefono, setTelefono] = useState("");
   const [total, setTotal] = useState(cantidadPersonas * precioBase);
   const [descuentoAplicado, setDescuentoAplicado] = useState(0);
 
@@ -104,9 +106,13 @@ export default function Reservas() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fecha_reserva: new Date(fecha).toISOString(),
+          fecha_ingreso: fecha,
+          fecha_egreso: fechaEgreso || fecha, // si no vino egreso, es una reserva por el día
           cantidad_personas: cantidadPersonas,
-          user_id: userId
+          user_id: userId,
+          titular: visitantes[0].nombre, // el titular es el primer visitante
+          email: emailContacto,
+          telefono: telefono
         })
       });
 
@@ -126,8 +132,6 @@ export default function Reservas() {
         },
         body: JSON.stringify({
           title: `${formatearTipo(tipo)} - ${cantidadPersonas} personas`,
-          unit_price: total,
-          payer_email: emailContacto,
           reserva_id: reservaId // <- EL PUENTE HACIA TU WEBHOOK
         }),
       });
@@ -172,6 +176,22 @@ export default function Reservas() {
                 placeholder="ejemplo@correo.com"
                 value={emailContacto}
                 onChange={(e) => setEmailContacto(e.target.value)}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Teléfono de Contacto</CardTitle>
+              <CardDescription>Lo usamos por si necesitamos comunicarnos por tu reserva.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Input 
+                type="tel" 
+                required 
+                placeholder="2604123456"
+                value={telefono}
+                onChange={(e) => setTelefono(e.target.value)}
               />
             </CardContent>
           </Card>
@@ -242,7 +262,8 @@ export default function Reservas() {
               <div className="flex justify-between text-zinc-600">
                 <span className="flex items-center gap-2"><CalendarDays className="w-4 h-4"/> Fecha</span>
                 <span className="font-medium text-zinc-900">
-                  {fecha ? new Date(fecha).toLocaleDateString('es-AR') : ''}
+                  {fecha ? formatearFecha(fecha) : ''}
+                  {fechaEgreso && fechaEgreso !== fecha ? ` al ${formatearFecha(fechaEgreso)}` : ''}
                 </span>
               </div>
               <div className="flex justify-between text-zinc-600">
