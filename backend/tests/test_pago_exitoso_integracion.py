@@ -1,17 +1,19 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 import api.payments as payments_module
+from core.config import settings
 from core.database import Base, SessionLocal, engine
 from main import app
-from models.reserva import EstadoPagoEnum, Reserva
+from models.reserva import EstadoPagoEnum, EstadoReservaEnum, Reserva
 from models.user import User
 
-pytestmark = pytest.mark.anyio
+# Las reservas necesitan el camping cargado (FK)
+pytestmark = [pytest.mark.anyio, pytest.mark.usefixtures("camping_de_prueba")]
 
 Base.metadata.create_all(bind=engine)
 
@@ -38,6 +40,15 @@ def _obtener_estado(reserva_id: uuid.UUID) -> EstadoPagoEnum:
     db = SessionLocal()
     try:
         return db.query(Reserva.estado_pago).filter(Reserva.id == reserva_id).scalar()
+    finally:
+        db.close()
+
+
+def _obtener_estado_reserva(reserva_id: uuid.UUID) -> EstadoReservaEnum:
+    """Igual que _obtener_estado, pero para el estado operativo de la reserva."""
+    db = SessionLocal()
+    try:
+        return db.query(Reserva.estado_reserva).filter(Reserva.id == reserva_id).scalar()
     finally:
         db.close()
 
@@ -79,10 +90,17 @@ def crear_reserva():
             db.commit()
             db.refresh(usuario)
 
+            manana = date.today() + timedelta(days=1)
             reserva = Reserva(
                 user_id=usuario.id,
-                fecha_reserva=datetime.now(timezone.utc) + timedelta(days=1),
+                camping_id=settings.CAMPING_ID,
+                fecha_ingreso=manana,
+                fecha_egreso=manana,
                 cantidad_personas=2,
+                monto_total=10000.0,
+                titular=usuario.nombre,
+                email=usuario.email,
+                estado_reserva=EstadoReservaEnum.PENDIENTE,
                 estado_pago=estado,
             )
             db.add(reserva)
@@ -114,6 +132,8 @@ def mp_mock(monkeypatch):
     # Defensivo: si más adelante se corrige el bloque de email del webhook,
     # estos tests no deben intentar enviar correos reales.
     monkeypatch.setattr(payments_module, "email_service", MagicMock())
+    # Tampoco dependemos de las claves JWT: el webhook genera el QR con SecurityService
+    monkeypatch.setattr(payments_module, "SecurityService", MagicMock())
     return mp
 
 
@@ -125,6 +145,7 @@ async def test_webhook_pago_aprobado_actualiza_reserva_a_pagado(crear_reserva, m
 
     # Precondición: parte de PENDIENTE
     assert _obtener_estado(reserva_id) == EstadoPagoEnum.PENDIENTE
+    assert _obtener_estado_reserva(reserva_id) == EstadoReservaEnum.PENDIENTE
 
     response = await _enviar_webhook()
 
@@ -134,6 +155,8 @@ async def test_webhook_pago_aprobado_actualiza_reserva_a_pagado(crear_reserva, m
     mp_mock.payment.return_value.get.assert_called_once_with(PAYMENT_ID)
     # Persistido en PostgreSQL (el enum guarda el nombre PAGADO)
     assert _obtener_estado(reserva_id) == EstadoPagoEnum.PAGADO
+    # Y la reserva queda confirmada, que es el estado operativo
+    assert _obtener_estado_reserva(reserva_id) == EstadoReservaEnum.CONFIRMADA
 
 
 async def test_webhook_pago_aprobado_no_modifica_otras_reservas(crear_reserva, mp_mock):
@@ -147,3 +170,4 @@ async def test_webhook_pago_aprobado_no_modifica_otras_reservas(crear_reserva, m
     assert _obtener_estado(reserva_pagada) == EstadoPagoEnum.PAGADO
     # Se vincula únicamente por external_reference
     assert _obtener_estado(reserva_ajena) == EstadoPagoEnum.PENDIENTE
+    assert _obtener_estado_reserva(reserva_ajena) == EstadoReservaEnum.PENDIENTE
