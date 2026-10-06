@@ -16,9 +16,9 @@ pydantic-settings = "*"
 qrcode = "*"
 pillow = "*"
 cryptography = "*"
-mercadopago = "*"
 jinja2 = "*"
 resend = "*"
+mercadopago = "*"
 
 [dev-packages]
 pytest = "*"
