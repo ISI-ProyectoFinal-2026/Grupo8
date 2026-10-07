@@ -3,6 +3,7 @@ import enum
 from datetime import datetime
 from sqlalchemy import Column, Integer, Float, String, Date, DateTime, Enum, ForeignKey, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from core.database import Base
 
@@ -48,6 +49,9 @@ class Reserva(Base):
     __table_args__ = (
         CheckConstraint("fecha_egreso >= fecha_ingreso", name="ck_reservas_egreso_desde_ingreso"),
     )
+    
+    # NUEVO: Relación bidireccional que fuerza el borrado en cascada a nivel de SQLAlchemy
+    ingresos = relationship("IngresoFisico", back_populates="reserva", cascade="all, delete-orphan")
 
     def marcar_como_pagada(self):
         # Cuando entra el pago la reserva también queda confirmada
