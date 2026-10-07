@@ -8,11 +8,17 @@ interface ScannerQRProps {
 
 export const ScannerQR = ({ onScanSuccess }: ScannerQRProps) => {
   const [permisoDenegado, setPermisoDenegado] = useState<boolean>(false);
-  // 👇 1. Nuevo estado para el input manual
   const [tokenManual, setTokenManual] = useState<string>(''); 
+
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  // Agregamos esta bandera para frenar el StrictMode de React
+  const inicializado = useRef<boolean>(false); 
 
   useEffect(() => {
+    // 2. Si ya pasó por aquí en este render, abortamos para evitar duplicar el HTML
+    if (inicializado.current) return;
+    inicializado.current = true;
+
     const inicializarCamara = async () => {
       try {
         const devices = await Html5Qrcode.getCameras();
@@ -41,13 +47,20 @@ export const ScannerQR = ({ onScanSuccess }: ScannerQRProps) => {
     inicializarCamara();
 
     return () => {
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.stop().catch(console.error);
+      //3. Mejoramos la limpieza para asegurar que borre el HTML residual al desmontar
+      if (scannerRef.current) {
+        if (scannerRef.current.isScanning) {
+          scannerRef.current.stop().catch(console.error).finally(() => {
+            scannerRef.current?.clear();
+          });
+        } else {
+          scannerRef.current.clear();
+        }
       }
     };
   }, [onScanSuccess]);
 
-  // 👇 2. Función para manejar el envío del token manual
+  //  2. Función para manejar el envío del token manual
   const handleSimularEscaneo = (e: React.FormEvent) => {
     e.preventDefault(); // Evita que la página se recargue al enviar el form
     if (tokenManual.trim() !== '') {
@@ -68,7 +81,7 @@ export const ScannerQR = ({ onScanSuccess }: ScannerQRProps) => {
         <div id="lector-qr" style={{ borderRadius: '12px', overflow: 'hidden', border: '2px solid #ccc' }}></div>
       )}
 
-      {/* 👇 3. Nueva barra de testeo manual (Modo Developer) */}
+      {/*  3. Nueva barra de testeo manual (Modo Developer) */}
       <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f8f9fa', border: '2px dashed #007bff', borderRadius: '8px' }}>
         <h4 style={{ margin: '0 0 10px 0', color: '#007bff', textAlign: 'center', fontFamily: 'sans-serif' }}>
           🔧 Modo Test (Simular QR)
