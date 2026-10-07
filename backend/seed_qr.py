@@ -12,6 +12,7 @@ from services.pricing_service import PricingService
 from security.services import SecurityService
 from security.schemas import JWTPayloadSchema
 from security.config import settings
+from models.ingreso_fisico import IngresoFisico
 
 # Creamos la sesión
 db = SessionLocal()
@@ -19,9 +20,10 @@ db = SessionLocal()
 def run_seed_con_qrs():
     print("--- Iniciando Seeding y Generación de QRs ---")
     
-    # 1. Limpiar la BD (IMPORTANTE: primero reservas porque dependen de usuarios)
-    db.query(Reserva).delete()
-    db.query(User).delete()
+    # 1. Limpiar la BD (IMPORTANTE: El orden estricto es de hijo a padre)
+    db.query(IngresoFisico).delete() # <- NUEVA LÍNEA: Borramos los hijos primero
+    db.query(Reserva).delete()       # <- Luego borramos los padres de los ingresos
+    db.query(User).delete()          # <- Luego borramos los padres de las reservas
     db.commit()
     print("Base de datos limpia.")
 
