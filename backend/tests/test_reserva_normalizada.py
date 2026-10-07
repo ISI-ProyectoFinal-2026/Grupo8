@@ -197,31 +197,39 @@ def test_crear_reserva_con_usuario_inexistente_devuelve_404(reservas_creadas):
 
 
 def test_cupo_depende_del_estado_de_reserva_y_no_del_pago(monkeypatch, reservas_creadas):
-    user_id = _crear_usuario()
+        user_id = _crear_usuario()
+        
+        # 1. Generamos el payload para saber qué fechas exactas va a intentar reservar el test
+        payload_prueba = _payload(user_id, cantidad_personas=2)
+        
+        # 2. Calculamos los lugares ocupados SOLO en esas fechas (la misma lógica nueva del backend)
+        db = SessionLocal()
+        try:
+            ocupados = db.query(func.sum(Reserva.cantidad_personas)).filter(
+                Reserva.estado_reserva != EstadoReservaEnum.CANCELADA,
+                Reserva.fecha_ingreso <= payload_prueba["fecha_egreso"],
+                Reserva.fecha_egreso >= payload_prueba["fecha_ingreso"]
+            ).scalar() or 0
+        finally:
+            db.close()
+            
+        # Dejamos exactamente 2 lugares libres para esas fechas
+        monkeypatch.setattr(
+            settings, "CAMPING_TOTAL_CAPACITY", ocupados + settings.CAMPING_OFFLINE_BUFFER + 2
+        )
 
-    # Dejamos exactamente 2 lugares libres, sin importar lo que haya en la BD local
-    db = SessionLocal()
-    try:
-        ocupados = db.query(func.sum(Reserva.cantidad_personas)).filter(
-            Reserva.estado_reserva != EstadoReservaEnum.CANCELADA
-        ).scalar() or 0
-    finally:
-        db.close()
-    monkeypatch.setattr(
-        settings, "CAMPING_TOTAL_CAPACITY", ocupados + settings.CAMPING_OFFLINE_BUFFER + 2
-    )
+        # Una reserva cancelada no ocupa lugar
+        _insertar_reserva(user_id, reservas_creadas, cantidad_personas=30,
+                          estado_reserva=EstadoReservaEnum.CANCELADA)
 
-    # Una reserva cancelada no ocupa lugar aunque su pago figure como pendiente
-    _insertar_reserva(user_id, reservas_creadas, cantidad_personas=30,
-                      estado_reserva=EstadoReservaEnum.CANCELADA)
+        # Reserva 1: ocupa los últimos 2 lugares
+        primera = client.post("/reservas/", json=payload_prueba)
+        assert primera.status_code == 201
+        reservas_creadas.append(primera.json()["id"])
 
-    primera = client.post("/reservas/", json=_payload(user_id, cantidad_personas=2))
-    assert primera.status_code == 201
-    reservas_creadas.append(primera.json()["id"])
-
-    # Ahora sí está lleno
-    segunda = client.post("/reservas/", json=_payload(user_id, cantidad_personas=1))
-    assert segunda.status_code == 400
+        # Reserva 2: ahora sí está lleno en esa fecha y debe fallar (Error 400)
+        segunda = client.post("/reservas/", json=_payload(user_id, cantidad_personas=1))
+        assert segunda.status_code == 400
 
 
 # ---------- GET /reservas ----------
