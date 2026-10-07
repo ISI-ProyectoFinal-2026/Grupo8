@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,7 +12,12 @@ from core.dependencies import get_current_user
 from main import app
 from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
 from models.user import User, RoleEnum
-from schemas.reserva import ReservaCreate
+from schemas.reserva import ReservaCreate, hoy_argentina
+
+# Fechas relativas a "hoy" (hora de Argentina, igual que el backend) para que los
+# tests no dependan del día en que se ejecutan
+INGRESO = hoy_argentina() + timedelta(days=30)
+EGRESO = INGRESO + timedelta(days=2)
 
 Base.metadata.create_all(bind=engine)
 
@@ -48,8 +53,8 @@ def _crear_usuario(es_socio=False) -> str:
 def _payload(user_id, **cambios) -> dict:
     payload = {
         "user_id": user_id,
-        "fecha_ingreso": "2026-12-20",
-        "fecha_egreso": "2026-12-22",
+        "fecha_ingreso": INGRESO.isoformat(),
+        "fecha_egreso": EGRESO.isoformat(),
         "cantidad_personas": 2,
         "titular": "Ana Pérez",
         "email": "ana@test.com",
@@ -57,7 +62,6 @@ def _payload(user_id, **cambios) -> dict:
     }
     payload.update(cambios)
     return payload
-
 
 def _insertar_reserva(user_id, ids, **campos) -> str:
     """Inserta una reserva directo en la BD y la anota para borrarla al final."""
@@ -118,15 +122,15 @@ def test_marcar_como_pagada_actualiza_pago_y_estado_de_reserva():
 
 def test_schema_acepta_ingreso_y_egreso_el_mismo_dia():
     # Quien pasa el día entra y sale el mismo día
-    reserva = ReservaCreate(**_payload(str(uuid.uuid4()), fecha_egreso="2026-12-20"))
+    reserva = ReservaCreate(**_payload(str(uuid.uuid4()), fecha_egreso=INGRESO.isoformat()))
 
     assert reserva.fecha_ingreso == reserva.fecha_egreso
 
 
 def test_schema_rechaza_egreso_anterior_al_ingreso():
+    antes = (INGRESO - timedelta(days=1)).isoformat()
     with pytest.raises(ValidationError):
-        ReservaCreate(**_payload(str(uuid.uuid4()), fecha_egreso="2026-12-19"))
-
+        ReservaCreate(**_payload(str(uuid.uuid4()), fecha_egreso=antes))
 
 # ---------- POST /reservas ----------
 
@@ -140,8 +144,8 @@ def test_crear_reserva_guarda_los_datos_normalizados(reservas_creadas):
     reservas_creadas.append(data["id"])
     assert data["user_id"] == user_id
     assert data["camping_id"] == settings.CAMPING_ID
-    assert data["fecha_ingreso"] == "2026-12-20"
-    assert data["fecha_egreso"] == "2026-12-22"
+    assert data["fecha_ingreso"] == INGRESO.isoformat()
+    assert data["fecha_egreso"] == EGRESO.isoformat()
     assert data["fecha_reserva"]  # la completa el backend al crear
     assert data["titular"] == "Ana Pérez"
     assert data["email"] == "ana@test.com"
@@ -165,11 +169,10 @@ def test_crear_reserva_aplica_descuento_de_socio(reservas_creadas):
 
 def test_crear_reserva_con_egreso_anterior_al_ingreso_devuelve_422(reservas_creadas):
     user_id = _crear_usuario()
+    antes = (INGRESO - timedelta(days=1)).isoformat()
 
-    response = client.post("/reservas/", json=_payload(user_id, fecha_egreso="2026-12-19"))
-
+    response = client.post("/reservas/", json=_payload(user_id, fecha_egreso=antes))
     assert response.status_code == 422
-
 
 @pytest.mark.parametrize("campo", ["titular", "email", "telefono", "fecha_ingreso", "fecha_egreso"])
 def test_crear_reserva_sin_campo_obligatorio_devuelve_422(campo, reservas_creadas):

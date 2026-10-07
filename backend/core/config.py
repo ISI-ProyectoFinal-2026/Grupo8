@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     CAMPING_ID: str = "CAMP-MENDOZA-01"
     CAMPING_TOTAL_CAPACITY: int = 50
     CAMPING_OFFLINE_BUFFER: int = 5
+    MAX_PERSONAS_POR_RESERVA: int = 10
+    MAX_NOCHES_POR_RESERVA: int = 10
 
     # --- Tarifas ---
     PRECIO_BASE_POR_PERSONA: float = 5000.0
