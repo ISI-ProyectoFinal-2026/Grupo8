@@ -6,7 +6,7 @@ from typing import List, Optional
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, and_
 
 from core.config import settings
 from core.database import get_db 
@@ -37,10 +37,16 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
             detail="El camping no está configurado."
         )
 
-    # 3. Calcular cuántos lugares están ocupados actualmente
-    # Sumamos las personas de todas las reservas que NO estén canceladas
+    # 3. Calcular cuántos lugares están ocupados en las fechas solicitadas
+    # Un solapamiento de fechas ocurre cuando el ingreso existente es <= al egreso solicitado, 
+    # y el egreso existente es >= al ingreso solicitado.
+    # Las reservas PENDIENTES y confirmadas consumen capacidad (!= CANCELADA) para evitar sobreventa.
     lugares_ocupados = db.query(func.sum(Reserva.cantidad_personas)).filter(
-        Reserva.estado_reserva != EstadoReservaEnum.CANCELADA
+        and_(
+            Reserva.estado_reserva != EstadoReservaEnum.CANCELADA,
+            Reserva.fecha_ingreso <= reserva_in.fecha_egreso,
+            Reserva.fecha_egreso >= reserva_in.fecha_ingreso
+        )
     ).scalar() or 0
 
     # 4. Validar disponibilidad (Endpoint POST)
@@ -79,7 +85,6 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al procesar la reserva. Intente nuevamente."
         )
-  
 
 @router.get("/", response_model=List[ReservaResponse])
 def obtener_reservas(
