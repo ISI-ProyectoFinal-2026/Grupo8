@@ -13,6 +13,7 @@ import Perfil from "./pages/Perfil";
 import Reservas from "./pages/Reservas";
 import PagoExito from "./pages/PagoExito";
 import PagoRechazado from "./pages/PagoRechazado";
+import PagoPendiente from "./pages/PagoPendiente";
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
         <Route path="/contacto" element={<Contacto />} />
         <Route path="/pago/exito" element={<PagoExito />} />
         <Route path="/pago/rechazado" element={<PagoRechazado />} />
+        <Route path="/pago/pendiente" element={<PagoPendiente />} />
         
         {/* Ruta Oculta para Guardaparques (Issue 7) */}
         <Route path="/acceso" element={<ControlAcceso />} />

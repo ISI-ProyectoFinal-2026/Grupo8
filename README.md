@@ -134,7 +134,7 @@ El sistema integra cobros en línea mediante el SDK oficial de Mercado Pago y Fa
 1. **Creación de Preferencia (`POST /api/payments/create`):** Genera la orden vinculando el UUID de la reserva local en `external_reference`.
 2. **Notificación Asíncrona (`POST /api/payments/webhook`):** Recibe eventos, consulta el estado real (`payment().get()`) y actualiza la reserva a `PAGADO` de manera atómica.
 3. **Mecanismo de Reconciliación y Contingencia (`GET /api/payments/reconcile/{reserva_id}`):** Flujo de verificación manual para mitigar posibles fallas en el webhook (cortes de red, caídas del servidor). Utiliza el SDK para consultar a la API filtrando por `external_reference`. Si hay un cobro `approved`, actualiza la reserva en PostgreSQL. Se dispara manualmente desde el panel de gestión ("Verificar Pago").
-4. **Pantallas de Retorno:** Vistas dedicadas (`/pago/exito` y `/pago/rechazado`) para la respuesta visual al usuario.
+4. **Pantallas de Retorno:** Vistas dedicadas (\/pago/exito`, `/pago/rechazado` y `/pago/pendiente`) para la respuesta visual al usuario.
 
 **⚠️ Consideraciones de Entorno Local:**
 - **Túnel ngrok para Webhooks:** En desarrollo, se requiere exponer el puerto `8000` con `ngrok http 8000` y definir la URL en `notification_url` (MP no notifica a localhost).

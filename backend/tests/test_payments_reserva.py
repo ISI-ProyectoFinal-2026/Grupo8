@@ -212,6 +212,7 @@ def test_crear_preferencia_cobra_el_monto_guardado_en_la_reserva(monkeypatch, re
     assert response.json()["init_point"] == "https://mp.test/init"
     assert mp.preferencia["items"][0]["unit_price"] == 15000.0
     assert mp.preferencia["external_reference"] == str(reserva_pendiente)
+    assert mp.preferencia["back_urls"]["pending"].endswith("/pago/pendiente")
 
 
 def test_crear_preferencia_con_reserva_inexistente_devuelve_404(monkeypatch):
