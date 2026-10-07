@@ -43,8 +43,8 @@ export const syncService = {
         }))
       };
 
-      // 3. Intento de envío al servidor
-      const response = await fetch(`${API_URL}/api/ingresos/sync`, {
+      // 3. Intento de envío al servidor (¡Ruta actualizada!)
+      const response = await fetch(`${API_URL}/api/v1/ingresos/bulk-sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

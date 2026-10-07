@@ -14,8 +14,16 @@ import Reservas from "./pages/Reservas";
 import PagoExito from "./pages/PagoExito";
 import PagoRechazado from "./pages/PagoRechazado";
 import PagoPendiente from "./pages/PagoPendiente";
+import { syncService } from "./services/syncService";
+import { useEffect } from "react";
 
 function App() {
+
+  //Encendemos el motor de sincronización al cargar la App
+  useEffect(() => {
+    syncService.iniciarBackgroundSync();
+  }, []);
+
   return (
     <BrowserRouter>
     {/* El Header se renderiza en todas las páginas, y queda fijo arriba */}
