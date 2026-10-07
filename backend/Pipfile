@@ -19,6 +19,8 @@ cryptography = "*"
 jinja2 = "*"
 resend = "*"
 mercadopago = "*"
+email-validator = "*"
+tzdata = "*"
 
 [dev-packages]
 pytest = "*"

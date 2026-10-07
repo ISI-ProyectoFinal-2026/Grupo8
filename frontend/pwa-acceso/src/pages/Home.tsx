@@ -11,17 +11,53 @@ import {
 } from "@/components/ui/select";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { sumarDias } from "@/lib/fechas";
+import {
+  hoyISO,
+  MAX_NOCHES,
+  MAX_PERSONAS,
+  soloDigitos,
+  validarCantidadPersonas,
+  validarFechasEstadia,
+  validarNoches,
+} from "@/lib/validaciones";
 
 export default function Home() {
   const navigate = useNavigate();
   const [fecha, setFecha] = useState("");
-  const [fechaEgreso, setFechaEgreso] = useState("");
+  const [noches, setNoches] = useState("");
   const [personas, setPersonas] = useState("");
   const [tipo, setTipo] = useState("");
+  const [errores, setErrores] = useState<Record<string, string>>({});
+  
+  const pideNoches = tipo !== "" && tipo !== "entrada_general";
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Pasamos los parámetros de búsqueda a la pantalla de disponibilidad
+    const nuevos: Record<string, string> = {};
+
+    if (!tipo) nuevos.tipo = "Seleccioná un tipo de reserva.";
+
+    const ePersonas = validarCantidadPersonas(personas);
+    if (ePersonas) nuevos.personas = ePersonas;
+
+    const eNoches = pideNoches ? validarNoches(noches) : null;
+    if (eNoches) nuevos.noches = eNoches;
+
+    // Entrada general: egreso = ingreso. Resto: ingreso + noches.
+    const fechaEgreso =
+      pideNoches && !eNoches && /^\d{4}-\d{2}-\d{2}$/.test(fecha)
+        ? sumarDias(fecha, Number(noches))
+        : fecha;
+
+    const fechas = validarFechasEstadia(fecha, fechaEgreso);
+    if (fechas.ingreso) nuevos.fecha = fechas.ingreso;
+
+    setErrores(nuevos);
+    if (Object.keys(nuevos).length > 0) return;
+
+    // Disponibilidad y Reservas siguen recibiendo fechaEgreso, no cambian
     navigate("/disponibilidad", { state: { fecha, fechaEgreso, personas, tipo } });
   };
 
@@ -42,50 +78,53 @@ export default function Home() {
           <CardDescription>Ingresá los datos de tu viaje para ver los cupos</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} noValidate className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="fecha">Fecha de ingreso</Label>
                 <Input 
                   id="fecha" 
                   type="date" 
-                  required 
+                  required
+                  min={hoyISO()}
                   value={fecha}
-                  onChange={(e) => {
-                    setFecha(e.target.value);
-                    // Si el egreso quedó antes del ingreso (o vacío), lo igualamos: pasar el día
-                    if (!fechaEgreso || fechaEgreso < e.target.value) setFechaEgreso(e.target.value);
-                  }}
+                  onChange={(e) => setFecha(e.target.value)}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fechaEgreso">Fecha de egreso</Label>
-                <Input 
-                  id="fechaEgreso" 
-                  type="date" 
-                  required 
-                  min={fecha}
-                  value={fechaEgreso}
-                  onChange={(e) => setFechaEgreso(e.target.value)}
-                />
+                {errores.fecha && (
+                  <p role="alert" className="text-sm text-red-600">
+                    {errores.fecha}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="personas">Cantidad de personas</Label>
-                <Input 
-                  id="personas" 
-                  type="number" 
-                  min="1" 
-                  max="10" 
-                  required 
+                <Input
+                  id="personas"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={String(MAX_PERSONAS).length}
+                  required
                   value={personas}
-                  onChange={(e) => setPersonas(e.target.value)}
+                  onChange={(e) => setPersonas(soloDigitos(e.target.value))}
                 />
+                {errores.personas && (
+                  <p role="alert" className="text-sm text-red-600">
+                    {errores.personas}
+                  </p>
+                )}
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="tipo">Tipo de reserva</Label>
-              <Select required value={tipo} onValueChange={setTipo}>
+              <Select
+                required
+                value={tipo}
+                onValueChange={(v) => {
+                  setTipo(v);
+                  if (v === "entrada_general") setNoches("");
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccioná una opción..." />
                 </SelectTrigger>
@@ -95,8 +134,28 @@ export default function Home() {
                   <SelectItem value="cabana">Cabaña</SelectItem>
                 </SelectContent>
               </Select>
+              {errores.tipo && (
+                <p role="alert" className="text-sm text-red-600">
+                  {errores.tipo}
+                </p>
+              )}
+              {pideNoches && (
+                <div className="space-y-2">
+                  <Label htmlFor="noches">Cantidad de noches (máx. {MAX_NOCHES})</Label>
+                  <Input
+                    id="noches"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={String(MAX_NOCHES).length}
+                    value={noches}
+                    onChange={(e) => setNoches(soloDigitos(e.target.value))}
+                  />
+                  {errores.noches && (
+                    <p role="alert" className="text-sm text-red-600">{errores.noches}</p>
+                  )}
+                </div>
+              )}
             </div>
-
             <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-md h-12">
               Consultar disponibilidad
             </Button>

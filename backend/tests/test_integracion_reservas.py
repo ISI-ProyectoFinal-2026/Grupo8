@@ -69,26 +69,29 @@ async def test_flujo_exitoso_crear_reserva(monkeypatch):
         assert data["cantidad_personas"] == 2
         assert "id" in data
 
-async def test_limite_de_capacidad():
+async def test_limite_de_capacidad(monkeypatch):
     """Criterio de Aceptación 2: Test de límite de capacidad"""
-    
+
+    # Dejamos un cupo menor al pedido, sin depender de la BD local:
+    # disponible = total - activas - buffer <= 5, y se piden 10
+    monkeypatch.setattr(
+        settings, "CAMPING_TOTAL_CAPACITY", settings.CAMPING_OFFLINE_BUFFER + 5
+    )
     user_id_real = crear_usuario_prueba()
-    
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        
         payload = {
             "user_id": user_id_real,
             "fecha_ingreso": FECHA_MAÑANA,
             "fecha_egreso": FECHA_MAÑANA,
-            "cantidad_personas": 60,
+            "cantidad_personas": settings.MAX_PERSONAS_POR_RESERVA,
             "titular": "Usuario Test",
             "email": "usuario.test@grupo8.com",
             "telefono": "2604000000"
         }
-        
+
         response = await ac.post("/reservas/", json=payload)
-        
+
         assert response.status_code == 400
-        # 3. Solucionamos el AssertionError cambiando la palabra a buscar
         assert "cupos" in response.json()["detail"].lower()
