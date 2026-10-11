@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from services.payment_service import payment_service
 from services.email_service import email_service
 from core.database import get_db
-from models.reserva import Reserva, EstadoPagoEnum
+from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
 from models.user import User
 from security.services import SecurityService # Ajusta la ruta si es necesario
 from security.schemas import JWTPayloadSchema # Ajusta la ruta si es necesario
@@ -29,6 +29,14 @@ async def create_payment_preference(request: PaymentRequest, db: Session = Depen
     reserva = db.query(Reserva).filter(Reserva.id == request.reserva_id).first()
     if not reserva:
         raise HTTPException(status_code=404, detail="Reserva no encontrada en la base de datos.")
+
+    # Detectar y evitar cobro duplicado
+    # 1) Chequeo local: solo se cobra una reserva pendiente de pago y no cancelada.
+    if reserva.estado_pago != EstadoPagoEnum.PENDIENTE or reserva.estado_reserva == EstadoReservaEnum.CANCELADA:
+        raise HTTPException(
+            status_code=409,
+            detail="La reserva no admite un nuevo pago (ya fue pagada o está cancelada).",
+        )
 
     preference_data = {
         "items": [
@@ -56,6 +64,16 @@ async def create_payment_preference(request: PaymentRequest, db: Session = Depen
     }
 
     try:
+        # 2) Chequeo contra MP: si ya cobró (p. ej. el webhook falló), no se abre otro checkout.
+        #    Si esta consulta falla, se bloquea el cobro (500) en lugar de arriesgar un cargo doble.
+        busqueda = payment_service.mp.payment().search({"external_reference": str(reserva.id)})
+        pagos_mp = busqueda.get("response", {}).get("results", [])
+        if any(pago.get("status") == "approved" for pago in pagos_mp):
+            raise HTTPException(
+                status_code=409,
+                detail="Mercado Pago ya registra un pago aprobado para esta reserva. Verificá el pago desde Mis reservas.",
+            )
+
         preference_response = payment_service.mp.preference().create(preference_data)
 
         if preference_response.get("status") not in (200, 201):
@@ -63,7 +81,10 @@ async def create_payment_preference(request: PaymentRequest, db: Session = Depen
 
         # Para pasar a producción real, cambiá "sandbox_init_point" por "init_point"
         return {"init_point": preference_response["response"]["sandbox_init_point"]}
-        
+    
+    except HTTPException:
+        # No convertir los 400/409 propios en 500
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
