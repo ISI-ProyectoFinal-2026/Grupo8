@@ -4,10 +4,23 @@ on:
   pull_request:
     branches: [ "main", "dev" ]
 
+# Mínimo privilegio
+permissions:
+  contents: read
+
 jobs:
   backend-tests:
     name: Backend (pytest + coverage)
     runs-on: ubuntu-latest
+    # Si un test intentara salir a la red por error, el job no queda colgado
+    timeout-minutes: 15
+    # Credenciales FICTICIAS:: MP y Resend están mockeados en los tests, así que nunca
+    # se realizan pagos ni se envían correos reales. Una única definición para todos los pasos.
+    env:
+      AUTH_SECRET_KEY: "clave_falsa_para_tests"
+      MERCADOPAGO_ACCESS_TOKEN: "test_token"
+      MERCADOPAGO_PUBLIC_KEY: "test_key"
+      RESEND_API_KEY: "test_resend_key"
     services:
       postgres:
         image: postgres:15
@@ -47,12 +60,20 @@ jobs:
           [ -f ../.env ] && cp ../.env .env || true
           echo 'DATABASE_URL="postgresql://usuario_admin:admin123@localhost:5435/camping_db"' >> .env
 
-      - name: Ejecutar tests con cobertura (mínimo 80%)
-        env:
-          AUTH_SECRET_KEY: "clave_falsa_para_tests"
-          MERCADOPAGO_ACCESS_TOKEN: "test_token"
-          MERCADOPAGO_PUBLIC_KEY: "test_key"
-          RESEND_API_KEY: "test_resend_key"
+      # Test webhook de pago, pantallas de rechazo/contingencia y correo transaccional
+      # Se ejecutan primero y de forma explícita: si fallan, el PR queda bloqueado con un paso identificable.
+      - name: Tests de integración de pagos y correos (Issues 12.1 a 12.3)
+        run: |
+          pipenv run python -m pytest \
+            tests/test_pago_exitoso_integracion.py \
+            tests/test_payments_reserva.py \
+            tests/test_payments_rechazo_contingencia.py \
+            tests/test_email_service.py \
+            tests/test_confirmacion_pago_resend.py \
+            -v
+
+      # Suite completa 
+      - name: Ejecutar suite completa con cobertura (mínimo 75%)
         run: |
           pipenv run python -m pytest \
             --cov=. \
@@ -62,6 +83,7 @@ jobs:
   frontend-tests:
     name: Frontend (Vitest)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ./frontend/pwa-acceso
@@ -83,5 +105,5 @@ jobs:
       - name: Compilar el proyecto (validación de TypeScript)
         run: npm run build
 
-      - name: Ejecutar tests (Vitest) — JWT/QR (8.1), IndexedDB (8.3), offline/online (8.4)
+      - name: Ejecutar tests (Vitest) — JWT/QR (8.1), IndexedDB (8.3), offline/online (8.4), pantallas de pago (12.1 y 12.2)
         run: npm run test
