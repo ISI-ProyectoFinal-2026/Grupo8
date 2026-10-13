@@ -5,6 +5,7 @@ on:
     branches: [ "main", "dev" ]
 
 # Mínimo privilegio
+permissions:
   contents: read
 
 jobs:
