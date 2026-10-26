@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Footer } from "./components/layout/Footer";
-import { Header } from "./components/layout/Header";
+import { LayoutPublico } from "./components/layout/LayoutPublico";
+import { AuthProvider } from "./context/AuthContext";
+import AdminRoutes from "./pages/admin/AdminRoutes";
 import Acerca from "./pages/Acerca";
 import Beneficios from "./pages/Beneficios";
 import Contacto from "./pages/Contacto";
@@ -26,33 +27,34 @@ function App() {
 
   return (
     <BrowserRouter>
-    {/* El Header se renderiza en todas las páginas, y queda fijo arriba */}
-      <Header />
-      
-      {/* Main envuelve el contenido central para que empuje al footer hacia abajo si hay poco contenido */}
-      <main className="min-h-[calc(100vh-4rem-15rem)]">
+    {/* La sesión (token y rol) queda disponible para todo el árbol de rutas */}
+    <AuthProvider>
       <Routes>
-        {/* Rutas Públicas para Visitantes (Issue 9) */}
-        <Route path="/" element={<Home />} />
-        <Route path="/disponibilidad" element={<Disponibilidad />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/reservas" element={<Reservas />} />
-        <Route path="/beneficios" element={<Beneficios />} />
-        <Route path="/perfil" element={<Perfil />} />
-        <Route path="/mis-reservas" element={<MisReservas />} />
-        <Route path="/acerca" element={<Acerca />} />
-        <Route path="/contacto" element={<Contacto />} />
-        <Route path="/pago/exito" element={<PagoExito />} />
-        <Route path="/pago/rechazado" element={<PagoRechazado />} />
-        <Route path="/pago/pendiente" element={<PagoPendiente />} />
-        
-        {/* Ruta Oculta para Guardaparques (Issue 7) */}
-        <Route path="/acceso" element={<ControlAcceso />} />
-      </Routes>
-      </main>
+        {/* Panel de administración (Issue 15.1): es una app aparte, sin el Header ni el Footer de la web.
+            Está protegido para ADMIN dentro de AdminRoutes y sus pantallas se registran en pages/admin/routes.tsx */}
+        <Route path="/admin/*" element={<AdminRoutes />} />
 
-      {/* El Footer se renderiza al fondo de todas las páginas */}
-      <Footer />
+        {/* Web de reservas: LayoutPublico pone el Header fijo arriba y el Footer al fondo */}
+        <Route element={<LayoutPublico />}>
+          {/* Rutas Públicas para Visitantes (Issue 9) */}
+          <Route path="/" element={<Home />} />
+          <Route path="/disponibilidad" element={<Disponibilidad />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/reservas" element={<Reservas />} />
+          <Route path="/beneficios" element={<Beneficios />} />
+          <Route path="/perfil" element={<Perfil />} />
+          <Route path="/mis-reservas" element={<MisReservas />} />
+          <Route path="/acerca" element={<Acerca />} />
+          <Route path="/contacto" element={<Contacto />} />
+          <Route path="/pago/exito" element={<PagoExito />} />
+          <Route path="/pago/rechazado" element={<PagoRechazado />} />
+          <Route path="/pago/pendiente" element={<PagoPendiente />} />
+
+          {/* Ruta Oculta para Guardaparques (Issue 7) */}
+          <Route path="/acceso" element={<ControlAcceso />} />
+        </Route>
+      </Routes>
+    </AuthProvider>
     </BrowserRouter>
   );
 }
