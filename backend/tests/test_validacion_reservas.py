@@ -12,14 +12,19 @@ from schemas.reserva import ReservaCreate, hoy_argentina
 client = TestClient(app)
 
 
+def _persona(**cambios) -> dict:
+    persona = {"nombre": "Ana Pérez", "edad": 34, "condicion": "visitante"}
+    persona.update(cambios)
+    return persona
+
+
 def _payload(**cambios) -> dict:
     manana = (hoy_argentina() + timedelta(days=1)).isoformat()
     payload = {
         "user_id": str(uuid.uuid4()),
         "fecha_ingreso": manana,
         "fecha_egreso": manana,
-        "cantidad_personas": 2,
-        "titular": "Ana Pérez",
+        "personas": [_persona(), _persona(nombre="Luis Pérez", edad=8)],
         "email": "ana@test.com",
         "telefono": "2604123456",
     }
@@ -30,20 +35,6 @@ def _payload(**cambios) -> dict:
 AYER = (hoy_argentina() - timedelta(days=1)).isoformat()
 
 CASOS_INVALIDOS = [
-    ("cantidad_personas", 0),
-    ("cantidad_personas", -1),
-    ("cantidad_personas", 2.5),
-    ("cantidad_personas", "2"),
-    ("cantidad_personas", "abc"),
-    ("cantidad_personas", None),
-    ("cantidad_personas", True),
-    ("cantidad_personas", settings.MAX_PERSONAS_POR_RESERVA + 1),
-    ("titular", ""),
-    ("titular", "   "),
-    ("titular", "A"),
-    ("titular", "12345"),
-    ("titular", "Ana<script>"),
-    ("titular", "x" * 101),
     ("email", ""),
     ("email", "no-es-un-email"),
     ("email", "ana@test"),
@@ -69,6 +60,54 @@ CASOS_INVALIDOS = [
 ]
 
 
+# Listas de personas inválidas: cada caso es el valor completo del campo "personas"
+PERSONAS_INVALIDAS = [
+    pytest.param([], id="lista_vacia"),
+    pytest.param(None, id="sin_lista"),
+    pytest.param("Ana Pérez", id="no_es_lista"),
+    pytest.param([_persona()] * 1 + [_persona(nombre="Persona Extra")] * settings.MAX_PERSONAS_POR_RESERVA,
+                 id="mas_del_maximo"),
+    pytest.param([_persona(nombre="")], id="nombre_vacio"),
+    pytest.param([_persona(nombre="   ")], id="nombre_en_blanco"),
+    pytest.param([_persona(nombre="A")], id="nombre_corto"),
+    pytest.param([_persona(nombre="12345")], id="nombre_con_numeros"),
+    pytest.param([_persona(nombre="Ana<script>")], id="nombre_con_simbolos"),
+    pytest.param([_persona(nombre="x" * 101)], id="nombre_largo"),
+    pytest.param([_persona(nombre=None)], id="nombre_nulo"),
+    pytest.param([_persona(edad=-1)], id="edad_negativa"),
+    pytest.param([_persona(edad=121)], id="edad_mayor_al_maximo"),
+    pytest.param([_persona(edad=2.5)], id="edad_decimal"),
+    pytest.param([_persona(edad="34")], id="edad_texto"),
+    pytest.param([_persona(edad=True)], id="edad_booleana"),
+    pytest.param([_persona(edad=None)], id="edad_nula"),
+    pytest.param([_persona(condicion="invitado")], id="condicion_desconocida"),
+    pytest.param([_persona(condicion=None)], id="condicion_nula"),
+    pytest.param([_persona(condicion="socio")], id="socio_sin_dni"),
+    pytest.param([_persona(condicion="socio", dni="")], id="socio_con_dni_vacio"),
+    pytest.param([_persona(condicion="socio", dni="123456")], id="dni_de_6_digitos"),
+    pytest.param([_persona(condicion="socio", dni="123456789")], id="dni_de_9_digitos"),
+    pytest.param([_persona(condicion="socio", dni="12.345.678")], id="dni_con_puntos"),
+    pytest.param([_persona(condicion="socio", dni="1234567a")], id="dni_con_letras"),
+    pytest.param([_persona(condicion="visitante", dni="abc")], id="visitante_con_dni_invalido"),
+    pytest.param(
+        [_persona(condicion="socio", dni="12345678"), _persona(nombre="Luis Pérez", condicion="socio", dni="12345678")],
+        id="dni_repetido",
+    ),
+]
+
+
+@pytest.mark.parametrize("personas", PERSONAS_INVALIDAS)
+def test_schema_rechaza_personas_invalidas(personas):
+    with pytest.raises(ValidationError):
+        ReservaCreate(**_payload(personas=personas))
+
+
+@pytest.mark.parametrize("personas", PERSONAS_INVALIDAS)
+def test_api_rechaza_personas_invalidas_con_422(personas):
+    response = client.post("/reservas/", json=_payload(personas=personas))
+    assert response.status_code == 422
+
+
 @pytest.mark.parametrize("campo, valor", CASOS_INVALIDOS)
 def test_schema_rechaza_valores_invalidos(campo, valor):
     with pytest.raises(ValidationError):
@@ -82,7 +121,7 @@ def test_api_rechaza_valores_invalidos_con_422(campo, valor):
 
 
 @pytest.mark.parametrize(
-    "campo", ["user_id", "fecha_ingreso", "fecha_egreso", "cantidad_personas", "titular", "email", "telefono"]
+    "campo", ["user_id", "fecha_ingreso", "fecha_egreso", "personas", "email", "telefono"]
 )
 def test_api_rechaza_campos_obligatorios_ausentes(campo):
     payload = _payload()
@@ -93,11 +132,6 @@ def test_api_rechaza_campos_obligatorios_ausentes(campo):
 @pytest.mark.parametrize(
     "campo, valor",
     [
-        ("cantidad_personas", 1),
-        ("cantidad_personas", settings.MAX_PERSONAS_POR_RESERVA),
-        ("titular", "José María O'Brien-Núñez"),
-        ("titular", "J. R. Smith"),
-        ("titular", "  Ana Pérez  "),
         ("email", "ana.perez+camping@correo.com.ar"),
         ("telefono", "26041234"),          # 8 dígitos (mínimo)
         ("telefono", "5492604123456"),     # con código de país
@@ -110,8 +144,49 @@ def test_schema_acepta_valores_validos(campo, valor):
     assert getattr(reserva, campo) is not None
 
 
-def test_schema_recorta_espacios_del_titular():
-    assert ReservaCreate(**_payload(titular="  Ana Pérez  ")).titular == "Ana Pérez"
+PERSONAS_VALIDAS = [
+    pytest.param([_persona()], id="una_persona"),
+    pytest.param([_persona(nombre=f"Persona {chr(65 + i)}") for i in range(settings.MAX_PERSONAS_POR_RESERVA)],
+                 id="maximo_de_personas"),
+    pytest.param([_persona(nombre="José María O'Brien-Núñez")], id="nombre_con_acentos_y_apostrofe"),
+    pytest.param([_persona(nombre="J. R. Smith")], id="nombre_con_puntos"),
+    pytest.param([_persona(edad=0)], id="edad_minima"),
+    pytest.param([_persona(edad=120)], id="edad_maxima"),
+    pytest.param([_persona(condicion="socio", dni="1234567")], id="socio_con_dni_de_7"),
+    pytest.param([_persona(condicion="socio", dni="12345678")], id="socio_con_dni_de_8"),
+    pytest.param([_persona(condicion="visitante", dni="12345678")], id="visitante_con_dni"),
+    pytest.param([_persona(condicion="visitante", dni="")], id="visitante_con_dni_vacio"),
+    pytest.param(
+        [_persona(condicion="socio", dni="12345678"), _persona(nombre="Luis Pérez", condicion="visitante")],
+        id="reserva_mixta",
+    ),
+]
+
+
+@pytest.mark.parametrize("personas", PERSONAS_VALIDAS)
+def test_schema_acepta_personas_validas(personas):
+    reserva = ReservaCreate(**_payload(personas=personas))
+    assert len(reserva.personas) == len(personas)
+
+
+def test_schema_recorta_espacios_del_nombre_y_del_dni():
+    reserva = ReservaCreate(
+        **_payload(personas=[_persona(nombre="  Ana Pérez  ", condicion="socio", dni=" 12345678 ")])
+    )
+    assert reserva.personas[0].nombre == "Ana Pérez"
+    assert reserva.personas[0].dni == "12345678"
+
+
+def test_schema_trata_el_dni_vacio_de_un_visitante_como_ausente():
+    reserva = ReservaCreate(**_payload(personas=[_persona(dni="  ")]))
+    assert reserva.personas[0].dni is None
+
+
+def test_schema_ya_no_pide_cantidad_personas_ni_titular():
+    # La cantidad sale de la lista y el titular es la primera persona
+    payload = _payload()
+    assert "cantidad_personas" not in payload and "titular" not in payload
+    assert len(ReservaCreate(**payload).personas) == 2
 
 
 def test_schema_acepta_ingreso_y_egreso_distintos_dias():

@@ -55,8 +55,10 @@ async def test_flujo_exitoso_crear_reserva(monkeypatch):
             "user_id": user_id_real,
             "fecha_ingreso": FECHA_MAÑANA,
             "fecha_egreso": FECHA_MAÑANA,
-            "cantidad_personas": 2,
-            "titular": "Usuario Test",
+            "personas": [
+                {"nombre": "Usuario Test", "edad": 30, "condicion": "visitante"},
+                {"nombre": "Acompañante Test", "edad": 8, "condicion": "visitante"},
+            ],
             "email": "usuario.test@grupo8.com",
             "telefono": "2604000000"
         }
@@ -67,6 +69,8 @@ async def test_flujo_exitoso_crear_reserva(monkeypatch):
         data = response.json()
         borrar_reserva(data["id"])
         assert data["cantidad_personas"] == 2
+        assert data["titular"] == "Usuario Test"
+        assert [p["nombre"] for p in data["personas"]] == ["Usuario Test", "Acompañante Test"]
         assert "id" in data
 
 async def test_limite_de_capacidad(monkeypatch):
@@ -85,8 +89,10 @@ async def test_limite_de_capacidad(monkeypatch):
             "user_id": user_id_real,
             "fecha_ingreso": FECHA_MAÑANA,
             "fecha_egreso": FECHA_MAÑANA,
-            "cantidad_personas": settings.MAX_PERSONAS_POR_RESERVA,
-            "titular": "Usuario Test",
+            "personas": [
+                {"nombre": f"Persona Test {chr(65 + i)}", "edad": 30, "condicion": "visitante"}
+                for i in range(settings.MAX_PERSONAS_POR_RESERVA)
+            ],
             "email": "usuario.test@grupo8.com",
             "telefono": "2604000000"
         }

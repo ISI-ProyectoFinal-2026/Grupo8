@@ -16,6 +16,11 @@ El sistema utiliza SQLAlchemy como ORM, mapeando clases Python a tablas en Postg
 * **Campos Principales:** ID (`UUID`), `user_id` (Clave foránea a usuarios), fecha y hora de la reserva, cantidad de personas.
 * **Lógica de Negocio:** Estado de pago manejado por `EstadoPagoEnum` (Pendiente, Pagado, Cancelado).
 * **Seguridad:** Identificador único para códigos QR (`jwt_jti`).
+* **Modelo de Personas de la Reserva (`ReservaPersona`)**
+* **Tabla:** `reserva_personas`
+* **Campos Principales:** ID (`UUID`), `reserva_id` (clave foránea a reservas, con borrado en cascada), `orden` (la posición 0 es el titular), `nombre`, `edad`, `condicion` (`visitante` o `socio`) y `dni`.
+* **Precio:** Cada fila guarda una foto del cobro al momento de reservar (`precio_base`, `descuento_pct`, `precio_final`), por lo que cambios posteriores en tarifas o descuentos no alteran reservas ya creadas.
+* **Restricciones:** El DNI no puede repetirse dentro de la misma reserva, la edad va de 0 a 120 y el descuento de 0 a 100 %. Las reservas creadas antes de esta tabla no tienen personas guardadas.
 * **Modelo de Ingresos Físicos (`IngresoFisico`)**
 * **Campos Principales:** `reserva_id`, `fecha_hora_ingreso`, `tipo_ingreso` (ej. WEB), `sincronizado_offline` (Booleano que permite métricas analíticas).
 * **Modelo de Conflictos de Sincronización (`ConflictosSincronizacion`)**
@@ -28,13 +33,14 @@ El sistema utiliza SQLAlchemy como ORM, mapeando clases Python a tablas en Postg
 FastAPI utiliza Pydantic para garantizar la serialización y validación estricta de todos los *payloads* de entrada y salida, con mensajes de error normalizados en español.
 
 * **`ReservaCreate` (Payload de Entrada)**
-* **Cantidad de personas:** Entero estricto, evaluado entre 1 y la variable de entorno `MAX_PERSONAS_POR_RESERVA` (10).
+* **Personas (`personas`):** Lista de `PersonaReserva` con entre 1 y `MAX_PERSONAS_POR_RESERVA` (10) elementos. La cantidad de personas de la reserva es el largo de la lista y el titular es la primera persona; ya no se envían `cantidad_personas` ni `titular`.
+* **`PersonaReserva`:** `nombre` (2 a 100 caracteres, solo letras, espacios, puntos, apóstrofes y guiones), `edad` (entero estricto entre 0 y 120), `condicion` (`visitante` o `socio`) y `dni` (7 u 8 dígitos; obligatorio para socios y sin repetirse dentro de la reserva).
 * **Fechas:** Formato AAAA-MM-DD. El sistema valida que el ingreso no sea anterior a "hoy" (hora de Argentina), el egreso no sea anterior al ingreso y la estadía no supere `MAX_NOCHES_POR_RESERVA` (10).
 * **Email:** Validado mediante `EmailStr` empleando la dependencia `email-validator`.
-* **Titular:** Cadena de 2 a 100 caracteres, limitando el contenido exclusivamente a letras, espacios, puntos, apóstrofes y guiones (con recorte de espacios en blanco).
 * **Teléfono:** Limitado estrictamente a números, requiriendo entre 8 y 15 dígitos.
 * **`ReservaResponse` (Payload de Salida)**
 * Esquema dedicado al formateo seguro de los datos de la reserva hacia el frontend, omitiendo datos sensibles internos.
+* Incluye `personas` (lista de `PersonaOut`: nombre, edad, condición, DNI, precio base, porcentaje de descuento y precio final). Las reservas anteriores a la tabla de personas devuelven una lista vacía.
 * **`JWTPayloadSchema` (Contrato Criptográfico QR)**
 * **Campos:** `jti` (UUID del token), `reserva_id` (Entero/UUID), `camping_id` (Entero), `typ` (Clasificación: `socio` o `visitante`), `cantidad_personas` (Entero), `iat` (Issued At), `exp` (Expiration Time) y `dat` (Fecha de la reserva). Este esquema es compartido exactamente con la interfaz `IJwtPayload` de TypeScript.
 
@@ -46,7 +52,7 @@ Estos endpoints estructuran la operación principal del sistema de reservas y su
 * **`POST /reservas`**
 * **Descripción:** Crea una nueva reserva inyectando datos a través de `ReservaCreate`.
 * **Manejo de Errores:** Devuelve código HTTP 400 si la petición supera el límite máximo calculado por `capacity_service.py`, o 422 si la validación Pydantic falla (ej. datos mal formados).
-* **Lógica Interna:** Acciona el `pricing_service.py` para calcular el costo total automatizado basándose en la cantidad de huéspedes.
+* **Lógica Interna:** Acciona el `pricing_service.py` para calcular el precio de cada persona según su condición (`socio` o `visitante`); el `monto_total` es la suma de los precios finales. La reserva y todas sus personas se guardan en la misma transacción: si falla alguna, no se crea nada.
 * **`GET /reservas/`**
 * **Seguridad:** Ruta crítica blindada mediante RBAC y `OAuth2PasswordBearer`.
 * **Dependencias:** Exige autenticación válida mediante `get_current_user` y permisos exclusivos autorizados por `require_role` (Administrador).

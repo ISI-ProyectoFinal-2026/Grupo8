@@ -3,7 +3,8 @@ from fastapi import HTTPException
 from services.capacity_service import CapacityService
 from core.config import settings
 
-def test_check_availability_success():
+def test_check_availability_success(monkeypatch):
+    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 50)
     servicio = CapacityService()
     # Simulamos que piden 2 espacios y hay 10 reservas activas
     # Capacidad (50) - Activas (10) - Buffer (5) = 35 disponibles
@@ -11,7 +12,8 @@ def test_check_availability_success():
     
     assert resultado is True
 
-def test_check_availability_no_hay_cupo_lanza_400():
+def test_check_availability_no_hay_cupo_lanza_400(monkeypatch):
+    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 50)
     servicio = CapacityService()
     # Simulamos que piden 40 espacios y ya hay 10 reservas activas
     # Capacidad (50) - Activas (10) - Buffer (5) = 35 disponibles. ¡Pide 40, debe fallar!
