@@ -21,6 +21,12 @@ El sistema utiliza SQLAlchemy como ORM, mapeando clases Python a tablas en Postg
 * **Campos Principales:** ID (`UUID`), `reserva_id` (clave foránea a reservas, con borrado en cascada), `orden` (la posición 0 es el titular), `nombre`, `edad`, `condicion` (`visitante` o `socio`) y `dni`.
 * **Precio:** Cada fila guarda una foto del cobro al momento de reservar (`precio_base`, `descuento_pct`, `precio_final`), por lo que cambios posteriores en tarifas o descuentos no alteran reservas ya creadas.
 * **Restricciones:** El DNI no puede repetirse dentro de la misma reserva, la edad va de 0 a 120 y el descuento de 0 a 100 %. Las reservas creadas antes de esta tabla no tienen personas guardadas.
+* **Modelo de Descuentos (`Descuento`)**
+* **Tabla:** `descuentos`
+* **Campos Principales:** ID (`UUID`), `codigo` (único y fijo, ej. `socio`), `nombre`, `aplica_a` (`socio` o `edad`), `porcentaje` (0 a 100, hasta 2 decimales), `edad_min` y `edad_max` (inclusivos, solo en los descuentos por edad) y `activo`.
+* **Valor inicial:** La migración crea el descuento `socio` con el porcentaje que hasta ahora estaba en `PORCENTAJE_DESCUENTO_SOCIO`; esa variable deja de usarse como fuente del descuento y el resto lo define el administrador.
+* **Restricciones:** Un descuento para socios no lleva límites de edad; uno por edad necesita los dos y `edad_min <= edad_max` (entre 0 y 120). Los descuentos no se borran: se desactivan.
+* **Reservas anteriores:** Las reservas guardan su propia copia del porcentaje y del precio (`reserva_personas`), por lo que modificar un descuento no cambia reservas ya creadas.
 * **Modelo de Ingresos Físicos (`IngresoFisico`)**
 * **Campos Principales:** `reserva_id`, `fecha_hora_ingreso`, `tipo_ingreso` (ej. WEB), `sincronizado_offline` (Booleano que permite métricas analíticas).
 * **Modelo de Conflictos de Sincronización (`ConflictosSincronizacion`)**
@@ -41,6 +47,9 @@ FastAPI utiliza Pydantic para garantizar la serialización y validación estrict
 * **`ReservaResponse` (Payload de Salida)**
 * Esquema dedicado al formateo seguro de los datos de la reserva hacia el frontend, omitiendo datos sensibles internos.
 * Incluye `personas` (lista de `PersonaOut`: nombre, edad, condición, DNI, precio base, porcentaje de descuento y precio final). Las reservas anteriores a la tabla de personas devuelven una lista vacía.
+* **`DescuentoCreate` / `DescuentoUpdate` / `DescuentoOut`**
+* **Alta:** `codigo` (2 a 30 caracteres: minúsculas, números y guion bajo, empezando con una letra), `nombre` (2 a 100), `aplica_a`, `porcentaje` (número entre 0 y 100 con hasta 2 decimales), `edad_min` y `edad_max` (enteros entre 0 y 120, solo para `edad`) y `activo` (verdadero por defecto).
+* **Modificación:** Se puede cambiar `nombre`, `porcentaje`, `edad_min`, `edad_max` y `activo`, enviando solo los campos a modificar. El `codigo` y `aplica_a` no se pueden cambiar.
 * **`JWTPayloadSchema` (Contrato Criptográfico QR)**
 * **Campos:** `jti` (UUID del token), `reserva_id` (Entero/UUID), `camping_id` (Entero), `typ` (Clasificación: `socio` o `visitante`), `cantidad_personas` (Entero), `iat` (Issued At), `exp` (Expiration Time) y `dat` (Fecha de la reserva). Este esquema es compartido exactamente con la interfaz `IJwtPayload` de TypeScript.
 
@@ -56,6 +65,10 @@ Estos endpoints estructuran la operación principal del sistema de reservas y su
 * **`GET /reservas/`**
 * **Seguridad:** Ruta crítica blindada mediante RBAC y `OAuth2PasswordBearer`.
 * **Dependencias:** Exige autenticación válida mediante `get_current_user` y permisos exclusivos autorizados por `require_role` (Administrador).
+* **`/admin/descuentos`** (solo `ADMIN`: sin token devuelve 401 y con otro rol, 403)
+* **`GET /admin/descuentos`:** Lista todos los descuentos, activos e inactivos.
+* **`POST /admin/descuentos`:** Crea un descuento (201). Devuelve 409 si el código ya existe y 422 si algún valor es inválido.
+* **`PUT /admin/descuentos/{id}`:** Modifica un descuento. Devuelve 404 si no existe y 422 si algún valor es inválido o los límites de edad quedan incoherentes. No hay endpoint para borrar.
 * **`GET /usuarios/prueba`**
 * **Descripción:** Endpoint auxiliar orientado a entornos de desarrollo. Retorna un identificador de usuario válido para agilizar pruebas de creación de reservas.
 * **Seguridad:** Queda automáticamente deshabilitado si la variable `ENVIRONMENT` es igual a `production`.
