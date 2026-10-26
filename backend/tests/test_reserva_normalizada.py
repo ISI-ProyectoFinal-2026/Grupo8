@@ -50,13 +50,18 @@ def _crear_usuario(es_socio=False) -> str:
         db.close()
 
 
+def _personas(cantidad) -> list:
+    """Una lista de visitantes; la primera persona es el titular (Ana Pérez)."""
+    nombres = ["Ana Pérez", "Luis Pérez", "María Gómez", "Juan Gómez", "Sofía López"]
+    return [{"nombre": nombres[i], "edad": 30 + i, "condicion": "visitante"} for i in range(cantidad)]
+
+
 def _payload(user_id, **cambios) -> dict:
     payload = {
         "user_id": user_id,
         "fecha_ingreso": INGRESO.isoformat(),
         "fecha_egreso": EGRESO.isoformat(),
-        "cantidad_personas": 2,
-        "titular": "Ana Pérez",
+        "personas": _personas(2),
         "email": "ana@test.com",
         "telefono": "2604123456",
     }
@@ -153,18 +158,35 @@ def test_crear_reserva_guarda_los_datos_normalizados(reservas_creadas):
     assert data["estado_reserva"] == EstadoReservaEnum.PENDIENTE.value
     assert data["estado_pago"] == EstadoPagoEnum.PENDIENTE.value
     assert data["monto_total"] == pytest.approx(2 * settings.PRECIO_BASE_POR_PERSONA)
+    assert data["cantidad_personas"] == 2
+    assert [p["nombre"] for p in data["personas"]] == ["Ana Pérez", "Luis Pérez"]
 
 
-def test_crear_reserva_aplica_descuento_de_socio(reservas_creadas):
-    user_id = _crear_usuario(es_socio=True)
+def test_crear_reserva_aplica_descuento_solo_a_las_personas_socias(reservas_creadas):
+    user_id = _crear_usuario()
+    personas = _personas(3)
+    personas[1].update(condicion="socio", dni="30123456")
 
-    response = client.post("/reservas/", json=_payload(user_id, cantidad_personas=3))
+    response = client.post("/reservas/", json=_payload(user_id, personas=personas))
 
     assert response.status_code == 201
     data = response.json()
     reservas_creadas.append(data["id"])
-    esperado = 3 * settings.PRECIO_BASE_POR_PERSONA * (1 - settings.PORCENTAJE_DESCUENTO_SOCIO)
+    base = settings.PRECIO_BASE_POR_PERSONA
+    esperado = base + base * (1 - settings.PORCENTAJE_DESCUENTO_SOCIO) + base
     assert data["monto_total"] == pytest.approx(esperado)
+
+
+def test_el_descuento_depende_de_la_condicion_de_cada_persona_y_no_del_usuario(reservas_creadas):
+    # Un usuario socio que reserva solo para visitantes no recibe descuento
+    user_id = _crear_usuario(es_socio=True)
+
+    response = client.post("/reservas/", json=_payload(user_id, personas=_personas(3)))
+
+    assert response.status_code == 201
+    data = response.json()
+    reservas_creadas.append(data["id"])
+    assert data["monto_total"] == pytest.approx(3 * settings.PRECIO_BASE_POR_PERSONA)
 
 
 def test_crear_reserva_con_egreso_anterior_al_ingreso_devuelve_422(reservas_creadas):
@@ -174,7 +196,7 @@ def test_crear_reserva_con_egreso_anterior_al_ingreso_devuelve_422(reservas_crea
     response = client.post("/reservas/", json=_payload(user_id, fecha_egreso=antes))
     assert response.status_code == 422
 
-@pytest.mark.parametrize("campo", ["titular", "email", "telefono", "fecha_ingreso", "fecha_egreso"])
+@pytest.mark.parametrize("campo", ["personas", "email", "telefono", "fecha_ingreso", "fecha_egreso"])
 def test_crear_reserva_sin_campo_obligatorio_devuelve_422(campo, reservas_creadas):
     payload = _payload(_crear_usuario())
     del payload[campo]
@@ -200,7 +222,7 @@ def test_cupo_depende_del_estado_de_reserva_y_no_del_pago(monkeypatch, reservas_
         user_id = _crear_usuario()
         
         # 1. Generamos el payload para saber qué fechas exactas va a intentar reservar el test
-        payload_prueba = _payload(user_id, cantidad_personas=2)
+        payload_prueba = _payload(user_id, personas=_personas(2))
         
         # 2. Calculamos los lugares ocupados SOLO en esas fechas (la misma lógica nueva del backend)
         db = SessionLocal()
@@ -228,7 +250,7 @@ def test_cupo_depende_del_estado_de_reserva_y_no_del_pago(monkeypatch, reservas_
         reservas_creadas.append(primera.json()["id"])
 
         # Reserva 2: ahora sí está lleno en esa fecha y debe fallar (Error 400)
-        segunda = client.post("/reservas/", json=_payload(user_id, cantidad_personas=1))
+        segunda = client.post("/reservas/", json=_payload(user_id, personas=_personas(1)))
         assert segunda.status_code == 400
 
 

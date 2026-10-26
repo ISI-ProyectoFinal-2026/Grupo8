@@ -37,8 +37,10 @@ def test_reserva_otra_fecha_no_reduce_capacidad():
         "user_id": user_id_prueba,
         "fecha_ingreso": str(fecha_futura_in),
         "fecha_egreso": str(fecha_futura_out),
-        "cantidad_personas": 100, # Supongamos que 100 es el máximo del camping
-        "titular": "Socio de prueba",
+        "personas": [
+            {"nombre": "Socio de prueba", "edad": 40, "condicion": "visitante"},
+            {"nombre": "Acompañante de prueba", "edad": 38, "condicion": "visitante"},
+        ],
         "email": "test@qamp.com",
         "telefono": "123456789"
     }
@@ -50,8 +52,10 @@ def test_reserva_otra_fecha_no_reduce_capacidad():
         "user_id": user_id_prueba,
         "fecha_ingreso": str(fecha_hoy),
         "fecha_egreso": str(fecha_hoy + timedelta(days=2)),
-        "cantidad_personas": 2,
-        "titular": "Emiliana Bianchi",
+        "personas": [
+            {"nombre": "Emiliana Bianchi", "edad": 29, "condicion": "visitante"},
+            {"nombre": "Lucía Bianchi", "edad": 27, "condicion": "visitante"},
+        ],
         "email": "emi@qamp.com",
         "telefono": "987654321"
     }

@@ -5,13 +5,15 @@ from core.dependencies import get_current_user, require_role
 from typing import List, Optional
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, and_
 
 from core.config import settings
 from core.database import get_db 
 from schemas.reserva import ReservaCreate, ReservaResponse
-from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
+from models.reserva import (
+    Reserva, ReservaPersona, CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum,
+)
 from models.configuracion import ConfiguracionCamping
 from services.capacity_service import CapacityService
 from services.pricing_service import PricingService
@@ -22,7 +24,7 @@ capacity_service = CapacityService()
 @router.post("/", response_model=ReservaResponse, status_code=status.HTTP_201_CREATED)
 def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
 
-    # 1. Necesitamos al usuario real (para saber si es socio y calcular el precio)
+    # 1. El usuario que hace la reserva tiene que existir
     usuario = db.query(User).filter(User.id == reserva_in.user_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
@@ -51,28 +53,46 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
 
     # 4. Validar disponibilidad (Endpoint POST)
     # Tu servicio lanzará automáticamente el Error 400 si se superó el límite
+    cantidad_personas = len(reserva_in.personas)
     capacity_service.check_availability(
-        espacios_solicitados=reserva_in.cantidad_personas,
+        espacios_solicitados=cantidad_personas,
         reservas_activas=lugares_ocupados
     )
 
-    # 5. Preparar el objeto para la base de datos
+    # 5. Precio de cada persona según su condición; el monto total es la suma
     # El monto lo calcula el backend, no lo manda el cliente
+    personas = []
+    for orden, persona_in in enumerate(reserva_in.personas):
+        precio = PricingService.calcular_precio_persona(persona_in.condicion == CondicionPersonaEnum.socio)
+        personas.append(ReservaPersona(
+            orden=orden,
+            nombre=persona_in.nombre,
+            edad=persona_in.edad,
+            condicion=persona_in.condicion,
+            dni=persona_in.dni,
+            precio_base=precio.precio_base,
+            descuento_pct=precio.descuento_pct,
+            precio_final=precio.precio_final,
+        ))
+    monto_total = float(sum(p.precio_final for p in personas))
+
+    # 6. Preparar el objeto para la base de datos (el titular es la primera persona)
     nueva_reserva = Reserva(
         user_id=reserva_in.user_id,
         camping_id=camping.camping_id,
         fecha_ingreso=reserva_in.fecha_ingreso,
         fecha_egreso=reserva_in.fecha_egreso,
-        cantidad_personas=reserva_in.cantidad_personas,
-        monto_total=PricingService.calcular_precio(reserva_in.cantidad_personas, bool(usuario.is_socio)),
-        titular=reserva_in.titular,
+        cantidad_personas=cantidad_personas,
+        monto_total=monto_total,
+        titular=reserva_in.personas[0].nombre,
         email=reserva_in.email,
         telefono=reserva_in.telefono,
         estado_reserva=EstadoReservaEnum.PENDIENTE,
-        estado_pago=EstadoPagoEnum.PENDIENTE
+        estado_pago=EstadoPagoEnum.PENDIENTE,
+        personas=personas
     )
 
-    # 6. Transacción Atómica
+    # 7. Transacción Atómica: la reserva y todas sus personas se guardan juntas
     try:
         db.add(nueva_reserva)
         db.commit()               # Se ejecuta la transacción
@@ -96,7 +116,7 @@ def obtener_reservas(
     current_user: User = Depends(require_role(RoleEnum.ADMIN)) #candado administrativo
 ):
     # Iniciamos la consulta base
-    query = db.query(Reserva)
+    query = db.query(Reserva).options(selectinload(Reserva.personas))
 
     # Aplicamos FILTROS dinámicamente si el usuario los mandó
     if estado:
