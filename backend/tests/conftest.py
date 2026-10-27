@@ -1,14 +1,17 @@
+from decimal import Decimal
+
 import pytest
 import resend
 
 from core.database import Base, SessionLocal, engine
 from models.user import User
 from models.reserva import Reserva, ReservaPersona
-from models.descuento import Descuento
+from models.descuento import AplicaDescuentoEnum, Descuento
 from models.ingreso_fisico import IngresoFisico
 from models.configuracion import ConfiguracionCamping
 from models.conflictos import ConflictosSincronizacion
 from services.camping_service import obtener_o_crear_camping
+from services.pricing_service import PricingService
 from services.qr_service import QRService, qr_service
 
 
@@ -22,6 +25,28 @@ def camping_de_prueba():
         return obtener_o_crear_camping(db).camping_id
     finally:
         db.close()
+
+# Descuento de socio que usan los tests de precios (en porcentaje)
+DESCUENTO_SOCIO_PRUEBA = 20
+
+
+@pytest.fixture(autouse=True)
+def descuentos_fijos(monkeypatch):
+    """
+    Autouse: los importes de los tests no dependen de lo que haya cargado en la tabla
+    descuentos (en CI está vacía y en una base local la edita el administrador).
+    Solo existe el descuento de socio; devuelve su porcentaje para armar los esperados.
+    """
+    socio = Descuento(
+        codigo="socio",
+        nombre="Descuento para socios",
+        aplica_a=AplicaDescuentoEnum.socio,
+        porcentaje=Decimal(DESCUENTO_SOCIO_PRUEBA),
+        activo=True,
+    )
+    monkeypatch.setattr(PricingService, "_descuentos_activos", staticmethod(lambda db: [socio]))
+    return DESCUENTO_SOCIO_PRUEBA
+
 
 class ResendFalso:
     """Reemplaza resend.Emails.send: registra cada envío y nunca sale a la red."""

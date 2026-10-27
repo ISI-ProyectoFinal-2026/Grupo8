@@ -162,7 +162,7 @@ def test_crear_reserva_guarda_los_datos_normalizados(reservas_creadas):
     assert [p["nombre"] for p in data["personas"]] == ["Ana Pérez", "Luis Pérez"]
 
 
-def test_crear_reserva_aplica_descuento_solo_a_las_personas_socias(reservas_creadas):
+def test_crear_reserva_aplica_descuento_solo_a_las_personas_socias(reservas_creadas, descuentos_fijos):
     user_id = _crear_usuario()
     personas = _personas(3)
     personas[1].update(condicion="socio", dni="30123456")
@@ -173,7 +173,7 @@ def test_crear_reserva_aplica_descuento_solo_a_las_personas_socias(reservas_crea
     data = response.json()
     reservas_creadas.append(data["id"])
     base = settings.PRECIO_BASE_POR_PERSONA
-    esperado = base + base * (1 - settings.PORCENTAJE_DESCUENTO_SOCIO) + base
+    esperado = base + base * (1 - descuentos_fijos / 100) + base
     assert data["monto_total"] == pytest.approx(esperado)
 
 

@@ -109,7 +109,7 @@ def test_se_guardan_los_datos_de_todas_las_personas(reservas_creadas):
     assert [p.dni for p in guardadas] == ["30111222", None, "12345678"]
 
 
-def test_cada_persona_guarda_su_precio_base_descuento_y_precio_final(reservas_creadas):
+def test_cada_persona_guarda_su_precio_base_descuento_y_precio_final(reservas_creadas, descuentos_fijos):
     response = client.post("/reservas/", json=_payload(_crear_usuario(), PERSONAS_MIXTAS))
 
     assert response.status_code == 201, response.text
@@ -117,7 +117,7 @@ def test_cada_persona_guarda_su_precio_base_descuento_y_precio_final(reservas_cr
     socia, *visitantes = _personas_guardadas(response.json()["id"])
 
     base = Decimal(str(settings.PRECIO_BASE_POR_PERSONA))
-    descuento = Decimal(str(settings.PORCENTAJE_DESCUENTO_SOCIO)) * 100
+    descuento = Decimal(descuentos_fijos)
     assert socia.precio_base == base
     assert socia.descuento_pct == descuento
     assert socia.precio_final == base * (100 - descuento) / 100
@@ -137,7 +137,7 @@ def test_el_monto_total_es_la_suma_de_lo_que_paga_cada_persona(reservas_creadas)
     assert data["cantidad_personas"] == len(PERSONAS_MIXTAS)
 
 
-def test_la_respuesta_devuelve_los_datos_de_las_personas(reservas_creadas):
+def test_la_respuesta_devuelve_los_datos_de_las_personas(reservas_creadas, descuentos_fijos):
     response = client.post("/reservas/", json=_payload(_crear_usuario(), PERSONAS_MIXTAS))
 
     assert response.status_code == 201, response.text
@@ -150,7 +150,7 @@ def test_la_respuesta_devuelve_los_datos_de_las_personas(reservas_creadas):
     assert primera["condicion"] == "socio"
     assert primera["dni"] == "30111222"
     assert primera["precio_base"] == settings.PRECIO_BASE_POR_PERSONA
-    assert primera["descuento_pct"] == pytest.approx(settings.PORCENTAJE_DESCUENTO_SOCIO * 100)
+    assert primera["descuento_pct"] == pytest.approx(descuentos_fijos)
     assert data["personas"][1]["dni"] is None
 
 
@@ -168,16 +168,15 @@ def test_el_mismo_dni_puede_estar_en_reservas_distintas(reservas_creadas):
 
 def test_si_falla_el_guardado_de_una_persona_no_se_crea_nada(monkeypatch, reservas_creadas):
     # La segunda persona viola la regla de la base (descuento mayor a 100 %): toda la reserva debe revertirse
-    llamadas = []
-    original = PricingService.calcular_precio_persona
+    original = PricingService.cotizar
 
-    def calculo_roto(es_socio):
-        llamadas.append(es_socio)
-        if len(llamadas) == 2:
-            return PrecioPersona(Decimal("5000.00"), Decimal("150.00"), Decimal("5000.00"))
-        return original(es_socio)
+    def cotizacion_rota(db, personas):
+        cotizacion = original(db, personas)
+        precios = list(cotizacion.personas)
+        precios[1] = PrecioPersona(Decimal("5000.00"), Decimal("150.00"), Decimal("5000.00"))
+        return cotizacion._replace(personas=precios)
 
-    monkeypatch.setattr(PricingService, "calcular_precio_persona", staticmethod(calculo_roto))
+    monkeypatch.setattr(PricingService, "cotizar", staticmethod(cotizacion_rota))
     payload = _payload(_crear_usuario(), PERSONAS_MIXTAS)
 
     response = client.post("/reservas/", json=payload)

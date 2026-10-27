@@ -11,8 +11,12 @@ from main import app
 from models.descuento import Descuento
 from models.reserva import Reserva
 from models.user import RoleEnum, User
+from services.pricing_service import PricingService
 
 Base.metadata.create_all(bind=engine)
+
+# La función que lee los descuentos de la base, antes de que los tests la reemplacen
+LECTOR_REAL = PricingService._descuentos_activos
 
 client = TestClient(app)
 
@@ -425,6 +429,8 @@ def test_cambiar_un_descuento_no_altera_los_importes_de_reservas_ya_creadas(
 ):
     # El test mira los importes guardados, no la capacidad: se sube el cupo para no depender de la BD local
     monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 100_000)
+    # Acá los descuentos se leen de la base de verdad, para que lo que cambia el administrador se note
+    monkeypatch.setattr(PricingService, "_descuentos_activos", staticmethod(LECTOR_REAL))
     fecha = "2096-05-10"
     usuario_id = uuid.UUID(jwt.decode(tokens["CLIENTE"], settings.AUTH_SECRET_KEY, algorithms=["HS256"])["sub"])
 
