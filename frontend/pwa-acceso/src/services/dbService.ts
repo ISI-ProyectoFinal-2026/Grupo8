@@ -1,4 +1,5 @@
 import { db } from '../db/db';
+import { generarJti } from '../utils/jti';
 
 export const dbService = {
   // ==========================================
@@ -96,19 +97,28 @@ export const dbService = {
   // ==========================================
   // INGRESO MANUAL Y ESPONTÁNEO
   // ==========================================
-  async registrarIngresoManual(dni: string, nombre: string, acompanantes: number, tipoIngreso: string): Promise<void> {
-    const jtiSimulado = `manual-${Date.now()}-${dni}`;
-    
+  async registrarIngresoManual(
+    dni: string,
+    nombre: string,
+    acompanantes: number,
+    tipoVisita: string,
+    montoCobrado = 0
+  ): Promise<void> {
+    // El id se genera una sola vez acá y queda guardado, así los reintentos mandan siempre el mismo
+    const jti = generarJti('manual');
+  
     const payloadManual = {
-      dni: dni,
-      nombre: nombre,
-      tipo_ingreso: tipoIngreso,
-      cantidad_personas: acompanantes + 1, 
-      typ: "manual"
+      dni,
+      nombre,
+      tipo_ingreso: 'MANUAL',
+      tipo_visita: tipoVisita, // lo que elige el guardia en el formulario
+      cantidad_personas: acompanantes + 1,
+      monto_cobrado: Math.round(montoCobrado * 100) / 100,
+      typ: 'manual'
     };
-
-    await this.registrarIngresoOffline(jtiSimulado, payloadManual);
-  }, 
+  
+    await this.registrarIngresoOffline(jti, payloadManual);
+  },
 
   // ==========================================
   // LISTA DE REVOCACIÓN (BLACKLIST)

@@ -1,21 +1,53 @@
-from pydantic import BaseModel, Field
-from typing import List
-from uuid import UUID
 from datetime import datetime
+from decimal import Decimal
+from typing import Annotated, Any, List, Literal, Optional, Union
+from uuid import UUID
 
-class IngresoOfflineItem(BaseModel):
-    """Representa un único registro escaneado sin internet"""
-    jti: str = Field(..., description="ID único del token QR para evitar duplicados")
-    reserva_id: UUID = Field(..., description="UUID de la reserva escaneada")
-    fecha_escaneo: datetime = Field(..., description="El momento exacto en que el guardia leyó el QR offline")
+from pydantic import BaseModel, Field, TypeAdapter
+
+
+class IngresoQRItem(BaseModel):
+    """Ingreso escaneado con QR (siempre trae reserva)."""
+    tipo_ingreso: Literal["QR"]
+    jti: str = Field(..., min_length=1, max_length=64)
+    reserva_id: UUID
+    fecha_escaneo: datetime
+    cantidad_personas: int = Field(1, ge=1)
+
+
+class IngresoManualItem(BaseModel):
+    """Ingreso cargado a mano por el guardia, con cobro en efectivo."""
+    tipo_ingreso: Literal["MANUAL"]
+    jti: str = Field(..., min_length=1, max_length=64)
+    reserva_id: Optional[UUID] = None
+    fecha_escaneo: datetime
+    cantidad_personas: int = Field(..., ge=1)
+    monto_cobrado: Decimal = Field(..., ge=0, max_digits=10, decimal_places=2)
+    nombre: str = Field(..., min_length=1, max_length=120)
+    dni: str = Field(..., min_length=1, max_length=20)
+
+
+# Se elige la clase según el valor de "tipo_ingreso"
+IngresoItem = Annotated[
+    Union[IngresoQRItem, IngresoManualItem],
+    Field(discriminator="tipo_ingreso"),
+]
+ingreso_item_adapter: TypeAdapter[Union[IngresoQRItem, IngresoManualItem]] = TypeAdapter(IngresoItem)
+
 
 class SyncIngresosRequest(BaseModel):
-    """El paquete completo (Batch) que envía la PWA"""
-    ingresos: List[IngresoOfflineItem]
+    """Lote de la PWA. Los ítems llegan crudos y se validan de a uno en el endpoint."""
+    ingresos: List[Any]
+
+
+class ErrorIngreso(BaseModel):
+    indice: int
+    jti: Optional[str] = None
+    motivo: str
+
 
 class SyncIngresosResponse(BaseModel):
-    """Respuesta del servidor indicando qué registros se pueden borrar localmente"""
-    sincronizados: List[str]  # Lista de JTIs procesados con éxito
-    errores: List[str]        # Lista de JTIs que fallaron (para logs)
-    
-    
+    procesados: int
+    conflictos: int
+    sincronizados_jti: List[str]  # la PWA borra estos de su cola
+    errores: List[ErrorIngreso]   # estos quedan en la cola
