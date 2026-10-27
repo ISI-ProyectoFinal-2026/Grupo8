@@ -75,7 +75,8 @@ describe('dbService — Encolamiento de ingresos en IndexedDB (Issue 8.3)', () =
 
     const personaDos = pendientes.find((p) => p.qr_payload.dni === '22222222');
     expect(personaDos?.qr_payload.cantidad_personas).toBe(3); // 2 acompañantes + 1
-    expect(personaDos?.qr_payload.tipo_ingreso).toBe('Manual con Reserva');
+    expect(personaDos?.qr_payload.tipo_ingreso).toBe('MANUAL');
+    expect(personaDos?.qr_payload.tipo_visita).toBe('Manual con Reserva');
   });
 
   it('Test 3 — orden FIFO: obtenerPendientesSincronizacion devuelve los registros en orden cronológico ascendente', async () => {
