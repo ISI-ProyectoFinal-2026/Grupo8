@@ -4,6 +4,7 @@ import resend
 from core.database import Base, SessionLocal, engine
 from models.user import User
 from models.reserva import Reserva, ReservaPersona
+from models.descuento import Descuento
 from models.ingreso_fisico import IngresoFisico
 from models.configuracion import ConfiguracionCamping
 from models.conflictos import ConflictosSincronizacion

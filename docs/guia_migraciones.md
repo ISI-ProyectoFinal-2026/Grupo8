@@ -23,6 +23,7 @@ Si dos migraciones tienen el mismo `down_revision`, aparecen dos heads y `alembi
 | corregir_tabla_conflictos | `7224388d1b53` | `f30ae74360fe` |
 | normalizar_reserva | `a3c91e5d7b42` | `7224388d1b53` |
 | reserva_personas (Issue 14.1) | `b7d4e2a91c58` | `a3c91e5d7b42` |
+| descuentos (Issue 14.2) | `c1e8f5a37d92` | `b7d4e2a91c58` |
 
 Cada vez que se integra una migración nueva hay que sumarla a esta tabla.
 
