@@ -20,3 +20,4 @@ dist-ssr/
 .pytest_cache/
 coverage/
 .eslintcache
+backend/qrs_generados/
