@@ -22,6 +22,7 @@ export default function ControlAcceso() {
   const [formAcompanantes, setFormAcompanantes] = useState(0);
   const [formTipo, setFormTipo] = useState('Espontaneo');
   const [idABloquear, setIdABloquear] = useState('');
+  const [formMonto, setFormMonto] = useState('');
   const [syncStatus, setSyncStatus] = useState<{ estado: string; mensaje: string } | null>(null);
 
   useEffect(() => {
@@ -85,24 +86,32 @@ export default function ControlAcceso() {
   };
 
   const handleIngresoManual = async (e: FormEvent) => {
-    e.preventDefault(); 
+    e.preventDefault();
     if (!formDni.trim() || !formNombre.trim()) {
       alert("⚠️ Por favor, complete el DNI y Nombre del visitante.");
       return;
     }
+  
+    const monto = Number(formMonto);
+    if (formMonto.trim() === '' || !Number.isFinite(monto) || monto < 0) {
+      alert("⚠️ Ingrese el monto cobrado (0 si no se cobró nada).");
+      return;
+    }
+  
     try {
-      await dbService.registrarIngresoManual(formDni, formNombre, formAcompanantes, formTipo);
-      const totalIngresan = formAcompanantes + 1; 
+      await dbService.registrarIngresoManual(formDni, formNombre, formAcompanantes, formTipo, monto);
+      const totalIngresan = formAcompanantes + 1;
       setOcupacion(prev => prev + totalIngresan);
       setResultadoValidacion({
         exito: true,
         mensaje: `✅ INGRESO MANUAL REGISTRADO (${formTipo.toUpperCase()})`,
-        payload: { dni: formDni, nombre: formNombre, cantidad_personas: totalIngresan }
+        payload: { dni: formDni, nombre: formNombre, cantidad_personas: totalIngresan, monto_cobrado: monto }
       });
       setFormDni('');
       setFormNombre('');
       setFormAcompanantes(0);
       setFormTipo('Espontaneo');
+      setFormMonto('');
       setMostrarFormulario(false);
     } catch (error: any) {
       setResultadoValidacion({ exito: false, mensaje: `❌ Error de ingreso: ${error.message}` });
@@ -172,6 +181,20 @@ export default function ControlAcceso() {
                   <option value="Manual con Reserva">Manual con Reserva</option>
                 </select>
               </div>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px' }}>Monto cobrado en efectivo ($):</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={formMonto}
+                  onChange={e => setFormMonto(e.target.value)}
+                  placeholder="0.00"
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
+                  required
+                />
+              </div>
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
               <button type="submit" style={{ flex: 1, padding: '10px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Guardar Ingreso</button>
@@ -189,6 +212,9 @@ export default function ControlAcceso() {
               {resultadoValidacion.payload.dni && <p><strong>DNI/ID:</strong> {resultadoValidacion.payload.dni}</p>}
               {resultadoValidacion.payload.nombre && <p><strong>Nombre:</strong> {resultadoValidacion.payload.nombre}</p>}
               <p><strong>Personas Ingresadas:</strong> {resultadoValidacion.payload.cantidad_personas}</p>
+              {resultadoValidacion.payload.monto_cobrado !== undefined && (
+              <p><strong>Monto cobrado:</strong> ${Number(resultadoValidacion.payload.monto_cobrado).toFixed(2)}</p>
+              )}
             </div>
           )}
         </div>
