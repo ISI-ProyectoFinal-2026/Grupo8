@@ -1,6 +1,7 @@
 from core.database import SessionLocal
 from models.user import User, RoleEnum
 from models.reserva import Reserva, CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum
+from models.ingreso_fisico import IngresoFisico  # noqa: F401 (SQLAlchemy lo necesita registrado para resolver Reserva.ingresos)
 from services.camping_service import obtener_o_crear_camping
 from services.pricing_service import PersonaPrecio, PricingService
 from services.auth_service import hash_password

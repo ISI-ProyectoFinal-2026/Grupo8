@@ -5,18 +5,47 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CalendarDays, LogOut, Tent, User } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useAuth, type Rol } from "@/context/AuthContext";
+import {
+    CalendarDays,
+    LayoutDashboard,
+    LogOut,
+    QrCode,
+    Tent,
+    User,
+    type LucideIcon,
+} from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+
+interface OpcionMenu {
+  ruta: string;
+  texto: string;
+  icono: LucideIcon;
+}
+
+// Opciones del menú "Mi Cuenta" según el rol; "Cerrar sesión" se agrega aparte para todos
+const OPCIONES_POR_ROL: Record<Rol, OpcionMenu[]> = {
+  CLIENTE: [
+    { ruta: "/perfil", texto: "Mi Perfil", icono: User },
+    { ruta: "/mis-reservas", texto: "Mis Reservas", icono: CalendarDays },
+  ],
+  SEGURIDAD: [{ ruta: "/acceso", texto: "Control de acceso", icono: QrCode }],
+  ADMIN: [{ ruta: "/admin", texto: "Panel de administración", icono: LayoutDashboard }],
+};
 
 export function Header() {
-  // TODO: Más adelante, esto vendrá del estado global o contexto de autenticación
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { rol, cerrarSesion } = useAuth();
+  const navigate = useNavigate();
+
+  const handleCerrarSesion = () => {
+    cerrarSesion();
+    navigate("/");
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-white">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        
+
         {/* Logo y Nombre */}
         <Link to="/" className="flex items-center gap-2">
           <Tent className="h-6 w-6 text-green-600" />
@@ -30,14 +59,12 @@ export function Header() {
           <Link to="/acerca" className="text-sm font-medium hover:text-green-600 transition-colors">Acerca de nosotros</Link>
           <Link to="/contacto" className="text-sm font-medium hover:text-green-600 transition-colors">Contacto</Link>
 
-          {/* Botonera dinámica según si inició sesión o no */}
-          {!isAuthenticated ? (
-            // Vista de Visitante
+          {/* Botonera dinámica: visitante o menú de la cuenta según el rol */}
+          {rol === null ? (
             <Button asChild className="bg-green-600 hover:bg-green-700">
               <Link to="/login">Iniciar Sesión</Link>
             </Button>
           ) : (
-            // Vista de Socio / Usuario Logueado
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2">
@@ -45,35 +72,22 @@ export function Header() {
                   Mi Cuenta
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem asChild className="cursor-pointer">
-                  <Link to="/perfil" className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Mi Perfil
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer">
-                  <Link to="/mis-reservas" className="flex items-center gap-2">
-                    <CalendarDays className="h-4 w-4" />
-                    Mis Reservas
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600" onClick={() => setIsAuthenticated(false)}>
+              <DropdownMenuContent align="end" className="w-56">
+                {OPCIONES_POR_ROL[rol].map(({ ruta, texto, icono: Icono }) => (
+                  <DropdownMenuItem key={ruta} asChild className="cursor-pointer">
+                    <Link to={ruta} className="flex items-center gap-2">
+                      <Icono className="h-4 w-4" />
+                      {texto}
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuItem className="cursor-pointer text-red-600 focus:text-red-600" onClick={handleCerrarSesion}>
                   <LogOut className="h-4 w-4 mr-2" />
                   Cerrar sesión
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          
-          {/* Botón temporal solo para que puedas probar cómo cambia la vista mientras programás */}
-          <button 
-            onClick={() => setIsAuthenticated(!isAuthenticated)} 
-            className="text-[10px] text-gray-300 absolute top-0 right-0 p-1"
-            title="Cambiar estado (solo para pruebas)"
-          >
-            SW
-          </button>
         </nav>
       </div>
     </header>

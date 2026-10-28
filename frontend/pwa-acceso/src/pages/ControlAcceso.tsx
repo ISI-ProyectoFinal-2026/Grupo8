@@ -123,7 +123,7 @@ export default function ControlAcceso() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
-      <h1 style={{ textAlign: 'center' }}>Sistema de Acceso - Grupo 8</h1>
+      <h1 style={{ textAlign: 'center' }}>Sistema de Acceso</h1>
       {syncStatus && (
         <div style={{ backgroundColor: syncStatus.estado === 'warning' ? '#fff3cd' : syncStatus.estado === 'success' ? '#d4edda' : '#f8d7da', color: syncStatus.estado === 'warning' ? '#856404' : syncStatus.estado === 'success' ? '#155724' : '#721c24', padding: '12px', borderRadius: '5px', textAlign: 'center', marginBottom: '15px', fontWeight: 'bold', border: '1px solid', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
           {syncStatus.mensaje}
