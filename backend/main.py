@@ -14,6 +14,7 @@ from api.sincronizacion import router as sincronizacion_router # Importamos el r
 from api.payments import router as payments_router
 from api.usuarios import router as usuarios_router
 from api.descuentos import router as descuentos_router
+from api.auth import router as auth_router
 from api.admin_alertas import router as admin_alertas_router
 
 # Configuración básica del logger
@@ -43,6 +44,7 @@ app.include_router(sincronizacion_router) # Conectamos endpoint a la app
 app.include_router(payments_router)
 app.include_router(usuarios_router)
 app.include_router(descuentos_router)
+app.include_router(auth_router)
 app.include_router(admin_alertas_router)
 
 # Middleware para loggeo de errores (Requisito del DoD)

@@ -21,8 +21,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     )
     
     try:
-        # Decodificamos el JWT usando la clave de tu .env (ajustá "ES256" si tu SecurityService genera otro algoritmo)
-        payload = jwt.decode(token, settings.AUTH_SECRET_KEY, algorithms=["ES256", "HS256"])
+        # El login firma solo con HS256; los tokens ES256 son de los QR y no sirven para iniciar sesión
+        payload = jwt.decode(token, settings.AUTH_SECRET_KEY, algorithms=["HS256"])
         
         # Asumimos que el ID del usuario viaja en el campo "sub" (subject) del JWT
         user_id: str = payload.get("sub")
