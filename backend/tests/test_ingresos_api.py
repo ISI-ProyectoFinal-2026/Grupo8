@@ -11,12 +11,30 @@ from services.camping_service import obtener_o_crear_camping
 from models.ingreso_fisico import IngresoFisico, TipoIngresoEnum
 from decimal import Decimal
 from typing import Optional
+import pytest
 
 # Aseguramos que las tablas existan, siguiendo el mismo patrón que
 # tests/test_reservas.py (operación idempotente).
 Base.metadata.create_all(bind=engine)
 
 client = TestClient(app)
+
+
+
+_creados: list[tuple[uuid.UUID, uuid.UUID]] = []  # (reserva_id, usuario_id)
+
+@pytest.fixture(autouse=True, scope="module")
+def _limpiar_reservas_de_prueba():
+    yield
+    db = SessionLocal()
+    try:
+        for reserva_id, usuario_id in _creados:
+            db.query(IngresoFisico).filter(IngresoFisico.reserva_id == reserva_id).delete(synchronize_session=False)
+            db.query(Reserva).filter(Reserva.id == reserva_id).delete(synchronize_session=False)
+            db.query(User).filter(User.id == usuario_id).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
 
 
 def _crear_reserva_de_prueba() -> str:
@@ -51,6 +69,7 @@ def _crear_reserva_de_prueba() -> str:
         db.add(reserva)
         db.commit()
         db.refresh(reserva)
+        _creados.append((reserva.id, usuario.id))
         return str(reserva.id)
     finally:
         db.close()
