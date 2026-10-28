@@ -9,10 +9,9 @@ from sqlalchemy import func
 
 from core.config import settings
 from core.database import Base, SessionLocal, engine
-from core.dependencies import get_current_user
 from main import app
 from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
-from models.user import User, RoleEnum
+from models.user import User
 from schemas.reserva import ReservaCreate, hoy_argentina
 
 # Fechas relativas a "hoy" (hora de Argentina, igual que el backend) para que los
@@ -26,11 +25,6 @@ client = TestClient(app)
 
 # Las reservas necesitan el camping cargado
 pytestmark = pytest.mark.usefixtures("camping_de_prueba")
-
-# El GET de reservas es solo para admin (mismo override que usa test_reservas.py)
-app.dependency_overrides[get_current_user] = lambda: User(
-    id=uuid.uuid4(), email="admin_test@grupo8.com", rol=RoleEnum.ADMIN
-)
 
 
 def _crear_usuario(es_socio=False) -> str:
@@ -286,7 +280,8 @@ def test_cupo_depende_del_estado_de_reserva_y_no_del_pago(monkeypatch, reservas_
 
 # ---------- GET /reservas ----------
 
-def test_una_reserva_anterior_con_telefono_se_sigue_pudiendo_leer(reservas_creadas):
+# El GET de reservas es solo para admin
+def test_una_reserva_anterior_con_telefono_se_sigue_pudiendo_leer(reservas_creadas, como_admin):
     user_id = _crear_usuario()
     anterior = _insertar_reserva(user_id, reservas_creadas, fecha_ingreso=date(2097, 3, 1),
                                  fecha_egreso=date(2097, 3, 1), telefono="2604000000")
@@ -301,7 +296,7 @@ def test_una_reserva_anterior_con_telefono_se_sigue_pudiendo_leer(reservas_cread
     assert por_id[sin_telefono]["telefono"] is None
 
 
-def test_listado_filtra_por_fecha_de_ingreso_y_devuelve_los_campos_nuevos(reservas_creadas):
+def test_listado_filtra_por_fecha_de_ingreso_y_devuelve_los_campos_nuevos(reservas_creadas, como_admin):
     user_id = _crear_usuario()
     # Fechas lejanas para no mezclarnos con otras reservas de la BD local
     cercana = _insertar_reserva(user_id, reservas_creadas, fecha_ingreso=date(2098, 1, 1),
