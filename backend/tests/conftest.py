@@ -1,10 +1,14 @@
 from decimal import Decimal
 
+import uuid
+
 import pytest
 import resend
 
 from core.database import Base, SessionLocal, engine
-from models.user import User
+from core.dependencies import get_current_user
+from main import app
+from models.user import RoleEnum, User
 from models.reserva import Reserva, ReservaPersona
 from models.descuento import AplicaDescuentoEnum, Descuento
 from models.ingreso_fisico import IngresoFisico
@@ -46,6 +50,23 @@ def descuentos_fijos(monkeypatch):
     )
     monkeypatch.setattr(PricingService, "_descuentos_activos", staticmethod(lambda db: [socio]))
     return DESCUENTO_SOCIO_PRUEBA
+
+
+@pytest.fixture
+def como_admin():
+    """
+    Hace que get_current_user devuelva un administrador (sin token) y deja todo como estaba al terminar.
+    Es solo para tests que no prueban la autenticación; así el reemplazo no se filtra a los demás módulos.
+    """
+    previo = app.dependency_overrides.get(get_current_user)
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id=uuid.uuid4(), email="admin_test@grupo8.com", rol=RoleEnum.ADMIN
+    )
+    yield
+    if previo is None:
+        app.dependency_overrides.pop(get_current_user, None)
+    else:
+        app.dependency_overrides[get_current_user] = previo
 
 
 class ResendFalso:

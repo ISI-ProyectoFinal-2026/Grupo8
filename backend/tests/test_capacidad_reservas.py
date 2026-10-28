@@ -1,25 +1,11 @@
 import pytest
-import uuid
 from datetime import date, timedelta
 from fastapi.testclient import TestClient
 
 from main import app
-from core.dependencies import get_current_user
-from models.user import User, RoleEnum
 
 # 1. Configuramos el cliente de pruebas local
 client = TestClient(app)
-
-# 2. Simulamos un usuario logueado para que no nos dé error 401 (No autorizado)
-def override_get_current_user():
-    return User(
-        id=uuid.uuid4(), 
-        email="admin_test@grupo8.com", 
-        rol=RoleEnum.ADMIN,
-        is_socio=True
-    )
-
-app.dependency_overrides[get_current_user] = override_get_current_user
 
 def test_reserva_otra_fecha_no_reduce_capacidad():
     """
