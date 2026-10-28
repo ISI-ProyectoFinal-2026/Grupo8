@@ -10,6 +10,7 @@ from models.reserva import Reserva, CondicionPersonaEnum, EstadoPagoEnum, Estado
 from services.camping_service import obtener_o_crear_camping
 from services.pricing_service import PersonaPrecio, PricingService
 from services.auth_service import hash_password
+from schemas.reserva import hoy_argentina
 from security.services import SecurityService
 from security.schemas import JWTPayloadSchema
 from security.config import settings
@@ -47,7 +48,9 @@ def run_seed_con_qrs():
             password_hash=password_usuarios, 
             nombre=f"Persona {i}", 
             dni=f"333{i}", 
-            is_socio=es_socio
+            is_socio=es_socio,
+            # Los socios de prueba tienen la cuota al día por un año
+            membresia_vence=hoy_argentina() + timedelta(days=365) if es_socio else None,
         )
         usuarios.append(u)
     db.add_all(usuarios)

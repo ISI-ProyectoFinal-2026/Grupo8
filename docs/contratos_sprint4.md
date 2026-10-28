@@ -87,15 +87,32 @@ Validación pública de socio:
 GET /socios/validar/{dni}
 ```
 
-Respuesta:
+Respuesta con socio vigente:
 ```json
 {
-  "valido": false,
-  "motivo": "CUOTA_VENCIDA"
+  "valido": true,
+  "motivo": null,
+  "nombre": "Ana Pérez",
+  "condicion": "socio"
 }
 ```
 
-`motivo` puede ser `NO_ES_SOCIO` o `CUOTA_VENCIDA`. El endpoint no devuelve nombre ni otros datos personales. `NO_ES_SOCIO` también cubre un DNI inexistente. El rate limiting queda fuera del alcance de este sprint.
+Respuesta con socio no válido:
+```json
+{
+  "valido": false,
+  "motivo": "CUOTA_VENCIDA",
+  "nombre": null,
+  "condicion": null
+}
+```
+
+- `motivo` puede ser `NO_EXISTE` (ningún usuario con ese DNI), `NO_ES_SOCIO` o `CUOTA_VENCIDA`.
+- `nombre` y `condicion` solo se informan cuando `valido` es verdadero; `condicion` vale `socio`. En los demás casos el endpoint no devuelve ningún dato personal.
+- La regla de vigencia es `is_socio` y `membresia_vence >= hoy` (fecha argentina): el día del vencimiento todavía es válido. Un socio sin `membresia_vence` figura como `CUOTA_VENCIDA`.
+- `estado_cuota` está en desuso y no se usa para decidir.
+- La lógica vive en `services/socio_service.py` (`validar_socio(db, dni)`), para que la reutilice la Issue 14.
+- El rate limiting queda fuera del alcance de este sprint.
 
 Alta y listado de socios (solo `ADMIN`):
 
@@ -128,7 +145,7 @@ Los modelos ejecutables se mantienen en código. Esta documentación describe su
 | `LoginResponse` | Backend y frontend | `access_token`, `token_type`, `expires_in`, `usuario: UsuarioSesion` |
 | `SocioCreate` | Backend | `nombre`, `dni`, `email`, `password`, `membresia_vence` |
 | `SocioOut` | Backend y frontend cuando se lista/crea | Datos de salida del socio; nunca incluye el password en claro |
-| `SocioValidacion` | Backend y frontend consumidor | `valido: boolean`, `motivo: NO_ES_SOCIO \| CUOTA_VENCIDA \| null` |
+| `SocioValidacion` | Backend y frontend consumidor | `valido: boolean`, `motivo: NO_EXISTE \| NO_ES_SOCIO \| CUOTA_VENCIDA \| null`, `nombre: string \| null`, `condicion: "socio" \| null` |
 
 Archivos ejecutables:
 - Backend: `backend/schemas/auth.py`.
