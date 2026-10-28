@@ -1,20 +1,38 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/context/AuthContext";
+import { ErrorLogin, RUTA_POR_ROL, solicitarLogin } from "@/lib/auth";
 import { Tent } from "lucide-react";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { Navigate } from "react-router-dom";
 
 export default function Login() {
-  const navigate = useNavigate();
+  const { rol, iniciarSesion } = useAuth();
   const [identificacion, setIdentificacion] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [enviando, setEnviando] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Con la sesión abierta no hace falta el formulario: va directo a la pantalla de su rol
+  if (rol) return <Navigate to={RUTA_POR_ROL[rol]} replace />;
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    // Simulación de login exitoso
-    navigate("/perfil");
+    setError("");
+    setEnviando(true);
+    try {
+      const token = await solicitarLogin(identificacion, password);
+      // Al abrir la sesión esta pantalla redirige sola según el rol
+      if (!iniciarSesion(token)) setError("No se pudo iniciar la sesión. Intentá de nuevo.");
+    } catch (err) {
+      setError(
+        err instanceof ErrorLogin ? err.message : "Ocurrió un error inesperado. Intentá de nuevo."
+      );
+    } finally {
+      setEnviando(false);
+    }
   };
 
   return (
@@ -23,7 +41,7 @@ export default function Login() {
         <Tent className="w-10 h-10" />
         <span className="text-3xl font-black tracking-tighter">Qamp</span>
       </div>
-      
+
       <Card className="w-full shadow-lg border-zinc-200">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Iniciar Sesión</CardTitle>
@@ -33,42 +51,42 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="identificacion">DNI o Email</Label>
-              <Input 
-                id="identificacion" 
-                required 
+              <Input
+                id="identificacion"
+                required
+                autoComplete="username"
                 placeholder="ej: emiliana@correo.com o 12345678"
                 value={identificacion}
                 onChange={(e) => setIdentificacion(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Label htmlFor="password">Contraseña</Label>
-                <Link to="#" className="text-xs text-green-600 hover:underline">
-                  ¿Olvidaste tu contraseña?
-                </Link>
-              </div>
-              <Input 
-                id="password" 
-                type="password" 
-                required 
+              <Label htmlFor="password">Contraseña</Label>
+              <Input
+                id="password"
+                type="password"
+                required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 h-11 text-md mt-4">
-              Ingresar
+
+            {error && (
+              <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              disabled={enviando}
+              className="w-full bg-green-600 hover:bg-green-700 h-11 text-md mt-4"
+            >
+              {enviando ? "Ingresando..." : "Ingresar"}
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="justify-center border-t p-4 mt-2">
-          <p className="text-sm text-zinc-600">
-            ¿No sos socio todavía?{" "}
-            <Link to="#" className="text-green-600 font-semibold hover:underline">
-              Registrarme
-            </Link>
-          </p>
-        </CardFooter>
       </Card>
     </div>
   );
