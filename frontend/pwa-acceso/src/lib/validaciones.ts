@@ -9,7 +9,6 @@ export const limpiarNombre = (v: string) => v.replace(/[^\p{L} .'’-]/gu, '');
 
 const EMAIL_REGEX = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
 const NOMBRE_REGEX = /^\p{L}+(?:[ .'’-]+\p{L}+)*\.?$/u;
-const TELEFONO_REGEX = /^[0-9]+$/;
 
 export function hoyISO(): string {
   const d = new Date();
@@ -33,14 +32,6 @@ export function validarNombre(valor: string): string | null {
   if (v.length > 100) return 'El nombre no puede superar los 100 caracteres.';
   if (!NOMBRE_REGEX.test(v))
     return 'El nombre solo puede contener letras, espacios, puntos, apóstrofes y guiones.';
-  return null;
-}
-
-export function validarTelefono(valor: string): string | null {
-  const v = valor.trim();
-  if (!v) return 'El teléfono es obligatorio.';
-  if (!TELEFONO_REGEX.test(v)) return 'El teléfono solo puede contener números.';
-  if (v.length < 8 || v.length > 15) return 'El teléfono debe tener entre 8 y 15 dígitos.';
   return null;
 }
 

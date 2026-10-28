@@ -10,7 +10,6 @@ import {
   validarFechasEstadia,
   validarNoches,
   validarNombre,
-  validarTelefono,
 } from './validaciones';
 
 describe('validarCantidadPersonas', () => {
@@ -46,18 +45,6 @@ describe('validarNombre', () => {
   );
   it.each(['', '   ', 'A', '12345', 'Ana<script>', 'x'.repeat(101)])('rechaza "%s"', (v) => {
     expect(validarNombre(v)).not.toBeNull();
-  });
-});
-
-describe('validarTelefono', () => {
-  it.each(['2604123456', '5492604123456'])('acepta %s', (v) => {
-    expect(validarTelefono(v)).toBeNull();
-  });
-  it.each([
-    '', '  ', 'abc', '123', '1'.repeat(16), '26041234a6',
-    '+54 9 260 412-3456', '(260) 412 3456', '260-412-3456', '260 412 3456',
-  ])('rechaza "%s"', (v) => {
-    expect(validarTelefono(v)).not.toBeNull();
   });
 });
 

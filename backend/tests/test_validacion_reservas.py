@@ -21,12 +21,10 @@ def _persona(**cambios) -> dict:
 def _payload(**cambios) -> dict:
     manana = (hoy_argentina() + timedelta(days=1)).isoformat()
     payload = {
-        "user_id": str(uuid.uuid4()),
         "fecha_ingreso": manana,
         "fecha_egreso": manana,
         "personas": [_persona(), _persona(nombre="Luis Pérez", edad=8)],
         "email": "ana@test.com",
-        "telefono": "2604123456",
     }
     payload.update(cambios)
     return payload
@@ -40,16 +38,6 @@ CASOS_INVALIDOS = [
     ("email", "ana@test"),
     ("email", "ana perez@test.com"),
     ("email", "ana@@test.com"),
-    ("telefono", ""),
-    ("telefono", "   "),
-    ("telefono", "abc"),
-    ("telefono", "123"),
-    ("telefono", "1" * 16),
-    ("telefono", "26041234a6"),
-    ("telefono", "+542604123456"),
-    ("telefono", "260-412-3456"),
-    ("telefono", "260 412 3456"),
-    ("telefono", "(260)4123456"),
     ("fecha_ingreso", ""),
     ("fecha_ingreso", "20-12-2030"),
     ("fecha_ingreso", "2030-02-30"),
@@ -121,7 +109,7 @@ def test_api_rechaza_valores_invalidos_con_422(campo, valor):
 
 
 @pytest.mark.parametrize(
-    "campo", ["user_id", "fecha_ingreso", "fecha_egreso", "personas", "email", "telefono"]
+    "campo", ["fecha_ingreso", "fecha_egreso", "personas", "email"]
 )
 def test_api_rechaza_campos_obligatorios_ausentes(campo):
     payload = _payload()
@@ -133,9 +121,6 @@ def test_api_rechaza_campos_obligatorios_ausentes(campo):
     "campo, valor",
     [
         ("email", "ana.perez+camping@correo.com.ar"),
-        ("telefono", "26041234"),          # 8 dígitos (mínimo)
-        ("telefono", "5492604123456"),     # con código de país
-        ("telefono", "1" * 15),            # 15 dígitos (máximo)
         ("fecha_ingreso", hoy_argentina().isoformat()),  # hoy es válido
     ],
 )
@@ -180,6 +165,19 @@ def test_schema_recorta_espacios_del_nombre_y_del_dni():
 def test_schema_trata_el_dni_vacio_de_un_visitante_como_ausente():
     reserva = ReservaCreate(**_payload(personas=[_persona(dni="  ")]))
     assert reserva.personas[0].dni is None
+
+
+def test_schema_ya_no_pide_telefono():
+    payload = _payload()
+    assert "telefono" not in payload
+    assert not hasattr(ReservaCreate(**payload), "telefono")
+
+
+@pytest.mark.parametrize("telefono", ["abc", "123", "", "260-412-3456"])
+def test_schema_ignora_el_telefono_si_un_cliente_todavia_lo_manda(telefono):
+    # Un cliente viejo puede seguir mandándolo: no se valida ni se guarda
+    reserva = ReservaCreate(**_payload(telefono=telefono))
+    assert not hasattr(reserva, "telefono")
 
 
 def test_schema_ya_no_pide_cantidad_personas_ni_titular():

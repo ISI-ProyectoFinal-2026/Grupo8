@@ -8,26 +8,59 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, and_
 
+from core.auth_opcional import get_current_user_optional
 from core.config import settings
 from core.database import get_db 
-from schemas.reserva import ReservaCreate, ReservaResponse
+from schemas.cotizacion import CotizarDetalle, CotizarRequest, CotizarResponse
+from schemas.reserva import ReservaCreate, ReservaDetalle, ReservaResponse
 from models.reserva import (
-    Reserva, ReservaPersona, CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum,
+    Reserva, ReservaPersona, EstadoPagoEnum, EstadoReservaEnum,
 )
 from models.configuracion import ConfiguracionCamping
 from services.capacity_service import CapacityService
-from services.pricing_service import PricingService
+from services.pricing_service import Cotizacion, PersonaPrecio, PricingService
 
 router = APIRouter(prefix="/reservas", tags=["Reservas"])
 capacity_service = CapacityService()
 
-@router.post("/", response_model=ReservaResponse, status_code=status.HTTP_201_CREATED)
-def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
 
-    # 1. El usuario que hace la reserva tiene que existir
-    usuario = db.query(User).filter(User.id == reserva_in.user_id).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+def _respuesta_cotizacion(cotizacion: Cotizacion, personas: List[PersonaPrecio]) -> CotizarResponse:
+    return CotizarResponse(
+        subtotal=float(cotizacion.subtotal),
+        descuento_total=float(cotizacion.descuento_total),
+        total=float(cotizacion.total),
+        cantidad_socios=cotizacion.cantidad_socios,
+        detalle=[
+            CotizarDetalle(
+                indice=indice,
+                condicion_efectiva=persona.condicion,
+                descuento_codigo=precio.descuento_codigo,
+                descuento_pct=float(precio.descuento_pct),
+                precio_base=float(precio.precio_base),
+                precio_final=float(precio.precio_final),
+            )
+            for indice, (persona, precio) in enumerate(zip(personas, cotizacion.personas))
+        ],
+    )
+
+
+@router.post("/cotizar", response_model=CotizarResponse)
+def cotizar_reserva(cotizacion_in: CotizarRequest, db: Session = Depends(get_db)):
+    """Precio de una reserva sin guardarla. Es público: no pide sesión."""
+    personas = [PersonaPrecio(p.edad, p.condicion) for p in cotizacion_in.personas]
+    return _respuesta_cotizacion(PricingService.cotizar(db, personas), personas)
+
+
+@router.post("/", response_model=ReservaResponse, status_code=status.HTTP_201_CREATED)
+def crear_reserva(
+    reserva_in: ReservaCreate,
+    db: Session = Depends(get_db),
+    usuario: Optional[User] = Depends(get_current_user_optional),
+):
+
+    # 1. Se puede reservar con o sin sesión. Con sesión la reserva queda a nombre del usuario del token
+    # (ya validado por el backend); sin sesión, user_id queda en None
+    user_id = usuario.id if usuario else None
 
     # 2. El camping tiene que estar configurado, porque la reserva lo referencia
     camping = db.query(ConfiguracionCamping).filter(
@@ -59,12 +92,13 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
         reservas_activas=lugares_ocupados
     )
 
-    # 5. Precio de cada persona según su condición; el monto total es la suma
+    # 5. Precio de cada persona y total, con la misma cuenta que usa la cotización
     # El monto lo calcula el backend, no lo manda el cliente
-    personas = []
-    for orden, persona_in in enumerate(reserva_in.personas):
-        precio = PricingService.calcular_precio_persona(persona_in.condicion == CondicionPersonaEnum.socio)
-        personas.append(ReservaPersona(
+    cotizacion = PricingService.cotizar(
+        db, [PersonaPrecio(p.edad, p.condicion) for p in reserva_in.personas]
+    )
+    personas = [
+        ReservaPersona(
             orden=orden,
             nombre=persona_in.nombre,
             edad=persona_in.edad,
@@ -73,12 +107,14 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
             precio_base=precio.precio_base,
             descuento_pct=precio.descuento_pct,
             precio_final=precio.precio_final,
-        ))
-    monto_total = float(sum(p.precio_final for p in personas))
+        )
+        for orden, (persona_in, precio) in enumerate(zip(reserva_in.personas, cotizacion.personas))
+    ]
+    monto_total = float(cotizacion.total)
 
     # 6. Preparar el objeto para la base de datos (el titular es la primera persona)
     nueva_reserva = Reserva(
-        user_id=reserva_in.user_id,
+        user_id=user_id,
         camping_id=camping.camping_id,
         fecha_ingreso=reserva_in.fecha_ingreso,
         fecha_egreso=reserva_in.fecha_egreso,
@@ -86,7 +122,6 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
         monto_total=monto_total,
         titular=reserva_in.personas[0].nombre,
         email=reserva_in.email,
-        telefono=reserva_in.telefono,
         estado_reserva=EstadoReservaEnum.PENDIENTE,
         estado_pago=EstadoPagoEnum.PENDIENTE,
         personas=personas
@@ -105,6 +140,21 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al procesar la reserva. Intente nuevamente."
         )
+
+@router.get("/mias", response_model=List[ReservaDetalle])
+def obtener_mis_reservas(
+    db: Session = Depends(get_db),
+    usuario: User = Depends(get_current_user),
+):
+    """Las reservas del usuario con la sesión iniciada. El usuario sale del token, no de la URL ni del body."""
+    return (
+        db.query(Reserva)
+        .options(selectinload(Reserva.personas))
+        .filter(Reserva.user_id == usuario.id)
+        .order_by(Reserva.fecha_ingreso.desc(), Reserva.fecha_reserva.desc())
+        .all()
+    )
+
 
 @router.get("/", response_model=List[ReservaResponse])
 def obtener_reservas(

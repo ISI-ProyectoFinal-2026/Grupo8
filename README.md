@@ -52,8 +52,8 @@ python seed.py
 ```
 > ⚠️ `seed.py` (y `seed_qr.py`) **borran** todos los usuarios y reservas antes de cargar los datos.
 
-**Usuario de prueba para crear reservas (no destructivo):**
-El frontend ya no lleva ningún UUID de usuario hardcodeado (:D) : al reservar, pide el `user_id` a `GET /usuarios/prueba`, que devuelve un usuario existente en *tu* base local (lo crea si no existe). Si querés crearlo de forma explícita:
+**Usuario de prueba para desarrollo (no destructivo):**
+Reservar ya no necesita ningún `user_id`: si la persona tiene la sesión iniciada, la reserva queda a su nombre (el backend lo saca del token); si no, se crea igual, sin cuenta. `GET /usuarios/prueba` quedó solo para desarrollo: devuelve un usuario existente en *tu* base local (lo crea si no existe) y sirve, por ejemplo, para probar `GET /reservas/mias` con un token armado a mano. Si querés crearlo de forma explícita:
 ```bash
 python seed_usuario_prueba.py
 ```

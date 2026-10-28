@@ -4,6 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+  cotizarReserva,
+  formatearMonto,
+  personasParaCotizar,
+  type Cotizacion,
+  type PersonaCotizar,
+} from "@/lib/cotizacion";
 import { formatearFecha } from "@/lib/fechas";
 import {
   limpiarNombre,
@@ -13,8 +20,8 @@ import {
   validarEdad,
   validarEmail,
   validarNombre,
-  validarTelefono,
 } from "@/lib/validaciones";
+import { useAuth } from "@/context/AuthContext";
 import { CalendarDays, CreditCard, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -68,10 +75,11 @@ const MensajeError = ({ texto }: { texto?: string }) =>
 export default function Reservas() {
   const location = useLocation();
   const navigate = useNavigate();
+  // Con sesión iniciada la reserva queda a nombre del usuario; sin sesión se reserva igual
+  const { token } = useAuth();
 
   // Rescatamos los datos que vienen del buscador y la disponibilidad con valores por defecto
-  const { fecha, fechaEgreso, personas, tipo, precio } = location.state || {};
-  const precioBase = precio || 5000; // Valor de respaldo por seguridad
+  const { fecha, fechaEgreso, personas, tipo } = location.state || {};
 
   // Si no hay fecha, redirigimos al inicio para evitar pantallas en blanco
   useEffect(() => {
@@ -89,27 +97,29 @@ export default function Reservas() {
   );
 
   const [emailContacto, setEmailContacto] = useState("");
-  const [telefono, setTelefono] = useState("");
-  const [total, setTotal] = useState(cantidadPersonas * precioBase);
-  const [descuentoAplicado, setDescuentoAplicado] = useState(0);
   const [errores, setErrores] = useState<Record<string, string>>({});
 
+  // El precio lo calcula el backend: acá solo se pide la cotización cuando cambia la edad
+  // o la condición de alguien. Mientras falte alguna edad no hay nada que cotizar.
+  const personasACotizar = personasParaCotizar(visitantes);
+  const claveCotizacion = JSON.stringify(personasACotizar);
+  const [cotizacion, setCotizacion] = useState<Cotizacion | null>(null);
+  const [errorCotizacion, setErrorCotizacion] = useState(false);
+
   useEffect(() => {
-    const calcularTarifasBackend = async () => {
-      try {
-        const cantidadSocios = visitantes.filter(v => v.condicion === "socio").length;
-        const subtotal = cantidadPersonas * precioBase;
-        const descuento = cantidadSocios * (precioBase * 0.5);
+    const aCotizar: PersonaCotizar[] | null = JSON.parse(claveCotizacion);
+    setCotizacion(null);
+    setErrorCotizacion(false);
+    if (!aCotizar) return;
 
-        setDescuentoAplicado(descuento);
-        setTotal(subtotal - descuento);
-      } catch (error) {
-        console.error("Error al calcular tarifas", error);
-      }
-    };
-
-    calcularTarifasBackend();
-  }, [visitantes, cantidadPersonas, precioBase]);
+    const controlador = new AbortController();
+    cotizarReserva(aCotizar, controlador.signal)
+      .then(setCotizacion)
+      .catch(() => {
+        if (!controlador.signal.aborted) setErrorCotizacion(true);
+      });
+    return () => controlador.abort();
+  }, [claveCotizacion]);
 
   const actualizarVisitante = (index: number, campo: keyof Visitante, valor: string) => {
     const nuevosVisitantes = [...visitantes];
@@ -124,9 +134,6 @@ export default function Reservas() {
 
     const eEmail = validarEmail(emailContacto);
     if (eEmail) nuevos.email = eEmail;
-
-    const eTelefono = validarTelefono(telefono);
-    if (eTelefono) nuevos.telefono = eTelefono;
 
     const eCantidad = validarCantidadPersonas(String(cantidadPersonas));
     if (eCantidad) nuevos.cantidad = eCantidad;
@@ -164,27 +171,26 @@ export default function Reservas() {
     if (!validarFormulario()) return;
 
     try {
-      // 0. Obtenemos un usuario que exista en la base de datos ACTUAL.
-      // (Temporal: cuando haya login real, el user_id saldrá del usuario autenticado.)
-      const usuarioResponse = await fetch(`${API_URL}/usuarios/prueba`);
-      if (!usuarioResponse.ok) {
-        alert("No se pudo obtener un usuario válido para crear la reserva.");
-        return;
-      }
-      const { user_id: userId } = await usuarioResponse.json();
-
-      // 1. PRIMERO: Guardamos la reserva en la base de datos
+      // 1. PRIMERO: Guardamos la reserva en la base de datos.
+      // Si hay sesión mandamos el token y el backend asocia la reserva al usuario;
+      // el user_id nunca viaja desde acá.
       const reservaResponse = await fetch(`${API_URL}/reservas/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           fecha_ingreso: fecha,
           fecha_egreso: fechaEgreso || fecha, // si no vino egreso, es una reserva por el día
-          cantidad_personas: cantidadPersonas,
-          user_id: userId,
-          titular: visitantes[0].nombre.trim(), // el titular es el primer visitante
-          email: emailContacto.trim(),
-          telefono: telefono.trim()
+          // El titular es la primera persona; el precio lo calcula el backend con estos datos
+          personas: visitantes.map((v) => ({
+            nombre: v.nombre.trim(),
+            edad: Number(v.edad),
+            condicion: v.condicion,
+            dni: v.condicion === "socio" ? v.dni.trim() : undefined,
+          })),
+          email: emailContacto.trim()
         })
       });
 
@@ -254,26 +260,6 @@ export default function Reservas() {
                 onChange={(e) => setEmailContacto(e.target.value)}
               />
               <MensajeError texto={errores.email} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Teléfono de Contacto</CardTitle>
-              <CardDescription>Lo usamos por si necesitamos comunicarnos por tu reserva. Solo números.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Input
-                type="tel"
-                inputMode="numeric"
-                maxLength={15}
-                required
-                placeholder="2604123456"
-                value={telefono}
-                aria-invalid={!!errores.telefono}
-                onChange={(e) => setTelefono(soloDigitos(e.target.value))}
-              />
-              <MensajeError texto={errores.telefono} />
             </CardContent>
           </Card>
 
@@ -368,14 +354,14 @@ export default function Reservas() {
 
               <div className="flex justify-between text-zinc-600">
                 <span>Subtotal ({cantidadPersonas} pers.)</span>
-                <span>${(cantidadPersonas * precioBase).toLocaleString('es-AR')}</span>
+                <span>{cotizacion ? formatearMonto(cotizacion.subtotal) : "—"}</span>
               </div>
               <MensajeError texto={errores.cantidad} />
 
-              {descuentoAplicado > 0 && (
+              {cotizacion && cotizacion.descuento_total > 0 && (
                 <div className="flex justify-between text-green-600 font-medium">
-                  <span>Descuento socios</span>
-                  <span>-${descuentoAplicado.toLocaleString('es-AR')}</span>
+                  <span>Descuentos</span>
+                  <span>-{formatearMonto(cotizacion.descuento_total)}</span>
                 </div>
               )}
 
@@ -383,8 +369,19 @@ export default function Reservas() {
 
               <div className="flex justify-between items-center">
                 <span className="text-lg font-bold text-zinc-900">Total a pagar</span>
-                <span className="text-2xl font-black text-green-700">${total.toLocaleString('es-AR')}</span>
+                <span className="text-2xl font-black text-green-700">
+                  {cotizacion ? formatearMonto(cotizacion.total) : "—"}
+                </span>
               </div>
+              {!cotizacion && (
+                <p role="status" className="text-sm text-zinc-500">
+                  {errorCotizacion
+                    ? "No pudimos calcular el precio. Revisá tu conexión e intentá nuevamente."
+                    : personasACotizar
+                      ? "Calculando el precio…"
+                      : "Completá la edad de cada persona para ver el precio."}
+                </p>
+              )}
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full bg-[#009EE3] hover:bg-[#0086c2] text-white h-14 text-lg font-semibold flex gap-2">

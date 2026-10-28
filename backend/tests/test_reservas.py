@@ -37,14 +37,12 @@ def test_obtener_reservas():
     assert isinstance(response.json(), list)
 
 def test_crear_reserva_sin_datos_completos():
-    # Simulamos enviar una reserva pero "olvidando" el user_id
+    # Simulamos enviar una reserva pero "olvidando" las personas
     payload_incompleto = {
         "fecha_ingreso": "2026-12-31",
         "fecha_egreso": "2026-12-31",
-        "personas": [{"nombre": "Ana Pérez", "edad": 34, "condicion": "visitante"}],
         "email": "ana@test.com",
-        "telefono": "2604000000"
-        # Falta el user_id intencionalmente
+        # Faltan las personas intencionalmente
     }
     
     response = client.post("/reservas/", json=payload_incompleto)

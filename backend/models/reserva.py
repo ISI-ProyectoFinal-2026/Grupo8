@@ -34,7 +34,8 @@ class Reserva(Base):
     __tablename__ = "reservas"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    # Nulo cuando el visitante reservó sin iniciar sesión
+    user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
     camping_id = Column(String, ForeignKey("configuracion_camping.camping_id"), nullable=False)
 
     # fecha_reserva es el momento en que se hizo la reserva; la estadía son ingreso y egreso
@@ -48,7 +49,7 @@ class Reserva(Base):
     # Datos del titular de la reserva (pueden no coincidir con los del usuario logueado)
     titular = Column(String, nullable=False)
     email = Column(String, nullable=False)
-    telefono = Column(String, nullable=True)  # nullable por las reservas anteriores, el schema lo exige en las nuevas
+    telefono = Column(String, nullable=True)  # solo lo tienen las reservas anteriores; las nuevas ya no lo piden
 
     estado_reserva = Column(Enum(EstadoReservaEnum), default=EstadoReservaEnum.PENDIENTE, nullable=False)
     estado_pago = Column(Enum(EstadoPagoEnum), default=EstadoPagoEnum.PENDIENTE, nullable=False)

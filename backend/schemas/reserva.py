@@ -4,7 +4,7 @@ from typing import List, Optional
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator, model_validator
 
 from core.config import settings
 from models.reserva import CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum
@@ -14,7 +14,6 @@ ZONA_HORARIA = ZoneInfo("America/Argentina/Buenos_Aires")
 FECHA_ISO_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Letras (con acentos), separadas por espacios, puntos, apóstrofes o guiones
 NOMBRE_REGEX = re.compile(r"^[^\W\d_]+(?:[ .'’\-]+[^\W\d_]+)*\.?$")
-TELEFONO_REGEX = re.compile(r"^[0-9]+$")
 DNI_REGEX = re.compile(r"^\d{7,8}$")
 
 EDAD_MAXIMA = 120
@@ -82,14 +81,13 @@ class ReservaCreate(BaseModel):
     # Se recortan espacios al inicio/fin de todos los textos antes de validar
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    user_id: UUID
+    # No lleva user_id: la reserva queda a nombre de quien tiene la sesión iniciada (si hay una)
     fecha_ingreso: date
     fecha_egreso: date
     # La primera persona es el titular; la cantidad de personas sale del largo de la lista
     personas: List[PersonaReserva]
     # EmailStr usa email-validator (sin chequeo DNS por defecto)
     email: EmailStr
-    telefono: str
 
     @field_validator("fecha_ingreso", "fecha_egreso", mode="before")
     @classmethod
@@ -120,17 +118,6 @@ class ReservaCreate(BaseModel):
             raise ValueError("Hay un DNI repetido dentro de la reserva.")
         return valor
 
-    @field_validator("telefono")
-    @classmethod
-    def validar_telefono(cls, valor: str) -> str:
-        if not valor:
-            raise ValueError("El teléfono es obligatorio.")
-        if not TELEFONO_REGEX.match(valor):
-            raise ValueError("El teléfono solo puede contener números.")
-        if not 8 <= len(valor) <= 15:
-            raise ValueError("El teléfono debe tener entre 8 y 15 dígitos.")
-        return valor
-
     @model_validator(mode="after")
     def validar_fechas(self):
         if self.fecha_ingreso < hoy_argentina():
@@ -156,7 +143,8 @@ class PersonaOut(BaseModel):
 
 class ReservaResponse(BaseModel):
     id: UUID
-    user_id: UUID
+    # Nulo en las reservas hechas sin iniciar sesión
+    user_id: Optional[UUID] = None
     camping_id: str
     fecha_reserva: datetime
     fecha_ingreso: date
@@ -165,6 +153,7 @@ class ReservaResponse(BaseModel):
     monto_total: float
     titular: str
     email: str
+    # Solo lo tienen las reservas anteriores; las nuevas ya no piden teléfono
     telefono: Optional[str] = None
     estado_reserva: EstadoReservaEnum
     estado_pago: EstadoPagoEnum
@@ -172,3 +161,12 @@ class ReservaResponse(BaseModel):
     personas: List[PersonaOut] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReservaDetalle(ReservaResponse):
+    """Lo que ve el socio en Mis reservas: la reserva con sus personas y cuántas son socias."""
+
+    @computed_field
+    @property
+    def cantidad_socios(self) -> int:
+        return sum(1 for persona in self.personas if persona.condicion == CondicionPersonaEnum.socio)
