@@ -21,6 +21,7 @@ import {
   validarEmail,
   validarNombre,
 } from "@/lib/validaciones";
+import { useAuth } from "@/context/AuthContext";
 import { CalendarDays, CreditCard, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -74,6 +75,8 @@ const MensajeError = ({ texto }: { texto?: string }) =>
 export default function Reservas() {
   const location = useLocation();
   const navigate = useNavigate();
+  // Con sesión iniciada la reserva queda a nombre del usuario; sin sesión se reserva igual
+  const { token } = useAuth();
 
   // Rescatamos los datos que vienen del buscador y la disponibilidad con valores por defecto
   const { fecha, fechaEgreso, personas, tipo } = location.state || {};
@@ -168,23 +171,18 @@ export default function Reservas() {
     if (!validarFormulario()) return;
 
     try {
-      // 0. Obtenemos un usuario que exista en la base de datos ACTUAL.
-      // (Temporal: cuando haya login real, el user_id saldrá del usuario autenticado.)
-      const usuarioResponse = await fetch(`${API_URL}/usuarios/prueba`);
-      if (!usuarioResponse.ok) {
-        alert("No se pudo obtener un usuario válido para crear la reserva.");
-        return;
-      }
-      const { user_id: userId } = await usuarioResponse.json();
-
-      // 1. PRIMERO: Guardamos la reserva en la base de datos
+      // 1. PRIMERO: Guardamos la reserva en la base de datos.
+      // Si hay sesión mandamos el token y el backend asocia la reserva al usuario;
+      // el user_id nunca viaja desde acá.
       const reservaResponse = await fetch(`${API_URL}/reservas/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           fecha_ingreso: fecha,
           fecha_egreso: fechaEgreso || fecha, // si no vino egreso, es una reserva por el día
-          user_id: userId,
           // El titular es la primera persona; el precio lo calcula el backend con estos datos
           personas: visitantes.map((v) => ({
             nombre: v.nombre.trim(),

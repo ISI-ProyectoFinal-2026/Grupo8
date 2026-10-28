@@ -45,9 +45,8 @@ def _crear_usuario() -> str:
         db.close()
 
 
-def _payload(user_id, personas, **cambios) -> dict:
+def _payload(personas, **cambios) -> dict:
     payload = {
-        "user_id": user_id,
         "fecha_ingreso": INGRESO.isoformat(),
         "fecha_egreso": EGRESO.isoformat(),
         "personas": personas,
@@ -94,7 +93,7 @@ def _personas_guardadas(reserva_id: str) -> list:
 
 
 def test_se_guardan_los_datos_de_todas_las_personas(reservas_creadas):
-    response = client.post("/reservas/", json=_payload(_crear_usuario(), PERSONAS_MIXTAS))
+    response = client.post("/reservas/", json=_payload(PERSONAS_MIXTAS))
 
     assert response.status_code == 201, response.text
     reservas_creadas.append(response.json()["id"])
@@ -109,7 +108,7 @@ def test_se_guardan_los_datos_de_todas_las_personas(reservas_creadas):
 
 
 def test_cada_persona_guarda_su_precio_base_descuento_y_precio_final(reservas_creadas, descuentos_fijos):
-    response = client.post("/reservas/", json=_payload(_crear_usuario(), PERSONAS_MIXTAS))
+    response = client.post("/reservas/", json=_payload(PERSONAS_MIXTAS))
 
     assert response.status_code == 201, response.text
     reservas_creadas.append(response.json()["id"])
@@ -127,7 +126,7 @@ def test_cada_persona_guarda_su_precio_base_descuento_y_precio_final(reservas_cr
 
 
 def test_el_monto_total_es_la_suma_de_lo_que_paga_cada_persona(reservas_creadas):
-    response = client.post("/reservas/", json=_payload(_crear_usuario(), PERSONAS_MIXTAS))
+    response = client.post("/reservas/", json=_payload(PERSONAS_MIXTAS))
 
     assert response.status_code == 201, response.text
     data = response.json()
@@ -137,7 +136,7 @@ def test_el_monto_total_es_la_suma_de_lo_que_paga_cada_persona(reservas_creadas)
 
 
 def test_la_respuesta_devuelve_los_datos_de_las_personas(reservas_creadas, descuentos_fijos):
-    response = client.post("/reservas/", json=_payload(_crear_usuario(), PERSONAS_MIXTAS))
+    response = client.post("/reservas/", json=_payload(PERSONAS_MIXTAS))
 
     assert response.status_code == 201, response.text
     data = response.json()
@@ -154,11 +153,10 @@ def test_la_respuesta_devuelve_los_datos_de_las_personas(reservas_creadas, descu
 
 
 def test_el_mismo_dni_puede_estar_en_reservas_distintas(reservas_creadas):
-    user_id = _crear_usuario()
     persona = [{"nombre": "Ana Pérez", "edad": 34, "condicion": "socio", "dni": "30111222"}]
 
-    primera = client.post("/reservas/", json=_payload(user_id, persona))
-    segunda = client.post("/reservas/", json=_payload(user_id, persona))
+    primera = client.post("/reservas/", json=_payload(persona))
+    segunda = client.post("/reservas/", json=_payload(persona))
 
     assert primera.status_code == 201, primera.text
     assert segunda.status_code == 201, segunda.text
@@ -176,7 +174,7 @@ def test_si_falla_el_guardado_de_una_persona_no_se_crea_nada(monkeypatch, reserv
         return cotizacion._replace(personas=precios)
 
     monkeypatch.setattr(PricingService, "cotizar", staticmethod(cotizacion_rota))
-    payload = _payload(_crear_usuario(), PERSONAS_MIXTAS)
+    payload = _payload(PERSONAS_MIXTAS)
 
     response = client.post("/reservas/", json=payload)
 
@@ -189,7 +187,7 @@ def test_si_falla_el_guardado_de_una_persona_no_se_crea_nada(monkeypatch, reserv
 
 
 def test_al_borrar_la_reserva_se_borran_sus_personas(reservas_creadas):
-    response = client.post("/reservas/", json=_payload(_crear_usuario(), PERSONAS_MIXTAS))
+    response = client.post("/reservas/", json=_payload(PERSONAS_MIXTAS))
     reserva_id = response.json()["id"]
     assert len(_personas_guardadas(reserva_id)) == 3
 
@@ -213,7 +211,7 @@ def test_el_listado_devuelve_las_personas_y_las_reservas_viejas_quedan_sin_perso
         user_id = _crear_usuario()
         nueva = client.post(
             "/reservas/",
-            json=_payload(user_id, PERSONAS_MIXTAS, fecha_ingreso="2097-01-01", fecha_egreso="2097-01-02"),
+            json=_payload(PERSONAS_MIXTAS, fecha_ingreso="2097-01-01", fecha_egreso="2097-01-02"),
         )
         assert nueva.status_code == 201, nueva.text
         reservas_creadas.append(nueva.json()["id"])

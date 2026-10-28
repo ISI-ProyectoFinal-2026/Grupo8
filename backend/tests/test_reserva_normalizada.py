@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, timedelta
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -50,15 +51,20 @@ def _crear_usuario(es_socio=False) -> str:
         db.close()
 
 
+def _headers(user_id) -> dict:
+    """Cabecera con un token firmado, como el que emite el login."""
+    token = jwt.encode({"sub": str(user_id)}, settings.AUTH_SECRET_KEY, algorithm="HS256")
+    return {"Authorization": f"Bearer {token}"}
+
+
 def _personas(cantidad) -> list:
     """Una lista de visitantes; la primera persona es el titular (Ana Pérez)."""
     nombres = ["Ana Pérez", "Luis Pérez", "María Gómez", "Juan Gómez", "Sofía López"]
     return [{"nombre": nombres[i], "edad": 30 + i, "condicion": "visitante"} for i in range(cantidad)]
 
 
-def _payload(user_id, **cambios) -> dict:
+def _payload(**cambios) -> dict:
     payload = {
-        "user_id": user_id,
         "fecha_ingreso": INGRESO.isoformat(),
         "fecha_egreso": EGRESO.isoformat(),
         "personas": _personas(2),
@@ -126,7 +132,7 @@ def test_marcar_como_pagada_actualiza_pago_y_estado_de_reserva():
 
 def test_schema_acepta_ingreso_y_egreso_el_mismo_dia():
     # Quien pasa el día entra y sale el mismo día
-    reserva = ReservaCreate(**_payload(str(uuid.uuid4()), fecha_egreso=INGRESO.isoformat()))
+    reserva = ReservaCreate(**_payload(fecha_egreso=INGRESO.isoformat()))
 
     assert reserva.fecha_ingreso == reserva.fecha_egreso
 
@@ -134,19 +140,17 @@ def test_schema_acepta_ingreso_y_egreso_el_mismo_dia():
 def test_schema_rechaza_egreso_anterior_al_ingreso():
     antes = (INGRESO - timedelta(days=1)).isoformat()
     with pytest.raises(ValidationError):
-        ReservaCreate(**_payload(str(uuid.uuid4()), fecha_egreso=antes))
+        ReservaCreate(**_payload(fecha_egreso=antes))
 
 # ---------- POST /reservas ----------
 
 def test_crear_reserva_guarda_los_datos_normalizados(reservas_creadas):
-    user_id = _crear_usuario()
-
-    response = client.post("/reservas/", json=_payload(user_id))
+    response = client.post("/reservas/", json=_payload())
 
     assert response.status_code == 201
     data = response.json()
     reservas_creadas.append(data["id"])
-    assert data["user_id"] == user_id
+    assert data["user_id"] is None  # sin sesión la reserva queda sin cuenta
     assert data["camping_id"] == settings.CAMPING_ID
     assert data["fecha_ingreso"] == INGRESO.isoformat()
     assert data["fecha_egreso"] == EGRESO.isoformat()
@@ -162,7 +166,7 @@ def test_crear_reserva_guarda_los_datos_normalizados(reservas_creadas):
 
 
 def test_crear_reserva_sin_telefono_devuelve_201(reservas_creadas):
-    payload = _payload(_crear_usuario())
+    payload = _payload()
     assert "telefono" not in payload
 
     response = client.post("/reservas/", json=payload)
@@ -172,7 +176,7 @@ def test_crear_reserva_sin_telefono_devuelve_201(reservas_creadas):
 
 
 def test_crear_reserva_no_guarda_el_telefono_si_un_cliente_viejo_lo_manda(reservas_creadas):
-    response = client.post("/reservas/", json=_payload(_crear_usuario(), telefono="2604123456"))
+    response = client.post("/reservas/", json=_payload(telefono="2604123456"))
 
     assert response.status_code == 201
     data = response.json()
@@ -181,11 +185,10 @@ def test_crear_reserva_no_guarda_el_telefono_si_un_cliente_viejo_lo_manda(reserv
 
 
 def test_crear_reserva_aplica_descuento_solo_a_las_personas_socias(reservas_creadas, descuentos_fijos):
-    user_id = _crear_usuario()
     personas = _personas(3)
     personas[1].update(condicion="socio", dni="30123456")
 
-    response = client.post("/reservas/", json=_payload(user_id, personas=personas))
+    response = client.post("/reservas/", json=_payload(personas=personas))
 
     assert response.status_code == 201
     data = response.json()
@@ -197,9 +200,13 @@ def test_crear_reserva_aplica_descuento_solo_a_las_personas_socias(reservas_crea
 
 def test_el_descuento_depende_de_la_condicion_de_cada_persona_y_no_del_usuario(reservas_creadas):
     # Un usuario socio que reserva solo para visitantes no recibe descuento
-    user_id = _crear_usuario(es_socio=True)
+    usuario_id = _crear_usuario(es_socio=True)
 
-    response = client.post("/reservas/", json=_payload(user_id, personas=_personas(3)))
+    response = client.post(
+        "/reservas/",
+        json=_payload(personas=_personas(3)),
+        headers=_headers(usuario_id),
+    )
 
     assert response.status_code == 201
     data = response.json()
@@ -208,15 +215,14 @@ def test_el_descuento_depende_de_la_condicion_de_cada_persona_y_no_del_usuario(r
 
 
 def test_crear_reserva_con_egreso_anterior_al_ingreso_devuelve_422(reservas_creadas):
-    user_id = _crear_usuario()
     antes = (INGRESO - timedelta(days=1)).isoformat()
 
-    response = client.post("/reservas/", json=_payload(user_id, fecha_egreso=antes))
+    response = client.post("/reservas/", json=_payload(fecha_egreso=antes))
     assert response.status_code == 422
 
 @pytest.mark.parametrize("campo", ["personas", "email", "fecha_ingreso", "fecha_egreso"])
 def test_crear_reserva_sin_campo_obligatorio_devuelve_422(campo, reservas_creadas):
-    payload = _payload(_crear_usuario())
+    payload = _payload()
     del payload[campo]
 
     response = client.post("/reservas/", json=payload)
@@ -225,22 +231,28 @@ def test_crear_reserva_sin_campo_obligatorio_devuelve_422(campo, reservas_creada
 
 
 def test_crear_reserva_con_email_invalido_devuelve_422(reservas_creadas):
-    response = client.post("/reservas/", json=_payload(_crear_usuario(), email="no-es-un-email"))
+    response = client.post("/reservas/", json=_payload(email="no-es-un-email"))
 
     assert response.status_code == 422
 
 
-def test_crear_reserva_con_usuario_inexistente_devuelve_404(reservas_creadas):
-    response = client.post("/reservas/", json=_payload(str(uuid.uuid4())))
+def test_el_user_id_del_body_se_ignora(reservas_creadas):
+    # La identidad sale del token; un user_id enviado por el cliente no cuenta
+    ajeno = _crear_usuario()
 
-    assert response.status_code == 404
+    response = client.post("/reservas/", json=_payload(user_id=ajeno))
+
+    assert response.status_code == 201
+    data = response.json()
+    reservas_creadas.append(data["id"])
+    assert data["user_id"] is None
 
 
 def test_cupo_depende_del_estado_de_reserva_y_no_del_pago(monkeypatch, reservas_creadas):
         user_id = _crear_usuario()
         
         # 1. Generamos el payload para saber qué fechas exactas va a intentar reservar el test
-        payload_prueba = _payload(user_id, personas=_personas(2))
+        payload_prueba = _payload(personas=_personas(2))
         
         # 2. Calculamos los lugares ocupados SOLO en esas fechas (la misma lógica nueva del backend)
         db = SessionLocal()
@@ -268,7 +280,7 @@ def test_cupo_depende_del_estado_de_reserva_y_no_del_pago(monkeypatch, reservas_
         reservas_creadas.append(primera.json()["id"])
 
         # Reserva 2: ahora sí está lleno en esa fecha y debe fallar (Error 400)
-        segunda = client.post("/reservas/", json=_payload(user_id, personas=_personas(1)))
+        segunda = client.post("/reservas/", json=_payload(personas=_personas(1)))
         assert segunda.status_code == 400
 
 

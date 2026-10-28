@@ -10,7 +10,6 @@ from core.database import Base, SessionLocal, engine
 from main import app
 from models.descuento import AplicaDescuentoEnum, Descuento
 from models.reserva import Reserva
-from models.user import User
 from schemas.reserva import hoy_argentina
 from services.payment_service import payment_service
 from services.pricing_service import PricingService
@@ -38,27 +37,8 @@ def _para_cotizar(personas) -> list:
     return [{"edad": p["edad"], "condicion": p["condicion"]} for p in personas]
 
 
-def _crear_usuario() -> str:
-    db = SessionLocal()
-    try:
-        usuario = User(
-            email=f"cotiz_{uuid.uuid4()}@grupo8.com",
-            password_hash="secreto",
-            nombre="Usuario Cotización",
-            dni=str(uuid.uuid4().int)[:8],
-            is_socio=False,
-        )
-        db.add(usuario)
-        db.commit()
-        db.refresh(usuario)
-        return str(usuario.id)
-    finally:
-        db.close()
-
-
 def _payload_reserva(personas=PERSONAS) -> dict:
     return {
-        "user_id": _crear_usuario(),
         "fecha_ingreso": INGRESO.isoformat(),
         "fecha_egreso": EGRESO.isoformat(),
         "personas": personas,

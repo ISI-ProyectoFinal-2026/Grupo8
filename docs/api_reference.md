@@ -13,7 +13,7 @@ El sistema utiliza SQLAlchemy como ORM, mapeando clases Python a tablas en Postg
 * **Auditoría:** Marcas de tiempo `created_at` y `updated_at`.
 * **Modelo de Reserva (`Reserva`)**
 * **Tabla:** `reservas`
-* **Campos Principales:** ID (`UUID`), `user_id` (Clave foránea a usuarios), fecha y hora de la reserva, cantidad de personas.
+* **Campos Principales:** ID (`UUID`), `user_id` (clave foránea a usuarios; es nulo cuando la reserva se hizo sin iniciar sesión), fecha y hora de la reserva, cantidad de personas.
 * **Lógica de Negocio:** Estado de pago manejado por `EstadoPagoEnum` (Pendiente, Pagado, Cancelado).
 * **Seguridad:** Identificador único para códigos QR (`jwt_jti`).
 * **Modelo de Personas de la Reserva (`ReservaPersona`)**
@@ -56,6 +56,7 @@ FastAPI utiliza Pydantic para garantizar la serialización y validación estrict
 * **Modificación:** Se puede cambiar `nombre`, `porcentaje`, `edad_min`, `edad_max` y `activo`, enviando solo los campos a modificar. El `codigo` y `aplica_a` no se pueden cambiar.
 * **`JWTPayloadSchema` (Contrato Criptográfico QR)**
 * **Campos:** `jti` (UUID del token), `reserva_id` (Entero/UUID), `camping_id` (Entero), `typ` (Clasificación: `socio` o `visitante`), `cantidad_personas` (Entero), `iat` (Issued At), `exp` (Expiration Time) y `dat` (Fecha de la reserva). Este esquema es compartido exactamente con la interfaz `IJwtPayload` de TypeScript.
+* **Qué significa `typ` en una reserva con socios y visitantes:** El QR es uno solo por reserva, no uno por persona, y `typ` no describe al titular ni a cada acompañante. Hoy se calcula al confirmar el pago a partir de la cuenta que hizo la reserva (`socio` si esa cuenta es socia; `visitante` si no lo es o si la reserva se hizo sin cuenta). Por eso, en una reserva mixta, la cantidad de socios no sale de `typ` sino de las personas de la reserva (`cantidad_socios` en `GET /reservas/mias`). El contrato del Sprint 4 (D4 y §4.4) reemplaza esto por un único `typ: "reserva"` con `cantidad_personas` y `cantidad_socios`; ese cambio de generación del QR y de la PWA no forma parte de la Issue 14.5. Los QR ya emitidos siguen siendo válidos.
 
 
 ## 3. Endpoints de Negocio y Reservas
@@ -68,9 +69,13 @@ Estos endpoints estructuran la operación principal del sistema de reservas y su
 * **Alcance actual:** El precio es por persona y no depende de los días ni del tipo de reserva.
 * **Manejo de Errores:** Devuelve 422 si no hay personas, hay más del máximo o alguna edad o condición es inválida.
 * **`POST /reservas`**
-* **Descripción:** Crea una nueva reserva inyectando datos a través de `ReservaCreate`.
+* **Descripción:** Crea una nueva reserva inyectando datos a través de `ReservaCreate`. Funciona con o sin sesión: no recibe `user_id`. Si el pedido trae un token válido, la reserva queda asociada al usuario de ese token; sin token se crea igual y `user_id` queda nulo. Un `user_id` enviado en el cuerpo se ignora.
+* **Sesión opcional:** Usa `get_current_user_optional` (`core/auth_opcional.py`). Con un token inválido o vencido responde 401 (no se trata como visitante) para que el frontend sepa que debe volver a iniciar sesión.
 * **Manejo de Errores:** Devuelve código HTTP 400 si la petición supera el límite máximo calculado por `capacity_service.py`, o 422 si la validación Pydantic falla (ej. datos mal formados).
 * **Lógica Interna:** Acciona `PricingService.cotizar`, la misma función que usa `POST /reservas/cotizar`, con los descuentos activos de la tabla `descuentos`; por eso el `monto_total` es igual al total cotizado con las mismas personas. La reserva y todas sus personas se guardan en la misma transacción: si falla alguna, no se crea nada.
+* **`GET /reservas/mias`**
+* **Descripción:** Devuelve solo las reservas del usuario autenticado (`ReservaDetalle[]`), ordenadas por fecha de ingreso descendente. Incluye las personas de cada reserva y `cantidad_socios` (cuántas personas tienen condición `socio`).
+* **Seguridad:** Exige sesión (401 sin token o con token inválido). El usuario sale del token; no existe ningún parámetro para pedir las reservas de otro. Las reservas hechas sin cuenta no aparecen en ningún listado personal.
 * **`GET /reservas/`**
 * **Seguridad:** Ruta crítica blindada mediante RBAC y `OAuth2PasswordBearer`.
 * **Dependencias:** Exige autenticación válida mediante `get_current_user` y permisos exclusivos autorizados por `require_role` (Administrador).
@@ -79,7 +84,7 @@ Estos endpoints estructuran la operación principal del sistema de reservas y su
 * **`POST /admin/descuentos`:** Crea un descuento (201). Devuelve 409 si el código ya existe y 422 si algún valor es inválido.
 * **`PUT /admin/descuentos/{id}`:** Modifica un descuento. Devuelve 404 si no existe y 422 si algún valor es inválido o los límites de edad quedan incoherentes. No hay endpoint para borrar.
 * **`GET /usuarios/prueba`**
-* **Descripción:** Endpoint auxiliar orientado a entornos de desarrollo. Retorna un identificador de usuario válido para agilizar pruebas de creación de reservas.
+* **Descripción:** Endpoint auxiliar solo para desarrollo. Retorna un identificador de usuario válido para pruebas manuales (por ejemplo, armar un token y llamar a `GET /reservas/mias`). El frontend no lo usa: reservar no necesita `user_id`.
 * **Seguridad:** Queda automáticamente deshabilitado si la variable `ENVIRONMENT` es igual a `production`.
 
 

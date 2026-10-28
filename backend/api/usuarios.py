@@ -17,11 +17,12 @@ router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 def obtener_usuario_prueba(db: Session = Depends(get_db)):
     """
     Devuelve el id de un usuario que EXISTE en la base de datos actual
-    (lo crea si hace falta). Reemplaza el UUID hardcodeado que tenía el frontend.
+    (lo crea si hace falta). Sirve para probar a mano los endpoints que piden
+    sesión (por ejemplo, armar un token con ese id y llamar a GET /reservas/mias).
 
-    Es un puente temporal hasta que el login real esté implementado: cuando
-    exista, el `user_id` debería salir del token del usuario autenticado.
-    Está deshabilitado cuando ENVIRONMENT=production.
+    El frontend ya no lo usa: reservar no necesita ningún user_id, porque la
+    reserva se asocia al usuario del token o queda sin cuenta si no hay sesión.
+    Solo para desarrollo: está deshabilitado cuando ENVIRONMENT=production.
     """
     if settings.ENVIRONMENT.lower() == "production":
         raise HTTPException(

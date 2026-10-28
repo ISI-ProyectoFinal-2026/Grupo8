@@ -4,7 +4,7 @@ from typing import List, Optional
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator, model_validator
 
 from core.config import settings
 from models.reserva import CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum
@@ -81,7 +81,7 @@ class ReservaCreate(BaseModel):
     # Se recortan espacios al inicio/fin de todos los textos antes de validar
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    user_id: UUID
+    # No lleva user_id: la reserva queda a nombre de quien tiene la sesión iniciada (si hay una)
     fecha_ingreso: date
     fecha_egreso: date
     # La primera persona es el titular; la cantidad de personas sale del largo de la lista
@@ -143,7 +143,8 @@ class PersonaOut(BaseModel):
 
 class ReservaResponse(BaseModel):
     id: UUID
-    user_id: UUID
+    # Nulo en las reservas hechas sin iniciar sesión
+    user_id: Optional[UUID] = None
     camping_id: str
     fecha_reserva: datetime
     fecha_ingreso: date
@@ -160,3 +161,12 @@ class ReservaResponse(BaseModel):
     personas: List[PersonaOut] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReservaDetalle(ReservaResponse):
+    """Lo que ve el socio en Mis reservas: la reserva con sus personas y cuántas son socias."""
+
+    @computed_field
+    @property
+    def cantidad_socios(self) -> int:
+        return sum(1 for persona in self.personas if persona.condicion == CondicionPersonaEnum.socio)

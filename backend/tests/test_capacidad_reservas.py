@@ -29,12 +29,8 @@ def test_reserva_otra_fecha_no_reduce_capacidad():
     fecha_futura_in = date.today() + timedelta(days=30)
     fecha_futura_out = date.today() + timedelta(days=32)
     
-    # Usamos un ID con formato válido para la base de datos
-    user_id_prueba = str(uuid.uuid4())
-    
     # PASO 1: Simular que creamos una reserva previa en el mes que viene que ocupa TODA la capacidad
     payload_reserva_futura = {
-        "user_id": user_id_prueba,
         "fecha_ingreso": str(fecha_futura_in),
         "fecha_egreso": str(fecha_futura_out),
         "personas": [
@@ -48,7 +44,6 @@ def test_reserva_otra_fecha_no_reduce_capacidad():
     # PASO 2: Intentar hacer una reserva HOY para 2 personas
     fecha_hoy = date.today()
     payload_reserva_hoy = {
-        "user_id": user_id_prueba,
         "fecha_ingreso": str(fecha_hoy),
         "fecha_egreso": str(fecha_hoy + timedelta(days=2)),
         "personas": [

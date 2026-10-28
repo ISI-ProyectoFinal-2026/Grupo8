@@ -2,7 +2,8 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthProvider, TOKEN_KEY } from '@/context/AuthContext';
 import type { Cotizacion } from '@/lib/cotizacion';
 import Reservas from './Reservas';
 
@@ -56,9 +57,21 @@ function mostrarReservas(personas = '2') {
         },
       ]}
     >
-      <Reservas />
+      <AuthProvider>
+        <Reservas />
+      </AuthProvider>
     </MemoryRouter>
   );
+}
+
+function base64Url(objeto: object) {
+  return btoa(JSON.stringify(objeto)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+// JWT sin firma válida: la interfaz solo lee los claims `rol` y `exp`.
+function crearToken() {
+  const payload = base64Url({ sub: 'u-1', rol: 'CLIENTE', exp: Math.floor(Date.now() / 1000) + 3600 });
+  return `${base64Url({ alg: 'HS256', typ: 'JWT' })}.${payload}.firma`;
 }
 
 // Los campos de edad son los únicos inputs numéricos de hasta 3 dígitos
@@ -72,6 +85,35 @@ function cargarEdades(contenedor: HTMLElement, edades: string[]) {
   camposDeEdad(contenedor).forEach((campo, i) =>
     fireEvent.change(campo, { target: { value: edades[i] } })
   );
+}
+
+// Completa el formulario y aprieta "Pagar"; devuelve el fetch falso para mirar sus llamadas
+async function reservar() {
+  const fetchFalso = vi.fn().mockImplementation(async (url: string) => {
+    const ruta = String(url);
+    if (ruta.endsWith('/reservas/cotizar')) {
+      return { ok: true, json: async () => COTIZACION_DEL_BACKEND };
+    }
+    if (ruta.endsWith('/reservas/')) return { ok: true, json: async () => ({ id: 'r-1' }) };
+    if (ruta.endsWith('/api/payments/create')) return { ok: true, json: async () => ({}) };
+    throw new Error(`Llamada inesperada a ${ruta}`);
+  });
+  vi.stubGlobal('fetch', fetchFalso);
+  const { container } = mostrarReservas();
+
+  fireEvent.change(container.querySelector('input[type="email"]')!, {
+    target: { value: 'ana@test.com' },
+  });
+  const nombres = Array.from(container.querySelectorAll<HTMLInputElement>('input[maxlength="100"]'));
+  fireEvent.change(nombres[0], { target: { value: 'Ana Pérez' } });
+  fireEvent.change(nombres[1], { target: { value: 'Luis Pérez' } });
+  cargarEdades(container, ['34', '8']);
+  fireEvent.click(screen.getByRole('button', { name: /pagar con mercado pago/i }));
+
+  await waitFor(() =>
+    expect(fetchFalso.mock.calls.some(([url]) => String(url).endsWith('/reservas/'))).toBe(true)
+  );
+  return fetchFalso;
 }
 
 describe('Reservas: precio calculado por el backend', () => {
@@ -169,35 +211,43 @@ describe('Reservas: sin teléfono', () => {
   });
 
   it('crea la reserva sin mandar teléfono y sin pedirlo en la validación', async () => {
-    const fetchFalso = vi.fn().mockImplementation(async (url: string) => {
-      const ruta = String(url);
-      if (ruta.endsWith('/reservas/cotizar')) {
-        return { ok: true, json: async () => COTIZACION_DEL_BACKEND };
-      }
-      if (ruta.endsWith('/usuarios/prueba')) return { ok: true, json: async () => ({ user_id: 'u-1' }) };
-      if (ruta.endsWith('/reservas/')) return { ok: true, json: async () => ({ id: 'r-1' }) };
-      if (ruta.endsWith('/api/payments/create')) return { ok: true, json: async () => ({}) };
-      throw new Error(`Llamada inesperada a ${ruta}`);
-    });
-    vi.stubGlobal('fetch', fetchFalso);
-    const { container } = mostrarReservas();
+    const fetchFalso = await reservar();
 
-    fireEvent.change(container.querySelector('input[type="email"]')!, {
-      target: { value: 'ana@test.com' },
-    });
-    const nombres = Array.from(container.querySelectorAll<HTMLInputElement>('input[maxlength="100"]'));
-    fireEvent.change(nombres[0], { target: { value: 'Ana Pérez' } });
-    fireEvent.change(nombres[1], { target: { value: 'Luis Pérez' } });
-    cargarEdades(container, ['34', '8']);
-    fireEvent.click(screen.getByRole('button', { name: /pagar con mercado pago/i }));
-
-    await waitFor(() =>
-      expect(fetchFalso.mock.calls.some(([url]) => String(url).endsWith('/reservas/'))).toBe(true)
-    );
     const llamada = fetchFalso.mock.calls.find(([url]) => String(url).endsWith('/reservas/'))!;
     const cuerpo = JSON.parse(llamada[1].body);
     expect(cuerpo).not.toHaveProperty('telefono');
     expect(cuerpo.email).toBe('ana@test.com');
     expect(cuerpo.personas).toHaveLength(2);
+  });
+});
+
+describe('Reservas: con y sin sesión', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it('sin sesión reserva igual: no pide el usuario de prueba, no manda user_id ni Authorization', async () => {
+    const fetchFalso = await reservar();
+
+    const llamada = fetchFalso.mock.calls.find(([url]) => String(url).endsWith('/reservas/'))!;
+    expect(JSON.parse(llamada[1].body)).not.toHaveProperty('user_id');
+    expect(llamada[1].headers).not.toHaveProperty('Authorization');
+    expect(fetchFalso.mock.calls.some(([url]) => String(url).includes('/usuarios/prueba'))).toBe(false);
+  });
+
+  it('con sesión manda el token para que el backend asocie la reserva, sin user_id', async () => {
+    const token = crearToken();
+    localStorage.setItem(TOKEN_KEY, token);
+
+    const fetchFalso = await reservar();
+
+    const llamada = fetchFalso.mock.calls.find(([url]) => String(url).endsWith('/reservas/'))!;
+    expect(llamada[1].headers.Authorization).toBe(`Bearer ${token}`);
+    expect(JSON.parse(llamada[1].body)).not.toHaveProperty('user_id');
   });
 });

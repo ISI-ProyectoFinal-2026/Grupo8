@@ -8,10 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, and_
 
+from core.auth_opcional import get_current_user_optional
 from core.config import settings
 from core.database import get_db 
 from schemas.cotizacion import CotizarDetalle, CotizarRequest, CotizarResponse
-from schemas.reserva import ReservaCreate, ReservaResponse
+from schemas.reserva import ReservaCreate, ReservaDetalle, ReservaResponse
 from models.reserva import (
     Reserva, ReservaPersona, EstadoPagoEnum, EstadoReservaEnum,
 )
@@ -51,12 +52,15 @@ def cotizar_reserva(cotizacion_in: CotizarRequest, db: Session = Depends(get_db)
 
 
 @router.post("/", response_model=ReservaResponse, status_code=status.HTTP_201_CREATED)
-def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
+def crear_reserva(
+    reserva_in: ReservaCreate,
+    db: Session = Depends(get_db),
+    usuario: Optional[User] = Depends(get_current_user_optional),
+):
 
-    # 1. El usuario que hace la reserva tiene que existir
-    usuario = db.query(User).filter(User.id == reserva_in.user_id).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+    # 1. Se puede reservar con o sin sesión. Con sesión la reserva queda a nombre del usuario del token
+    # (ya validado por el backend); sin sesión, user_id queda en None
+    user_id = usuario.id if usuario else None
 
     # 2. El camping tiene que estar configurado, porque la reserva lo referencia
     camping = db.query(ConfiguracionCamping).filter(
@@ -110,7 +114,7 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
 
     # 6. Preparar el objeto para la base de datos (el titular es la primera persona)
     nueva_reserva = Reserva(
-        user_id=reserva_in.user_id,
+        user_id=user_id,
         camping_id=camping.camping_id,
         fecha_ingreso=reserva_in.fecha_ingreso,
         fecha_egreso=reserva_in.fecha_egreso,
@@ -136,6 +140,21 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al procesar la reserva. Intente nuevamente."
         )
+
+@router.get("/mias", response_model=List[ReservaDetalle])
+def obtener_mis_reservas(
+    db: Session = Depends(get_db),
+    usuario: User = Depends(get_current_user),
+):
+    """Las reservas del usuario con la sesión iniciada. El usuario sale del token, no de la URL ni del body."""
+    return (
+        db.query(Reserva)
+        .options(selectinload(Reserva.personas))
+        .filter(Reserva.user_id == usuario.id)
+        .order_by(Reserva.fecha_ingreso.desc(), Reserva.fecha_reserva.desc())
+        .all()
+    )
+
 
 @router.get("/", response_model=List[ReservaResponse])
 def obtener_reservas(

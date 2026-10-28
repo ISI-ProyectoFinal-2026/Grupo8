@@ -432,12 +432,10 @@ def test_cambiar_un_descuento_no_altera_los_importes_de_reservas_ya_creadas(
     # Acá los descuentos se leen de la base de verdad, para que lo que cambia el administrador se note
     monkeypatch.setattr(PricingService, "_descuentos_activos", staticmethod(LECTOR_REAL))
     fecha = "2096-05-10"
-    usuario_id = uuid.UUID(jwt.decode(tokens["CLIENTE"], settings.AUTH_SECRET_KEY, algorithms=["HS256"])["sub"])
 
     reserva = client.post(
         "/reservas/",
         json={
-            "user_id": str(usuario_id),
             "fecha_ingreso": fecha,
             "fecha_egreso": fecha,
             "personas": [
