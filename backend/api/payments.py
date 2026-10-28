@@ -115,7 +115,7 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                         # LÓGICA DE BASE DE DATOS
                         # ==========================================
                         # 1. Buscar la reserva por el ID
-                        reserva = db.query(Reserva).filter(Reserva.id == reserva_id).first()
+                        reserva = db.query(Reserva).filter(Reserva.id == reserva_id).with_for_update().first()
                         
                         if reserva:
                             # 2. EVITAR DUPLICADOS (DoD 3): Si ya está pagada, no hacemos nada
@@ -215,10 +215,15 @@ def reconciliar_pago(reserva_id: str, db: Session = Depends(get_db)):
         pago_aprobado = next((pago for pago in pagos_encontrados if pago.get("status") == "approved"), None)
 
         if pago_aprobado:
-            # Reconciliación exitosa: MP dice que se pagó, actualizamos nuestra BD
+            # Se bloquea y se relee la reserva recién ahora, para no mantener la fila
+            # bloqueada mientras se esperaba la respuesta de Mercado Pago
+            db.refresh(reserva, with_for_update=True)
+
+            # Si la reserva está en alerta, el pago se registra pero el estado de la
+            # reserva no cambia (lo resuelve marcar_como_pagada)
             reserva.marcar_como_pagada()
             db.commit()
-            
+
             return {
                 "status": "reconciliado",
                 "message": "Se encontró el pago en Mercado Pago. Reserva actualizada a PAGADO.",

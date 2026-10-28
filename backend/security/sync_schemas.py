@@ -13,6 +13,7 @@ class IngresoQRItem(BaseModel):
     reserva_id: UUID
     fecha_escaneo: datetime
     cantidad_personas: int = Field(1, ge=1)
+    dispositivo_id: str = Field(..., min_length=1, max_length=64)
 
 
 class IngresoManualItem(BaseModel):
@@ -25,6 +26,7 @@ class IngresoManualItem(BaseModel):
     monto_cobrado: Decimal = Field(..., ge=0, max_digits=10, decimal_places=2)
     nombre: str = Field(..., min_length=1, max_length=120)
     dni: str = Field(..., min_length=1, max_length=20)
+    dispositivo_id: str = Field(..., min_length=1, max_length=64)
 
 
 # Se elige la clase según el valor de "tipo_ingreso"

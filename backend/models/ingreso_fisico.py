@@ -32,5 +32,7 @@ class IngresoFisico(Base):
     monto_cobrado = Column(Numeric(10, 2), nullable=True)
     nombre = Column(String(120), nullable=True)
     dni = Column(String(20), nullable=True)
+    # Dispositivo (PWA) que registró el ingreso: permite distinguir un reenvío de un QR clonado
+    dispositivo_id = Column(String(64), nullable=True)
 
     reserva = relationship("Reserva", back_populates="ingresos")

@@ -181,20 +181,20 @@ export default function ControlAcceso() {
                   <option value="Manual con Reserva">Manual con Reserva</option>
                 </select>
               </div>
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>Monto cobrado en efectivo ($):</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={formMonto}
-                  onChange={e => setFormMonto(e.target.value)}
-                  placeholder="0.00"
-                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-                  required
-                />
-              </div>
+            </div>
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px' }}>Monto cobrado en efectivo ($):</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                value={formMonto}
+                onChange={e => setFormMonto(e.target.value)}
+                placeholder="0.00"
+                style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
+                required
+              />
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
               <button type="submit" style={{ flex: 1, padding: '10px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Guardar Ingreso</button>

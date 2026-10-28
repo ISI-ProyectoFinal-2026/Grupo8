@@ -1,4 +1,5 @@
 import { dbService } from './dbService';
+import { obtenerDispositivoId } from '../utils/dispositivo';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -20,6 +21,7 @@ interface IngresoBase {
   fecha_escaneo: string;
   cantidad_personas: number;
   reserva_id: string | null;
+  dispositivo_id: string;
 }
 
 interface IngresoQRPayload extends IngresoBase {
@@ -51,13 +53,14 @@ interface SyncResponse {
 type Pendiente = Awaited<ReturnType<typeof dbService.obtenerPendientesSincronizacion>>[number];
 
 // Arma el ítem que viaja en el lote según sea QR o manual
-const construirIngreso = (p: Pendiente): IngresoPayload => {
+const construirIngreso = (p: Pendiente, dispositivoId: string): IngresoPayload => {
   const datos = p.qr_payload ?? {};
   const base: IngresoBase = {
     jti: p.jti,
     fecha_escaneo: p.fecha_escaneo.toISOString(),
     cantidad_personas: datos.cantidad_personas ?? 1,
     reserva_id: datos.reserva_id ?? null,
+    dispositivo_id: dispositivoId,
   };
 
   // Los registros manuales viejos que quedaron en la cola no tienen tipo_ingreso,
@@ -102,7 +105,8 @@ export const syncService = {
       }
 
       // Empaquetamos manteniendo el orden cronológico
-      const payload = { ingresos: pendientes.map(construirIngreso) };
+      const dispositivoId = await obtenerDispositivoId();
+      const payload = { ingresos: pendientes.map((p) => construirIngreso(p, dispositivoId)) };
 
       // 3. Intento de envío al servidor
       const response = await fetch(`${API_URL}/api/v1/ingresos/bulk-sync`, {

@@ -216,47 +216,60 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     dni: '40123456',
   });
   expect(ingresos[0].jti).toMatch(/^manual-[0-9a-f-]{36}$/);
-});
+  });
 
-it('Test 7 — éxito parcial: solo se borran de la cola los confirmados por el servidor', async () => {
-  await dbService.registrarIngresoManual('11111111', 'Uno', 0, 'Espontaneo', 100);
-  await dbService.registrarIngresoManual('22222222', 'Dos', 0, 'Espontaneo', 100);
+ it('Test 7 — éxito parcial: solo se borran de la cola los confirmados por el servidor', async () => {
+    await dbService.registrarIngresoManual('11111111', 'Uno', 0, 'Espontaneo', 100);
+    await dbService.registrarIngresoManual('22222222', 'Dos', 0, 'Espontaneo', 100);
 
-  globalThis.fetch = vi.fn().mockImplementation(async (_url: string, options: RequestInit) => {
-    const { ingresos } = JSON.parse(options.body as string) as { ingresos: Array<{ jti: string }> };
-    return {
+    globalThis.fetch = vi.fn().mockImplementation(async (_url: string, options: RequestInit) => {
+      const { ingresos } = JSON.parse(options.body as string) as { ingresos: Array<{ jti: string }> };
+      return {
+        ok: true,
+        json: async () => ({
+          procesados: 1,
+          conflictos: 0,
+          sincronizados_jti: [ingresos[0].jti],
+          errores: [{ indice: 1, jti: ingresos[1].jti, motivo: 'dni: inválido' }],
+        }),
+      };
+    }) as unknown as typeof fetch;
+
+    await syncService.sincronizarIngresosPendientes();
+
+    const restantes = await db.ingresos_pendientes.toArray();
+    expect(restantes).toHaveLength(1);
+    expect(restantes[0].qr_payload.dni).toBe('22222222');
+  });
+
+  it('Test 8 — un reintento reenvía el mismo jti (no se genera uno nuevo)', async () => {
+    await dbService.registrarIngresoManual('33333333', 'Reintento', 0, 'Espontaneo', 50);
+
+    globalThis.fetch = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')) as unknown as typeof fetch;
+    await syncService.sincronizarIngresosPendientes();
+    const jtiPrimerEnvio = (await db.ingresos_pendientes.toArray())[0].jti;
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        procesados: 1,
-        conflictos: 0,
-        sincronizados_jti: [ingresos[0].jti],
-        errores: [{ indice: 1, jti: ingresos[1].jti, motivo: 'dni: inválido' }],
-      }),
-    };
-  }) as unknown as typeof fetch;
+      json: async () => ({ procesados: 0, conflictos: 0, sincronizados_jti: [], errores: [] }),
+    }) as unknown as typeof fetch;
+    await syncService.sincronizarIngresosPendientes();
 
-  await syncService.sincronizarIngresosPendientes();
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const { ingresos } = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(ingresos[0].jti).toBe(jtiPrimerEnvio);
+  });
 
-  const restantes = await db.ingresos_pendientes.toArray();
-  expect(restantes).toHaveLength(1);
-  expect(restantes[0].qr_payload.dni).toBe('22222222');
-});
 
-it('Test 8 — un reintento reenvía el mismo jti (no se genera uno nuevo)', async () => {
-  await dbService.registrarIngresoManual('33333333', 'Reintento', 0, 'Espontaneo', 50);
+  it('Test 9 — todos los ingresos viajan con el mismo dispositivo_id', async () => {
+    await dbService.registrarIngresoManual('11111111', 'Uno', 0, 'Espontaneo', 10);
+    await dbService.registrarIngresoManual('22222222', 'Dos', 0, 'Espontaneo', 10);
 
-  globalThis.fetch = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')) as unknown as typeof fetch;
-  await syncService.sincronizarIngresosPendientes();
-  const jtiPrimerEnvio = (await db.ingresos_pendientes.toArray())[0].jti;
+    await syncService.sincronizarIngresosPendientes();
 
-  globalThis.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ procesados: 0, conflictos: 0, sincronizados_jti: [], errores: [] }),
-  }) as unknown as typeof fetch;
-  await syncService.sincronizarIngresosPendientes();
-
-  const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
-  const { ingresos } = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-  expect(ingresos[0].jti).toBe(jtiPrimerEnvio);
-});
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const { ingresos } = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(ingresos[0].dispositivo_id).toMatch(/^dispositivo-[0-9a-f-]{36}$/);
+    expect(ingresos[1].dispositivo_id).toBe(ingresos[0].dispositivo_id);
+  });
 });
