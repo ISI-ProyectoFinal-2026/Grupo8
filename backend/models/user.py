@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, String, Boolean, Date, DateTime, Enum
 from sqlalchemy.dialects.postgresql import UUID
 
 # Importamos la clase Base que creaste en la Sub-issue 1.2
@@ -27,7 +27,10 @@ class User(Base):
     # Rol y membresía
     rol = Column(Enum(RoleEnum), default=RoleEnum.CLIENTE, nullable=False)
     is_socio = Column(Boolean, default=False)
-    estado_cuota = Column(String, nullable=True) # Ej: "Activo", "Inactivo" (Null si no es socio)
+    # Último día en que la cuota está al día. Es lo que decide si la membresía está vigente
+    membresia_vence = Column(Date, nullable=True)
+    # En desuso: se conserva por compatibilidad, pero ya no se usa para decidir nada
+    estado_cuota = Column(String, nullable=True)
 
     # Atributos de auditoría estándar
     created_at = Column(DateTime, default=datetime.utcnow)

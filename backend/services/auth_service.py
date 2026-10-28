@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from models.user import RoleEnum, User
 from schemas.auth import PASSWORD_MIN_LENGTH, UsuarioSesion
-from schemas.reserva import hoy_argentina
+from services.socio_service import membresia_vigente
 
 # El login usa solo HS256 con AUTH_SECRET_KEY; ES256 queda para los QR
 ALGORITMO_JWT = "HS256"
@@ -83,10 +83,6 @@ def crear_token(usuario: User) -> tuple[str, int]:
 
 
 def usuario_sesion(usuario: User) -> UsuarioSesion:
-    # La fecha de vencimiento llega con la migración de la sub-issue 13.3.
-    # Mientras no exista, ningún socio figura con membresía vigente.
-    vence = getattr(usuario, "membresia_vence", None)
-    vigente = bool(usuario.is_socio) and vence is not None and vence >= hoy_argentina()
     return UsuarioSesion(
         id=usuario.id,
         nombre=usuario.nombre,
@@ -94,6 +90,6 @@ def usuario_sesion(usuario: User) -> UsuarioSesion:
         dni=usuario.dni,
         rol=usuario.rol.name,
         is_socio=bool(usuario.is_socio),
-        membresia_vigente=vigente,
-        membresia_vence=vence,
+        membresia_vigente=membresia_vigente(usuario),
+        membresia_vence=usuario.membresia_vence,
     )
