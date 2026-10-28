@@ -46,7 +46,7 @@ class Reserva(Base):
     # Datos del titular de la reserva (pueden no coincidir con los del usuario logueado)
     titular = Column(String, nullable=False)
     email = Column(String, nullable=False)
-    telefono = Column(String, nullable=True)  # nullable por las reservas anteriores, el schema lo exige en las nuevas
+    telefono = Column(String, nullable=True)  # solo lo tienen las reservas anteriores; las nuevas ya no lo piden
 
     estado_reserva = Column(Enum(EstadoReservaEnum), default=EstadoReservaEnum.PENDIENTE, nullable=False)
     estado_pago = Column(Enum(EstadoPagoEnum), default=EstadoPagoEnum.PENDIENTE, nullable=False)

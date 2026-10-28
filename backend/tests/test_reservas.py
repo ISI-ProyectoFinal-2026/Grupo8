@@ -43,7 +43,6 @@ def test_crear_reserva_sin_datos_completos():
         "fecha_egreso": "2026-12-31",
         "personas": [{"nombre": "Ana Pérez", "edad": 34, "condicion": "visitante"}],
         "email": "ana@test.com",
-        "telefono": "2604000000"
         # Falta el user_id intencionalmente
     }
     

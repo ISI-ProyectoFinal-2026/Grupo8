@@ -445,7 +445,6 @@ def test_cambiar_un_descuento_no_altera_los_importes_de_reservas_ya_creadas(
                 {"nombre": "Luis Pérez", "edad": 8, "condicion": "visitante"},
             ],
             "email": "descuentos@test.com",
-            "telefono": "2604123456",
         },
     )
     assert reserva.status_code == 201, reserva.text

@@ -42,7 +42,6 @@ def test_reserva_otra_fecha_no_reduce_capacidad():
             {"nombre": "Acompañante de prueba", "edad": 38, "condicion": "visitante"},
         ],
         "email": "test@qamp.com",
-        "telefono": "123456789"
     }
     client.post("/reservas/", json=payload_reserva_futura)
 
@@ -57,7 +56,6 @@ def test_reserva_otra_fecha_no_reduce_capacidad():
             {"nombre": "Lucía Bianchi", "edad": 27, "condicion": "visitante"},
         ],
         "email": "emi@qamp.com",
-        "telefono": "987654321"
     }
     
     response = client.post("/reservas/", json=payload_reserva_hoy)

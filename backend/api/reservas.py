@@ -118,7 +118,6 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
         monto_total=monto_total,
         titular=reserva_in.personas[0].nombre,
         email=reserva_in.email,
-        telefono=reserva_in.telefono,
         estado_reserva=EstadoReservaEnum.PENDIENTE,
         estado_pago=EstadoPagoEnum.PENDIENTE,
         personas=personas

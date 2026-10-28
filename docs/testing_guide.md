@@ -31,7 +31,7 @@ El backend implementa una suite de pruebas automatizadas utilizando `pytest` jun
 ### 1.4. Validación de Datos y Formularios (Schemas)
 * Restricciones de Negocio: El archivo test_validacion_reservas.py evalúa de forma unitaria y a nivel API los límites definidos en la configuración (MAX_PERSONAS_POR_RESERVA y MAX_NOCHES_POR_RESERVA), confirmando que la API rechace datos inválidos independientemente del frontend.
 
-* Formatos y Saneamiento: Se verifica la correcta validación del EmailStr (mediante email-validator), la restricción de caracteres para el titular (solo letras, espacios, puntos, apóstrofes y guiones) y los límites del teléfono (8 a 15 dígitos numéricos), asegurando además que los espacios en blanco sean recortados.
+* Formatos y Saneamiento: Se verifica la correcta validación del EmailStr (mediante email-validator), la restricción de caracteres para el titular (solo letras, espacios, puntos, apóstrofes y guiones) y que la reserva ya no pida teléfono (se ignora si un cliente anterior lo envía), asegurando además que los espacios en blanco sean recortados.
 
 * Fechas Relativas: Los tests de reservas (como test_reserva_normalizada.py) utilizan lógicas de fechas relativas a "hoy" (hora de Argentina) para evitar roturas temporales, asegurando que el ingreso no sea anterior a hoy y el egreso no sea anterior al ingreso.
 

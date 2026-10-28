@@ -153,3 +153,51 @@ describe('Reservas: precio calculado por el backend', () => {
     expect(JSON.parse(fetchFalso.mock.calls[1][1].body).personas[0].edad).toBe(70);
   });
 });
+
+describe('Reservas: sin teléfono', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('no muestra ningún campo de teléfono', () => {
+    simularBackend();
+    const { container } = mostrarReservas();
+
+    expect(container.querySelector('input[type="tel"]')).toBeNull();
+    expect(screen.queryByText(/teléfono/i)).toBeNull();
+  });
+
+  it('crea la reserva sin mandar teléfono y sin pedirlo en la validación', async () => {
+    const fetchFalso = vi.fn().mockImplementation(async (url: string) => {
+      const ruta = String(url);
+      if (ruta.endsWith('/reservas/cotizar')) {
+        return { ok: true, json: async () => COTIZACION_DEL_BACKEND };
+      }
+      if (ruta.endsWith('/usuarios/prueba')) return { ok: true, json: async () => ({ user_id: 'u-1' }) };
+      if (ruta.endsWith('/reservas/')) return { ok: true, json: async () => ({ id: 'r-1' }) };
+      if (ruta.endsWith('/api/payments/create')) return { ok: true, json: async () => ({}) };
+      throw new Error(`Llamada inesperada a ${ruta}`);
+    });
+    vi.stubGlobal('fetch', fetchFalso);
+    const { container } = mostrarReservas();
+
+    fireEvent.change(container.querySelector('input[type="email"]')!, {
+      target: { value: 'ana@test.com' },
+    });
+    const nombres = Array.from(container.querySelectorAll<HTMLInputElement>('input[maxlength="100"]'));
+    fireEvent.change(nombres[0], { target: { value: 'Ana Pérez' } });
+    fireEvent.change(nombres[1], { target: { value: 'Luis Pérez' } });
+    cargarEdades(container, ['34', '8']);
+    fireEvent.click(screen.getByRole('button', { name: /pagar con mercado pago/i }));
+
+    await waitFor(() =>
+      expect(fetchFalso.mock.calls.some(([url]) => String(url).endsWith('/reservas/'))).toBe(true)
+    );
+    const llamada = fetchFalso.mock.calls.find(([url]) => String(url).endsWith('/reservas/'))!;
+    const cuerpo = JSON.parse(llamada[1].body);
+    expect(cuerpo).not.toHaveProperty('telefono');
+    expect(cuerpo.email).toBe('ana@test.com');
+    expect(cuerpo.personas).toHaveLength(2);
+  });
+});

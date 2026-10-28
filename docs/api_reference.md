@@ -43,9 +43,10 @@ FastAPI utiliza Pydantic para garantizar la serialización y validación estrict
 * **`PersonaReserva`:** `nombre` (2 a 100 caracteres, solo letras, espacios, puntos, apóstrofes y guiones), `edad` (entero estricto entre 0 y 120), `condicion` (`visitante` o `socio`) y `dni` (7 u 8 dígitos; obligatorio para socios y sin repetirse dentro de la reserva).
 * **Fechas:** Formato AAAA-MM-DD. El sistema valida que el ingreso no sea anterior a "hoy" (hora de Argentina), el egreso no sea anterior al ingreso y la estadía no supere `MAX_NOCHES_POR_RESERVA` (10).
 * **Email:** Validado mediante `EmailStr` empleando la dependencia `email-validator`.
-* **Teléfono:** Limitado estrictamente a números, requiriendo entre 8 y 15 dígitos.
+* **Teléfono:** Ya no se pide ni se valida al crear una reserva. Si un cliente anterior lo envía, se ignora y no se guarda.
 * **`ReservaResponse` (Payload de Salida)**
 * Esquema dedicado al formateo seguro de los datos de la reserva hacia el frontend, omitiendo datos sensibles internos.
+* Incluye `telefono` solo para las reservas anteriores que lo tienen guardado (las nuevas lo devuelven en `null`; la columna se conserva para poder seguir leyéndolas).
 * Incluye `personas` (lista de `PersonaOut`: nombre, edad, condición, DNI, precio base, porcentaje de descuento y precio final). Las reservas anteriores a la tabla de personas devuelven una lista vacía.
 * **`CotizarRequest` / `CotizarResponse`**
 * **Request:** `personas`, con entre 1 y `MAX_PERSONAS_POR_RESERVA` (10) elementos de `PersonaCotizar`: `edad` (entero estricto entre 0 y 120) y `condicion` (`visitante` o `socio`). No se envía ningún importe: el sistema ignora cualquier precio que mande el cliente.
