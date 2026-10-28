@@ -10,16 +10,45 @@ from sqlalchemy import func, and_
 
 from core.config import settings
 from core.database import get_db 
+from schemas.cotizacion import CotizarDetalle, CotizarRequest, CotizarResponse
 from schemas.reserva import ReservaCreate, ReservaResponse
 from models.reserva import (
-    Reserva, ReservaPersona, CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum,
+    Reserva, ReservaPersona, EstadoPagoEnum, EstadoReservaEnum,
 )
 from models.configuracion import ConfiguracionCamping
 from services.capacity_service import CapacityService
-from services.pricing_service import PricingService
+from services.pricing_service import Cotizacion, PersonaPrecio, PricingService
 
 router = APIRouter(prefix="/reservas", tags=["Reservas"])
 capacity_service = CapacityService()
+
+
+def _respuesta_cotizacion(cotizacion: Cotizacion, personas: List[PersonaPrecio]) -> CotizarResponse:
+    return CotizarResponse(
+        subtotal=float(cotizacion.subtotal),
+        descuento_total=float(cotizacion.descuento_total),
+        total=float(cotizacion.total),
+        cantidad_socios=cotizacion.cantidad_socios,
+        detalle=[
+            CotizarDetalle(
+                indice=indice,
+                condicion_efectiva=persona.condicion,
+                descuento_codigo=precio.descuento_codigo,
+                descuento_pct=float(precio.descuento_pct),
+                precio_base=float(precio.precio_base),
+                precio_final=float(precio.precio_final),
+            )
+            for indice, (persona, precio) in enumerate(zip(personas, cotizacion.personas))
+        ],
+    )
+
+
+@router.post("/cotizar", response_model=CotizarResponse)
+def cotizar_reserva(cotizacion_in: CotizarRequest, db: Session = Depends(get_db)):
+    """Precio de una reserva sin guardarla. Es público: no pide sesión."""
+    personas = [PersonaPrecio(p.edad, p.condicion) for p in cotizacion_in.personas]
+    return _respuesta_cotizacion(PricingService.cotizar(db, personas), personas)
+
 
 @router.post("/", response_model=ReservaResponse, status_code=status.HTTP_201_CREATED)
 def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
@@ -59,12 +88,13 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
         reservas_activas=lugares_ocupados
     )
 
-    # 5. Precio de cada persona según su condición; el monto total es la suma
+    # 5. Precio de cada persona y total, con la misma cuenta que usa la cotización
     # El monto lo calcula el backend, no lo manda el cliente
-    personas = []
-    for orden, persona_in in enumerate(reserva_in.personas):
-        precio = PricingService.calcular_precio_persona(persona_in.condicion == CondicionPersonaEnum.socio)
-        personas.append(ReservaPersona(
+    cotizacion = PricingService.cotizar(
+        db, [PersonaPrecio(p.edad, p.condicion) for p in reserva_in.personas]
+    )
+    personas = [
+        ReservaPersona(
             orden=orden,
             nombre=persona_in.nombre,
             edad=persona_in.edad,
@@ -73,8 +103,10 @@ def crear_reserva(reserva_in: ReservaCreate, db: Session = Depends(get_db)):
             precio_base=precio.precio_base,
             descuento_pct=precio.descuento_pct,
             precio_final=precio.precio_final,
-        ))
-    monto_total = float(sum(p.precio_final for p in personas))
+        )
+        for orden, (persona_in, precio) in enumerate(zip(reserva_in.personas, cotizacion.personas))
+    ]
+    monto_total = float(cotizacion.total)
 
     # 6. Preparar el objeto para la base de datos (el titular es la primera persona)
     nueva_reserva = Reserva(

@@ -47,6 +47,9 @@ FastAPI utiliza Pydantic para garantizar la serialización y validación estrict
 * **`ReservaResponse` (Payload de Salida)**
 * Esquema dedicado al formateo seguro de los datos de la reserva hacia el frontend, omitiendo datos sensibles internos.
 * Incluye `personas` (lista de `PersonaOut`: nombre, edad, condición, DNI, precio base, porcentaje de descuento y precio final). Las reservas anteriores a la tabla de personas devuelven una lista vacía.
+* **`CotizarRequest` / `CotizarResponse`**
+* **Request:** `personas`, con entre 1 y `MAX_PERSONAS_POR_RESERVA` (10) elementos de `PersonaCotizar`: `edad` (entero estricto entre 0 y 120) y `condicion` (`visitante` o `socio`). No se envía ningún importe: el sistema ignora cualquier precio que mande el cliente.
+* **Response:** `moneda` (`ARS`), `subtotal`, `descuento_total`, `total`, `cantidad_socios` y `detalle` (por persona: `indice`, `condicion_efectiva`, `descuento_codigo`, `descuento_pct`, `precio_base` y `precio_final`). Los importes salen con dos decimales.
 * **`DescuentoCreate` / `DescuentoUpdate` / `DescuentoOut`**
 * **Alta:** `codigo` (2 a 30 caracteres: minúsculas, números y guion bajo, empezando con una letra), `nombre` (2 a 100), `aplica_a`, `porcentaje` (número entre 0 y 100 con hasta 2 decimales), `edad_min` y `edad_max` (enteros entre 0 y 120, solo para `edad`) y `activo` (verdadero por defecto).
 * **Modificación:** Se puede cambiar `nombre`, `porcentaje`, `edad_min`, `edad_max` y `activo`, enviando solo los campos a modificar. El `codigo` y `aplica_a` no se pueden cambiar.
@@ -58,10 +61,15 @@ FastAPI utiliza Pydantic para garantizar la serialización y validación estrict
 
 Estos endpoints estructuran la operación principal del sistema de reservas y su seguridad de acceso.
 
+* **`POST /reservas/cotizar`**
+* **Descripción:** Calcula cuánto cuesta una reserva sin guardarla, para que el frontend muestre el total sin hacer cuentas propias. Es público (no pide sesión).
+* **Cálculo:** Cada persona paga el precio base (`PRECIO_BASE_POR_PERSONA`) menos el mayor de los descuentos activos que le corresponden: el de socio si su condición es `socio` y los de edad cuyo rango incluye su edad. Los descuentos no se acumulan. El precio de cada persona se redondea a dos decimales (mitad hacia arriba) y el total es la suma de esos precios.
+* **Alcance actual:** El precio es por persona y no depende de los días ni del tipo de reserva.
+* **Manejo de Errores:** Devuelve 422 si no hay personas, hay más del máximo o alguna edad o condición es inválida.
 * **`POST /reservas`**
 * **Descripción:** Crea una nueva reserva inyectando datos a través de `ReservaCreate`.
 * **Manejo de Errores:** Devuelve código HTTP 400 si la petición supera el límite máximo calculado por `capacity_service.py`, o 422 si la validación Pydantic falla (ej. datos mal formados).
-* **Lógica Interna:** Acciona el `pricing_service.py` para calcular el precio de cada persona según su condición (`socio` o `visitante`); el `monto_total` es la suma de los precios finales. La reserva y todas sus personas se guardan en la misma transacción: si falla alguna, no se crea nada.
+* **Lógica Interna:** Acciona `PricingService.cotizar`, la misma función que usa `POST /reservas/cotizar`, con los descuentos activos de la tabla `descuentos`; por eso el `monto_total` es igual al total cotizado con las mismas personas. La reserva y todas sus personas se guardan en la misma transacción: si falla alguna, no se crea nada.
 * **`GET /reservas/`**
 * **Seguridad:** Ruta crítica blindada mediante RBAC y `OAuth2PasswordBearer`.
 * **Dependencias:** Exige autenticación válida mediante `get_current_user` y permisos exclusivos autorizados por `require_role` (Administrador).
@@ -135,7 +143,7 @@ Rutas operativas que soportan el comportamiento *offline-first* de la Progressiv
 Módulo encargado de la comunicación con los servidores de Mercado Pago (MP) y la acreditación de reservas.
 
 * **`POST /api/payments/create`**
-* **Descripción:** Configura el SDK de MP y genera la preferencia de pago.
+* **Descripción:** Configura el SDK de MP y genera la preferencia de pago. El `unit_price` que se envía es el `monto_total` guardado en la reserva; el cliente no manda ningún importe.
 * **Vínculo:** Inyecta el UUID local de la reserva en el atributo `external_reference` de MP para garantizar trazabilidad. Configura el diccionario `back_urls` (rutas de éxito, fallo, pendiente) y la `notification_url`.
 * **`POST /api/payments/webhook`**
 * **Descripción:** Ruta de escucha asíncrona para notificaciones de MP.

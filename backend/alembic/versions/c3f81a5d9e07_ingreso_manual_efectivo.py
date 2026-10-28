@@ -1,7 +1,7 @@
 """ingreso manual en efectivo: jti, cantidad_personas, monto_cobrado, nombre y dni
 
 Revision ID: c3f81a5d9e07
-Revises: b7d4e2a91c58
+Revises: c1e8f5a37d92
 """
 from alembic import op
 import sqlalchemy as sa
