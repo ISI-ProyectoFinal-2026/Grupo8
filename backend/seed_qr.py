@@ -9,6 +9,7 @@ from models.user import User, RoleEnum
 from models.reserva import Reserva, CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum
 from services.camping_service import obtener_o_crear_camping
 from services.pricing_service import PersonaPrecio, PricingService
+from services.auth_service import hash_password
 from security.services import SecurityService
 from security.schemas import JWTPayloadSchema
 from security.config import settings
@@ -28,19 +29,22 @@ def run_seed_con_qrs():
     print("Base de datos limpia.")
 
     # 2. Crear Admin y Guardia
-    admin = User(email="admin@camping.com", password_hash="admin123", nombre="Admin", dni="111", rol=RoleEnum.ADMIN)
-    guardia = User(email="guardia@camping.com", password_hash="admin123", nombre="Guardia", dni="222", rol=RoleEnum.SEGURIDAD)
+    # Contraseñas de desarrollo: se guardan hasheadas, nunca en texto plano
+    password_base = hash_password("admin123")
+    admin = User(email="admin@camping.com", password_hash=password_base, nombre="Admin", dni="111", rol=RoleEnum.ADMIN)
+    guardia = User(email="guardia@camping.com", password_hash=password_base, nombre="Guardia", dni="222", rol=RoleEnum.SEGURIDAD)
     db.add_all([admin, guardia])
     db.commit()
     print("Usuarios base creados.")
 
     # 3. Crear 5 usuarios (2 socios, 3 visitantes)
     usuarios = []
+    password_usuarios = hash_password("pass1234")
     for i in range(5):
         es_socio = i < 2
         u = User(
             email=f"user{i}@test.com", 
-            password_hash="pass123", 
+            password_hash=password_usuarios, 
             nombre=f"Persona {i}", 
             dni=f"333{i}", 
             is_socio=es_socio

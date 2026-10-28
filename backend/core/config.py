@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     
     # --- Autenticación Web (Login) ---
     AUTH_SECRET_KEY: str
+    # Duración de la sesión: socios y admin en minutos; el guardia en horas (trabaja offline)
+    AUTH_TOKEN_EXPIRE_MINUTES: int = 60
+    GUARD_TOKEN_EXPIRE_HOURS: int = 168
     
     # --- Criptografía QRs Offline ---
     JWT_PRIVATE_KEY: str

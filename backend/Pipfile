@@ -21,6 +21,7 @@ resend = "*"
 mercadopago = "*"
 email-validator = "*"
 tzdata = "*"
+bcrypt = "*"
 
 [dev-packages]
 pytest = "*"
