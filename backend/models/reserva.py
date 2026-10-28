@@ -32,7 +32,8 @@ class Reserva(Base):
     __tablename__ = "reservas"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    # Nulo cuando el visitante reservó sin iniciar sesión
+    user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
     camping_id = Column(String, ForeignKey("configuracion_camping.camping_id"), nullable=False)
 
     # fecha_reserva es el momento en que se hizo la reserva; la estadía son ingreso y egreso

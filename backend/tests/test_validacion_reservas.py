@@ -21,7 +21,6 @@ def _persona(**cambios) -> dict:
 def _payload(**cambios) -> dict:
     manana = (hoy_argentina() + timedelta(days=1)).isoformat()
     payload = {
-        "user_id": str(uuid.uuid4()),
         "fecha_ingreso": manana,
         "fecha_egreso": manana,
         "personas": [_persona(), _persona(nombre="Luis Pérez", edad=8)],
@@ -110,7 +109,7 @@ def test_api_rechaza_valores_invalidos_con_422(campo, valor):
 
 
 @pytest.mark.parametrize(
-    "campo", ["user_id", "fecha_ingreso", "fecha_egreso", "personas", "email"]
+    "campo", ["fecha_ingreso", "fecha_egreso", "personas", "email"]
 )
 def test_api_rechaza_campos_obligatorios_ausentes(campo):
     payload = _payload()
