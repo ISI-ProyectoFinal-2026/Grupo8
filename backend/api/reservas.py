@@ -1,6 +1,6 @@
 # Importaciones nuevas para la seguridad
 from models.user import User, RoleEnum
-from core.dependencies import get_current_user, require_role
+from core.dependencies import get_current_user, get_current_user_optional, require_role
 
 from typing import List, Optional
 from datetime import date
@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, and_
 
-from core.auth_opcional import get_current_user_optional
 from core.config import settings
 from core.database import get_db 
 from schemas.cotizacion import CotizarDetalle, CotizarRequest, CotizarResponse
