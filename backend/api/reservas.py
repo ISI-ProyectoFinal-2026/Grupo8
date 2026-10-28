@@ -136,6 +136,7 @@ def crear_reserva(
     
     except Exception as e:
         db.rollback()             # Si algo falla arriba, se revierte todo de forma segura
+        import traceback; traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al procesar la reserva. Intente nuevamente."

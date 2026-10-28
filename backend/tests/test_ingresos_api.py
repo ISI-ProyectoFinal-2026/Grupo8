@@ -11,12 +11,30 @@ from services.camping_service import obtener_o_crear_camping
 from models.ingreso_fisico import IngresoFisico, TipoIngresoEnum
 from decimal import Decimal
 from typing import Optional
+import pytest
 
 # Aseguramos que las tablas existan, siguiendo el mismo patrón que
 # tests/test_reservas.py (operación idempotente).
 Base.metadata.create_all(bind=engine)
 
 client = TestClient(app)
+
+
+
+_creados: list[tuple[uuid.UUID, uuid.UUID]] = []  # (reserva_id, usuario_id)
+
+@pytest.fixture(autouse=True, scope="module")
+def _limpiar_reservas_de_prueba():
+    yield
+    db = SessionLocal()
+    try:
+        for reserva_id, usuario_id in _creados:
+            db.query(IngresoFisico).filter(IngresoFisico.reserva_id == reserva_id).delete(synchronize_session=False)
+            db.query(Reserva).filter(Reserva.id == reserva_id).delete(synchronize_session=False)
+            db.query(User).filter(User.id == usuario_id).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
 
 
 def _crear_reserva_de_prueba() -> str:
@@ -51,6 +69,7 @@ def _crear_reserva_de_prueba() -> str:
         db.add(reserva)
         db.commit()
         db.refresh(reserva)
+        _creados.append((reserva.id, usuario.id))
         return str(reserva.id)
     finally:
         db.close()
@@ -61,6 +80,7 @@ def test_bulk_sync_reserva_inexistente_queda_en_errores():
         "ingresos": [
             {
                 "tipo_ingreso": "QR",
+                "dispositivo_id": "dispositivo-test",
                 "jti": str(uuid.uuid4()),
                 "reserva_id": str(uuid.uuid4()),
                 "fecha_escaneo": datetime.now(timezone.utc).isoformat(),
@@ -88,6 +108,7 @@ def test_bulk_sync_ingreso_nuevo_se_procesa_correctamente():
             {
                 "tipo_ingreso": "QR",
                 "jti": jti,
+                "dispositivo_id": "dispositivo-test",
                 "reserva_id": reserva_id,
                 "fecha_escaneo": datetime.now(timezone.utc).isoformat(),
             }
@@ -127,6 +148,7 @@ def test_bulk_sync_ingreso_duplicado_se_marca_como_conflicto():
         "ingresos": [
             {
                 "tipo_ingreso": "QR",
+                "dispositivo_id": "dispositivo-test",
                 "jti": jti_duplicado,
                 "reserva_id": reserva_id,
                 "fecha_escaneo": datetime.now(timezone.utc).isoformat(),
@@ -153,12 +175,14 @@ def test_bulk_sync_multiples_ingresos_en_un_solo_batch():
         "ingresos": [
             {
                 "tipo_ingreso": "QR",
+                "dispositivo_id": "dispositivo-test",
                 "jti": str(uuid.uuid4()),
                 "reserva_id": reserva_id_1,
                 "fecha_escaneo": datetime.now(timezone.utc).isoformat(),
             },
             {
                 "tipo_ingreso": "QR",
+                "dispositivo_id": "dispositivo-test",
                 "jti": str(uuid.uuid4()),
                 "reserva_id": reserva_id_2,
                 "fecha_escaneo": datetime.now(timezone.utc).isoformat(),
@@ -181,6 +205,7 @@ def _item_qr(reserva_id: str, jti: Optional[str] = None) -> dict:
     return {
         "tipo_ingreso": "QR",
         "jti": jti or str(uuid.uuid4()),
+        "dispositivo_id": "dispositivo-test",
         "reserva_id": reserva_id,
         "fecha_escaneo": datetime.now(timezone.utc).isoformat(),
     }
@@ -190,6 +215,7 @@ def _item_manual(**cambios) -> dict:
     item = {
         "tipo_ingreso": "MANUAL",
         "jti": f"manual-{uuid.uuid4()}",
+        "dispositivo_id": "dispositivo-test",
         "fecha_escaneo": datetime.now(timezone.utc).isoformat(),
         "cantidad_personas": 3,
         "monto_cobrado": 4500.50,

@@ -7,6 +7,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+from datetime import datetime, timezone
 
 from core.database import Base
 
@@ -22,6 +23,7 @@ class EstadoReservaEnum(enum.Enum):
     CONFIRMADA = "Confirmada"
     CANCELADA = "Cancelada"
     FINALIZADA = "Finalizada" # no hay nada que la setee todavia.
+    ALERTA_CLONACION = "Alerta de clonación"
 
 # Condición de cada persona de la reserva. Se envía y se guarda con el mismo texto.
 class CondicionPersonaEnum(str, enum.Enum):
@@ -52,6 +54,8 @@ class Reserva(Base):
     estado_reserva = Column(Enum(EstadoReservaEnum), default=EstadoReservaEnum.PENDIENTE, nullable=False)
     estado_pago = Column(Enum(EstadoPagoEnum), default=EstadoPagoEnum.PENDIENTE, nullable=False)
 
+    # Momento en que se detectó el primer QR clonado de esta reserva
+    fecha_alerta_clonacion = Column(DateTime, nullable=True)
     # Identificador único del QR
     jwt_jti = Column(String, unique=True, index=True, nullable=True)
 
@@ -69,11 +73,30 @@ class Reserva(Base):
         cascade="all, delete-orphan",
         order_by="ReservaPersona.orden",
     )
+    @property
+    def en_alerta(self) -> bool:
+        return self.estado_reserva == EstadoReservaEnum.ALERTA_CLONACION
 
-    def marcar_como_pagada(self):
-        # Cuando entra el pago la reserva también queda confirmada
+    def cambiar_estado_reserva(self, nuevo_estado: EstadoReservaEnum) -> bool:
+        """Único camino para cambiar el estado operativo desde otros flujos
+        (pagos, cancelaciones). Una reserva en alerta no se toca hasta que un admin la revise.
+        Devuelve False si el cambio se ignoró."""
+        if self.en_alerta:
+            return False
+        self.estado_reserva = nuevo_estado
+        return True
+
+    def marcar_alerta_clonacion(self) -> None:
+        # Es la única transición hacia la alerta. La fecha queda con la primera detección.
+        self.estado_reserva = EstadoReservaEnum.ALERTA_CLONACION
+        if self.fecha_alerta_clonacion is None:
+            self.fecha_alerta_clonacion = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    def marcar_como_pagada(self) -> None:
+        # El pago siempre se registra (la plata ya entró), pero el estado de la reserva
+        # solo cambia si no está en alerta
         self.estado_pago = EstadoPagoEnum.PAGADO
-        self.estado_reserva = EstadoReservaEnum.CONFIRMADA
+        self.cambiar_estado_reserva(EstadoReservaEnum.CONFIRMADA)
 
 
 class ReservaPersona(Base):

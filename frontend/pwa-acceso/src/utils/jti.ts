@@ -3,7 +3,7 @@
  * Usa crypto.randomUUID(); si el navegador no lo tiene (contexto no seguro o Safari viejo)
  * arma un UUID v4 con crypto.getRandomValues, que sí está disponible.
  */
-const uuidV4 = (): string => {
+export const uuidV4 = (): string => {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
