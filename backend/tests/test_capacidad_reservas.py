@@ -56,4 +56,4 @@ def test_reserva_otra_fecha_no_reduce_capacidad():
     response = client.post("/reservas/", json=payload_reserva_hoy)
     
     # PASO 3: Afirmar que el sistema NO la rechazó por falta de cupo (Error 400)
-    assert response.status_code != 400
+    assert response.status_code != 400, response.text
