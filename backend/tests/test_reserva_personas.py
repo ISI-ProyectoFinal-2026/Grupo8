@@ -52,7 +52,6 @@ def _payload(user_id, personas, **cambios) -> dict:
         "fecha_egreso": EGRESO.isoformat(),
         "personas": personas,
         "email": f"{uuid.uuid4().hex[:10]}@test.com",
-        "telefono": "2604123456",
     }
     payload.update(cambios)
     return payload

@@ -63,7 +63,6 @@ def _payload_reserva(personas=PERSONAS) -> dict:
         "fecha_egreso": EGRESO.isoformat(),
         "personas": personas,
         "email": "ana@test.com",
-        "telefono": "2604123456",
     }
 
 

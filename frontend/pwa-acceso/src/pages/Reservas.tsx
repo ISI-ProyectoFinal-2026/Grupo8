@@ -20,7 +20,6 @@ import {
   validarEdad,
   validarEmail,
   validarNombre,
-  validarTelefono,
 } from "@/lib/validaciones";
 import { CalendarDays, CreditCard, Users } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -95,7 +94,6 @@ export default function Reservas() {
   );
 
   const [emailContacto, setEmailContacto] = useState("");
-  const [telefono, setTelefono] = useState("");
   const [errores, setErrores] = useState<Record<string, string>>({});
 
   // El precio lo calcula el backend: acá solo se pide la cotización cuando cambia la edad
@@ -133,9 +131,6 @@ export default function Reservas() {
 
     const eEmail = validarEmail(emailContacto);
     if (eEmail) nuevos.email = eEmail;
-
-    const eTelefono = validarTelefono(telefono);
-    if (eTelefono) nuevos.telefono = eTelefono;
 
     const eCantidad = validarCantidadPersonas(String(cantidadPersonas));
     if (eCantidad) nuevos.cantidad = eCantidad;
@@ -197,8 +192,7 @@ export default function Reservas() {
             condicion: v.condicion,
             dni: v.condicion === "socio" ? v.dni.trim() : undefined,
           })),
-          email: emailContacto.trim(),
-          telefono: telefono.trim()
+          email: emailContacto.trim()
         })
       });
 
@@ -268,26 +262,6 @@ export default function Reservas() {
                 onChange={(e) => setEmailContacto(e.target.value)}
               />
               <MensajeError texto={errores.email} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Teléfono de Contacto</CardTitle>
-              <CardDescription>Lo usamos por si necesitamos comunicarnos por tu reserva. Solo números.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Input
-                type="tel"
-                inputMode="numeric"
-                maxLength={15}
-                required
-                placeholder="2604123456"
-                value={telefono}
-                aria-invalid={!!errores.telefono}
-                onChange={(e) => setTelefono(soloDigitos(e.target.value))}
-              />
-              <MensajeError texto={errores.telefono} />
             </CardContent>
           </Card>
 

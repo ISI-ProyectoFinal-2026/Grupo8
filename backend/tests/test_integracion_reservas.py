@@ -60,7 +60,6 @@ async def test_flujo_exitoso_crear_reserva(monkeypatch):
                 {"nombre": "Acompañante Test", "edad": 8, "condicion": "visitante"},
             ],
             "email": "usuario.test@grupo8.com",
-            "telefono": "2604000000"
         }
         
         response = await ac.post("/reservas/", json=payload)
@@ -94,7 +93,6 @@ async def test_limite_de_capacidad(monkeypatch):
                 for i in range(settings.MAX_PERSONAS_POR_RESERVA)
             ],
             "email": "usuario.test@grupo8.com",
-            "telefono": "2604000000"
         }
 
         response = await ac.post("/reservas/", json=payload)

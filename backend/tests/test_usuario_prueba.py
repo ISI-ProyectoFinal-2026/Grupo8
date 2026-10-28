@@ -71,7 +71,6 @@ def test_se_puede_crear_una_reserva_con_el_usuario_de_prueba(monkeypatch):
             "fecha_egreso": (date.today() + timedelta(days=1)).isoformat(),
             "personas": [{"nombre": "Cliente de Prueba", "edad": 30, "condicion": "visitante"}],
             "email": EMAIL_USUARIO_PRUEBA,
-            "telefono": "2604000000",
         },
     )
 
