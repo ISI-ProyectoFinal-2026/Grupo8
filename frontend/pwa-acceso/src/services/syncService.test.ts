@@ -3,6 +3,7 @@
 import 'fake-indexeddb/auto';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AUTH_EXPIRED_EVENT, TOKEN_KEY } from '@/context/AuthContext';
 import { db } from '../db/db';
 import { dbService } from './dbService';
 import { syncService } from './syncService';
@@ -24,6 +25,8 @@ import { syncService } from './syncService';
  * y (b) si en ese momento se dispara un intento real de sincronización
  * y la red falla, el registro no se pierde ni la app explota.
  */
+const TOKEN_GUARDIA = 'token-del-guardia';
+
 describe('Offline/Online integration — pérdida y recuperación de conexión (Issue 8.4)', () => {
   let originalOnLineDescriptor: PropertyDescriptor | undefined;
 
@@ -56,6 +59,8 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     await db.configuracion.clear();
     setNavigatorOnLine(true);
     syncService.isSyncing = false;
+    // bulk-sync exige la sesión del guardia: se simula una abierta
+    localStorage.setItem(TOKEN_KEY, TOKEN_GUARDIA);
 
     // Mock de fetch por defecto: éxito "vacío". Actúa como red de
     // seguridad: si un reintento con backoff agendado por un test anterior
@@ -74,6 +79,7 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     await db.configuracion.clear();
     setNavigatorOnLine(true);
     syncService.isSyncing = false;
+    localStorage.removeItem(TOKEN_KEY);
     vi.restoreAllMocks();
   });
 
@@ -271,5 +277,93 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     const { ingresos } = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(ingresos[0].dispositivo_id).toMatch(/^dispositivo-[0-9a-f-]{36}$/);
     expect(ingresos[1].dispositivo_id).toBe(ingresos[0].dispositivo_id);
+  });
+  // ---------- Autenticación de bulk-sync (Issue 13.5) ----------
+
+  function responder(status: number) {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: status < 400,
+      status,
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
+    return globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+  }
+
+  it('Test 10 — bulk-sync viaja con el token del guardia en el header Authorization', async () => {
+    await dbService.registrarIngresoManual('11111111', 'Con Token', 0, 'Espontaneo', 10);
+
+    await syncService.sincronizarIngresosPendientes();
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${TOKEN_GUARDIA}`);
+  });
+
+  it('Test 11 — sin sesión no se envía nada y la cola queda intacta', async () => {
+    localStorage.removeItem(TOKEN_KEY);
+    await dbService.registrarIngresoManual('22222222', 'Sin Sesion', 0, 'Espontaneo', 10);
+
+    await syncService.sincronizarIngresosPendientes();
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(await db.ingresos_pendientes.toArray()).toHaveLength(1);
+    expect(syncService.isSyncing).toBe(false);
+  });
+
+  it('Test 12 — un 401 pausa la sincronización: conserva la cola, no reintenta y cierra la sesión', async () => {
+    await dbService.registrarIngresoManual('33333333', 'Token Vencido', 0, 'Espontaneo', 10);
+    const fetchMock = responder(401);
+    const sesionVencida = vi.fn();
+    const avisos: string[] = [];
+    window.addEventListener(AUTH_EXPIRED_EVENT, sesionVencida);
+    const escuchar = (e: Event) => avisos.push((e as CustomEvent).detail.detalles?.mensaje ?? '');
+    window.addEventListener('sync-status', escuchar);
+    const temporizador = vi.spyOn(globalThis, 'setTimeout');
+
+    await syncService.sincronizarIngresosPendientes();
+
+    window.removeEventListener(AUTH_EXPIRED_EVENT, sesionVencida);
+    window.removeEventListener('sync-status', escuchar);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(temporizador.mock.calls.some(([, demora]) => demora === 5000)).toBe(false);
+    expect(await db.ingresos_pendientes.toArray()).toHaveLength(1);
+    expect(sesionVencida).toHaveBeenCalledTimes(1);
+    expect(avisos.some((m) => /iniciá sesión de nuevo/i.test(m))).toBe(true);
+    expect(syncService.isSyncing).toBe(false);
+  });
+
+  it('Test 13 — un 403 también conserva la cola y no cierra la sesión', async () => {
+    await dbService.registrarIngresoManual('44444444', 'Sin Permiso', 0, 'Espontaneo', 10);
+    const fetchMock = responder(403);
+    const sesionVencida = vi.fn();
+    window.addEventListener(AUTH_EXPIRED_EVENT, sesionVencida);
+
+    await syncService.sincronizarIngresosPendientes();
+
+    window.removeEventListener(AUTH_EXPIRED_EVENT, sesionVencida);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await db.ingresos_pendientes.toArray()).toHaveLength(1);
+    expect(sesionVencida).not.toHaveBeenCalled();
+  });
+
+  it('Test 14 — después de volver a iniciar sesión, la cola pendiente se sincroniza', async () => {
+    await dbService.registrarIngresoManual('55555555', 'Reanuda', 0, 'Espontaneo', 10);
+    responder(401);
+    await syncService.sincronizarIngresosPendientes();
+    expect(await db.ingresos_pendientes.toArray()).toHaveLength(1);
+
+    // El guardia inicia sesión de nuevo y el siguiente intento ya viaja con el token nuevo
+    localStorage.setItem(TOKEN_KEY, 'token-nuevo');
+    const jti = (await db.ingresos_pendientes.toArray())[0].jti;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ procesados: 1, conflictos: 0, sincronizados_jti: [jti], errores: [] }),
+    }) as unknown as typeof fetch;
+
+    await syncService.sincronizarIngresosPendientes();
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer token-nuevo');
+    expect(await db.ingresos_pendientes.toArray()).toHaveLength(0);
   });
 });

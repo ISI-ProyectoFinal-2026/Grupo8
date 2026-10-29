@@ -118,7 +118,7 @@ Rutas operativas que soportan el comportamiento *offline-first* de la Progressiv
 ### `POST /api/v1/ingresos/bulk-sync`
 
 * **Tag:** Ingresos y Sincronización.
-* **Seguridad:** Requiere JWT de sesión del guardia administrativo (Header: `Authorization: Bearer <token>`). Emite código 401 si no hay un token válido.
+* **Seguridad:** Requiere el JWT de sesión de un usuario con rol `SEGURIDAD` (Header: `Authorization: Bearer <token>`). Emite código 401 si no hay un token válido o está vencido, y 403 si el usuario tiene otro rol (incluido `ADMIN`). En ambos casos no se procesa el lote.
 * **Descripción:** Recibe en lote los ingresos registrados por la PWA sin conexión. Procesa el arreglo verificando cada reserva, detectando duplicidades y efectuando un *commit* único.
 * **Request Body (`SyncIngresosRequest`):**
 ```json

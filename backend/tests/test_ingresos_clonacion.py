@@ -141,8 +141,8 @@ def _item_qr(reserva_id: str, jti: Optional[str] = None, dispositivo: str = "dis
     }
 
 
-def _sincronizar(items: List[Dict[str, object]]) -> Dict[str, object]:
-    response = client.post(URL_SYNC, json={"ingresos": items})
+def _sincronizar(tokens: Dict[str, str], items: List[Dict[str, object]]) -> Dict[str, object]:
+    response = client.post(URL_SYNC, json={"ingresos": items}, headers=_headers(tokens["SEGURIDAD"]))
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -176,11 +176,11 @@ def _conflictos(reserva_id: str) -> List[ConflictosSincronizacion]:
 
 # ---------- Sincronización ----------
 
-def test_jti_nuevo_se_guarda_sin_alerta(crear_reserva):
+def test_jti_nuevo_se_guarda_sin_alerta(tokens, crear_reserva):
     reserva_id = crear_reserva()
     item = _item_qr(reserva_id)
 
-    data = _sincronizar([item])
+    data = _sincronizar(tokens, [item])
 
     assert data["procesados"] == 1
     assert data["conflictos"] == 0
@@ -190,12 +190,12 @@ def test_jti_nuevo_se_guarda_sin_alerta(crear_reserva):
     assert _conflictos(reserva_id) == []
 
 
-def test_mismo_jti_desde_otro_dispositivo_es_clonacion(crear_reserva):
+def test_mismo_jti_desde_otro_dispositivo_es_clonacion(tokens, crear_reserva):
     reserva_id = crear_reserva()
     jti = str(uuid.uuid4())
-    _sincronizar([_item_qr(reserva_id, jti, "dispositivo-A")])
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-A")])
 
-    data = _sincronizar([_item_qr(reserva_id, jti, "dispositivo-B")])
+    data = _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-B")])
 
     assert data["procesados"] == 0
     assert data["conflictos"] == 1
@@ -213,12 +213,12 @@ def test_mismo_jti_desde_otro_dispositivo_es_clonacion(crear_reserva):
     assert fecha is not None
 
 
-def test_reenvio_desde_el_mismo_dispositivo_no_es_alerta(crear_reserva):
+def test_reenvio_desde_el_mismo_dispositivo_no_es_alerta(tokens, crear_reserva):
     reserva_id = crear_reserva()
     item = _item_qr(reserva_id, dispositivo="dispositivo-A")
-    _sincronizar([item])
+    _sincronizar(tokens, [item])
 
-    data = _sincronizar([item])
+    data = _sincronizar(tokens, [item])
 
     assert data["procesados"] == 0
     assert data["conflictos"] == 0
@@ -228,30 +228,30 @@ def test_reenvio_desde_el_mismo_dispositivo_no_es_alerta(crear_reserva):
     assert _conflictos(reserva_id) == []
 
 
-def test_un_segundo_clon_registra_otro_conflicto_y_conserva_la_fecha(crear_reserva):
+def test_un_segundo_clon_registra_otro_conflicto_y_conserva_la_fecha(tokens, crear_reserva):
     reserva_id = crear_reserva()
     jti = str(uuid.uuid4())
-    _sincronizar([_item_qr(reserva_id, jti, "dispositivo-A")])
-    _sincronizar([_item_qr(reserva_id, jti, "dispositivo-B")])
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-A")])
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-B")])
     fecha_primera = _estado_reserva(reserva_id)[1]
 
-    _sincronizar([_item_qr(reserva_id, jti, "dispositivo-C")])
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-C")])
 
     assert len(_conflictos(reserva_id)) == 2
     assert _estado_reserva(reserva_id)[1] == fecha_primera
 
 
-def test_lote_mixto_nuevo_clon_e_invalido(crear_reserva):
+def test_lote_mixto_nuevo_clon_e_invalido(tokens, crear_reserva):
     reserva_nueva = crear_reserva()
     reserva_clonada = crear_reserva()
     jti_clon = str(uuid.uuid4())
-    _sincronizar([_item_qr(reserva_clonada, jti_clon, "dispositivo-A")])
+    _sincronizar(tokens, [_item_qr(reserva_clonada, jti_clon, "dispositivo-A")])
 
     nuevo = _item_qr(reserva_nueva, dispositivo="dispositivo-B")
     clon = _item_qr(reserva_clonada, jti_clon, "dispositivo-B")
     invalido = {"tipo_ingreso": "QR", "jti": str(uuid.uuid4())}  # faltan campos
 
-    data = _sincronizar([nuevo, clon, invalido])
+    data = _sincronizar(tokens, [nuevo, clon, invalido])
 
     assert data["procesados"] == 1
     assert data["conflictos"] == 1
@@ -262,7 +262,7 @@ def test_lote_mixto_nuevo_clon_e_invalido(crear_reserva):
     assert _estado_reserva(reserva_clonada)[0] == EstadoReservaEnum.ALERTA_CLONACION
 
 
-def test_sincronizaciones_concurrentes_aceptan_un_solo_ingreso(crear_reserva):
+def test_sincronizaciones_concurrentes_aceptan_un_solo_ingreso(tokens, crear_reserva):
     reserva_id = crear_reserva()
     jti = str(uuid.uuid4())
     barrera = threading.Barrier(2)
@@ -270,7 +270,9 @@ def test_sincronizaciones_concurrentes_aceptan_un_solo_ingreso(crear_reserva):
     def sincronizar(dispositivo: str) -> Dict[str, object]:
         barrera.wait()  # las dos peticiones salen a la vez
         respuesta = TestClient(app).post(
-            URL_SYNC, json={"ingresos": [_item_qr(reserva_id, jti, dispositivo)]}
+            URL_SYNC,
+            json={"ingresos": [_item_qr(reserva_id, jti, dispositivo)]},
+            headers=_headers(tokens["SEGURIDAD"]),
         )
         assert respuesta.status_code == 200, respuesta.text
         return respuesta.json()
@@ -299,9 +301,9 @@ def test_admin_lista_solo_las_reservas_en_alerta(tokens, crear_reserva):
     en_alerta = crear_reserva(titular="Titular Clonado")
     sin_alerta = crear_reserva(titular="Titular Normal")
     jti = str(uuid.uuid4())
-    _sincronizar([_item_qr(en_alerta, jti, "dispositivo-A")])
-    _sincronizar([_item_qr(en_alerta, jti, "dispositivo-B")])
-    _sincronizar([_item_qr(sin_alerta, dispositivo="dispositivo-A")])
+    _sincronizar(tokens, [_item_qr(en_alerta, jti, "dispositivo-A")])
+    _sincronizar(tokens, [_item_qr(en_alerta, jti, "dispositivo-B")])
+    _sincronizar(tokens, [_item_qr(sin_alerta, dispositivo="dispositivo-A")])
 
     response = client.get(URL_ALERTAS, headers=_headers(tokens["ADMIN"]))
 

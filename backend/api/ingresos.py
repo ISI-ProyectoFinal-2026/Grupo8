@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 
 from core.database import get_db
+from core.dependencies import require_role
 from models.conflictos import ConflictosSincronizacion
 from models.ingreso_fisico import IngresoFisico, TipoIngresoEnum
 from models.reserva import Reserva
+from models.user import RoleEnum
 from security.sync_schemas import (
     ErrorIngreso,
     IngresoManualItem,
@@ -151,6 +153,8 @@ def _guardar_item(db: Session, item: ItemIngreso) -> ResultadoItem:
     "/bulk-sync",
     response_model=SyncIngresosResponse,
     status_code=status.HTTP_200_OK,
+    # Solo el guardia sincroniza ingresos: sin token es 401 y con otro rol, 403
+    dependencies=[Depends(require_role(RoleEnum.SEGURIDAD))],
 )
 def sincronizacion_masiva_offline(
     payload: SyncIngresosRequest,

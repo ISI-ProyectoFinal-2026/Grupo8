@@ -112,13 +112,15 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
     });
 
     it.each(['CLIENTE', 'SEGURIDAD'])(
-      'el rol %s no accede al panel y vuelve al inicio',
+      'el rol %s no accede al panel y ve "Acceso denegado"',
       (rol) => {
         localStorage.setItem(TOKEN_KEY, crearToken(rol));
 
         renderizarEn('/admin/incidentes');
 
-        expect(screen.getByText('Inicio público')).toBeTruthy();
+        expect(
+          screen.getByRole('heading', { level: 1, name: /acceso denegado/i })
+        ).toBeTruthy();
         expect(
           screen.queryByRole('navigation', { name: NOMBRE_NAV })
         ).toBeNull();
