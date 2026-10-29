@@ -1,11 +1,10 @@
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import jwt
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import func
 
 from core.config import settings
 from core.database import Base, SessionLocal, engine
@@ -13,6 +12,7 @@ from main import app
 from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
 from models.user import User
 from schemas.reserva import ReservaCreate, hoy_argentina
+from services.capacity_service import CapacityService
 
 # Fechas relativas a "hoy" (hora de Argentina, igual que el backend) para que los
 # tests no dependan del día en que se ejecutan
@@ -22,6 +22,7 @@ EGRESO = INGRESO + timedelta(days=2)
 Base.metadata.create_all(bind=engine)
 
 client = TestClient(app)
+capacity_service = CapacityService()
 
 # Las reservas necesitan el camping cargado
 pytestmark = pytest.mark.usefixtures("camping_de_prueba")
@@ -242,40 +243,73 @@ def test_el_user_id_del_body_se_ignora(reservas_creadas):
     assert data["user_id"] is None
 
 
+def _ahora_utc() -> datetime:
+    # fecha_reserva se guarda en UTC sin zona horaria
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _dejar_dos_lugares_libres(monkeypatch) -> None:
+    """Ajusta la capacidad para que queden exactamente 2 lugares libres en las fechas del payload."""
+    db = SessionLocal()
+    try:
+        ocupados = capacity_service.lugares_ocupados(db, INGRESO, EGRESO)
+    finally:
+        db.close()
+    monkeypatch.setattr(
+        settings, "CAMPING_TOTAL_CAPACITY", ocupados + settings.CAMPING_OFFLINE_BUFFER + 2
+    )
+
+
 def test_cupo_depende_del_estado_de_reserva_y_no_del_pago(monkeypatch, reservas_creadas):
-        user_id = _crear_usuario()
-        
-        # 1. Generamos el payload para saber qué fechas exactas va a intentar reservar el test
-        payload_prueba = _payload(personas=_personas(2))
-        
-        # 2. Calculamos los lugares ocupados SOLO en esas fechas (la misma lógica nueva del backend)
-        db = SessionLocal()
-        try:
-            ocupados = db.query(func.sum(Reserva.cantidad_personas)).filter(
-                Reserva.estado_reserva != EstadoReservaEnum.CANCELADA,
-                Reserva.fecha_ingreso <= payload_prueba["fecha_egreso"],
-                Reserva.fecha_egreso >= payload_prueba["fecha_ingreso"]
-            ).scalar() or 0
-        finally:
-            db.close()
-            
-        # Dejamos exactamente 2 lugares libres para esas fechas
-        monkeypatch.setattr(
-            settings, "CAMPING_TOTAL_CAPACITY", ocupados + settings.CAMPING_OFFLINE_BUFFER + 2
-        )
+    user_id = _crear_usuario()
+    _dejar_dos_lugares_libres(monkeypatch)
+    vencida = _ahora_utc() - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES + 5)
 
-        # Una reserva cancelada no ocupa lugar
-        _insertar_reserva(user_id, reservas_creadas, cantidad_personas=30,
-                          estado_reserva=EstadoReservaEnum.CANCELADA)
+    # Ni una reserva cancelada ni una pendiente abandonada (fuera del plazo) ocupan lugar,
+    # aunque sean de las mismas fechas y de muchas personas
+    _insertar_reserva(user_id, reservas_creadas, fecha_ingreso=INGRESO, fecha_egreso=EGRESO,
+                      cantidad_personas=30, estado_reserva=EstadoReservaEnum.CANCELADA)
+    _insertar_reserva(user_id, reservas_creadas, fecha_ingreso=INGRESO, fecha_egreso=EGRESO,
+                      cantidad_personas=30, estado_reserva=EstadoReservaEnum.PENDIENTE,
+                      fecha_reserva=vencida)
 
-        # Reserva 1: ocupa los últimos 2 lugares
-        primera = client.post("/reservas/", json=payload_prueba)
-        assert primera.status_code == 201
-        reservas_creadas.append(primera.json()["id"])
+    # Reserva 1: ocupa los últimos 2 lugares
+    primera = client.post("/reservas/", json=_payload(personas=_personas(2)))
+    assert primera.status_code == 201
+    reservas_creadas.append(primera.json()["id"])
 
-        # Reserva 2: ahora sí está lleno en esa fecha y debe fallar (Error 400)
-        segunda = client.post("/reservas/", json=_payload(personas=_personas(1)))
-        assert segunda.status_code == 400
+    # Reserva 2: ahora sí está lleno en esa fecha y debe fallar (Error 400). La primera quedó
+    # pendiente y dentro del plazo, así que sigue ocupando cupo aunque todavía no se pagó
+    segunda = client.post("/reservas/", json=_payload(personas=_personas(1)))
+    assert segunda.status_code == 400
+
+
+def test_una_pendiente_dentro_del_plazo_sigue_ocupando_cupo(monkeypatch, reservas_creadas):
+    user_id = _crear_usuario()
+    _dejar_dos_lugares_libres(monkeypatch)
+    # Le faltan 5 minutos para vencer
+    reciente = _ahora_utc() - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES - 5)
+    _insertar_reserva(user_id, reservas_creadas, fecha_ingreso=INGRESO, fecha_egreso=EGRESO,
+                      cantidad_personas=2, estado_reserva=EstadoReservaEnum.PENDIENTE,
+                      fecha_reserva=reciente)
+
+    response = client.post("/reservas/", json=_payload(personas=_personas(1)))
+
+    assert response.status_code == 400
+
+
+def test_una_pendiente_vencida_libera_el_cupo(monkeypatch, reservas_creadas):
+    user_id = _crear_usuario()
+    _dejar_dos_lugares_libres(monkeypatch)
+    vencida = _ahora_utc() - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES + 5)
+    _insertar_reserva(user_id, reservas_creadas, fecha_ingreso=INGRESO, fecha_egreso=EGRESO,
+                      cantidad_personas=2, estado_reserva=EstadoReservaEnum.PENDIENTE,
+                      fecha_reserva=vencida)
+
+    response = client.post("/reservas/", json=_payload(personas=_personas(2)))
+
+    assert response.status_code == 201
+    reservas_creadas.append(response.json()["id"])
 
 
 # ---------- GET /reservas ----------

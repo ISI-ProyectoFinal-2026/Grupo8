@@ -6,7 +6,6 @@ from typing import List, Optional
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import func, and_
 
 from core.config import settings
 from core.database import get_db 
@@ -71,17 +70,11 @@ def crear_reserva(
             detail="El camping no está configurado."
         )
 
-    # 3. Calcular cuántos lugares están ocupados en las fechas solicitadas
-    # Un solapamiento de fechas ocurre cuando el ingreso existente es <= al egreso solicitado, 
-    # y el egreso existente es >= al ingreso solicitado.
-    # Las reservas PENDIENTES y confirmadas consumen capacidad (!= CANCELADA) para evitar sobreventa.
-    lugares_ocupados = db.query(func.sum(Reserva.cantidad_personas)).filter(
-        and_(
-            Reserva.estado_reserva != EstadoReservaEnum.CANCELADA,
-            Reserva.fecha_ingreso <= reserva_in.fecha_egreso,
-            Reserva.fecha_egreso >= reserva_in.fecha_ingreso
-        )
-    ).scalar() or 0
+    # 3. Lugares ocupados en las fechas pedidas (las canceladas y las pendientes vencidas no cuentan;
+    # la regla está en CapacityService)
+    lugares_ocupados = capacity_service.lugares_ocupados(
+        db, reserva_in.fecha_ingreso, reserva_in.fecha_egreso
+    )
 
     # 4. Validar disponibilidad (Endpoint POST)
     # Tu servicio lanzará automáticamente el Error 400 si se superó el límite
