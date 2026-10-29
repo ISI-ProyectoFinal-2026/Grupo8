@@ -1,3 +1,4 @@
+import { AUTH_EXPIRED_EVENT, TOKEN_KEY } from '@/context/AuthContext';
 import { dbService } from './dbService';
 import { obtenerDispositivoId } from '../utils/dispositivo';
 
@@ -50,6 +51,17 @@ interface SyncResponse {
   errores: ErrorIngreso[];
 }
 
+// Token de la sesión del guardia; bulk-sync lo exige
+const leerToken = (): string | null => {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+const MENSAJE_SESION = 'Iniciá sesión de nuevo para sincronizar. Tus ingresos siguen guardados en este dispositivo.';
+
 type Pendiente = Awaited<ReturnType<typeof dbService.obtenerPendientesSincronizacion>>[number];
 
 // Arma el ítem que viaja en el lote según sea QR o manual
@@ -97,6 +109,14 @@ export const syncService = {
         return;
       }
 
+      // Sin sesión no se envía nada: la cola queda intacta hasta que el guardia vuelva a iniciar sesión
+      const token = leerToken();
+      if (!token) {
+        this.isSyncing = false;
+        notificarUI('error', { mensaje: MENSAJE_SESION });
+        return;
+      }
+
       // 2. Notificamos a la UI para el bloqueo visual discreto
       if (intento === 1) {
         notificarUI('iniciando', { cantidad: pendientes.length });
@@ -111,9 +131,23 @@ export const syncService = {
       // 3. Intento de envío al servidor
       const response = await fetch(`${API_URL}/api/v1/ingresos/bulk-sync`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
+
+      // Token vencido o sin permiso: reintentar con el mismo token no sirve, así que se pausa
+      // el envío y se conserva la cola. Con 401 además se cierra la sesión para pedir un nuevo login.
+      if (response.status === 401 || response.status === 403) {
+        this.isSyncing = false;
+        if (response.status === 401) window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+        notificarUI('error', {
+          mensaje:
+            response.status === 401
+              ? MENSAJE_SESION
+              : 'Tu usuario no tiene permiso para sincronizar ingresos.',
+        });
+        return;
+      }
 
       if (!response.ok) throw new Error(`Falla HTTP: ${response.status}`);
 

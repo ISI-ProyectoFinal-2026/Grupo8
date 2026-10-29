@@ -162,6 +162,7 @@ Frontend:
 - `AuthContext` mantiene la sesión y `src/lib/api.ts` expone `apiFetch`, que agrega `Authorization: Bearer <token>`.
 - Un `401` con token debe emitir `qamp:auth-expired`.
 - En la sincronización offline, un `401` pausa el envío y conserva la cola; se muestra “Iniciá sesión de nuevo para sincronizar”.
+- Rutas de la interfaz: sin sesión, `/acceso` y `/admin/*` redirigen a `/login`; con una sesión de otro rol muestran “Acceso denegado”. `/acceso` es solo para `SEGURIDAD` y `/admin/*` solo para `ADMIN`.
 
 ## 3. Cotización, reservas y descuentos (P2)
 
@@ -294,13 +295,23 @@ Archivos ejecutables:
 
 ### 4.1 Autorización y procesamiento
 
-- `POST /api/v1/ingresos/bulk-sync` requiere rol `SEGURIDAD`.
+- `POST /api/v1/ingresos/bulk-sync` requiere rol `SEGURIDAD`. Sin token responde `401` y con otro rol (incluido `ADMIN`) responde `403`; en ambos casos no se guarda nada del lote.
 - El backend procesa cada ítem de manera independiente. Un ítem inválido no rechaza el lote completo.
 - La solicitud admite hasta 500 ítems.
 - Cada ingreso tiene un `jti` único. La restricción `UNIQUE` en `ingresos_fisicos.jti` es la protección definitiva ante sincronizaciones concurrentes.
 - Para ingresos manuales, generar `jti = "manual-" + crypto.randomUUID()` una sola vez al registrar el ingreso; conservarlo en todos los reintentos.
 - En `errores[].permanente`, `true` significa que la PWA puede quitar ese ítem de la cola; `false` significa que debe reintentarlo.
 - Si la API devuelve `401`, no se borra ni descarta la cola: se pausa la sincronización hasta volver a iniciar sesión.
+- La PWA envía `Authorization: Bearer <token>` en cada lote. Si no hay token guardado, no envía nada y conserva la cola.
+
+#### Sesión del guardia y token vencido sin conexión
+
+- El token del guardia dura 168 horas (7 días), configurable con `GUARD_TOKEN_EXPIRE_HOURS`. Socios y administradores usan 60 minutos.
+- Sin conexión el vencimiento no interrumpe el trabajo: escanear QR, validarlos e ingresar personas a mano son operaciones locales que no usan el token. Los ingresos quedan en la cola de IndexedDB.
+- Si la app se vuelve a abrir sin conexión con el token vencido, el guardia conserva su sesión en `/acceso`, porque sin red no podría iniciar sesión de nuevo. Esta excepción es solo para el rol `SEGURIDAD`; con conexión, un token vencido se descarta y se pide el login, como para cualquier otro rol.
+- Al volver la conexión, `bulk-sync` responde `401`. La PWA pausa el envío (sin reintentos con backoff, porque con el mismo token fallarían igual), conserva toda la cola, muestra “Iniciá sesión de nuevo para sincronizar” y cierra la sesión para llevar al guardia al login.
+- Después de iniciar sesión, la cola se envía en el siguiente evento `online` o en el chequeo periódico de 5 minutos, ya con el token nuevo. No se pierde ningún ingreso y el `jti` se conserva, por lo que un reintento no duplica registros.
+- El backend es quien decide: aunque la interfaz conserve la sesión, un token vencido nunca es aceptado por la API.
 
 ### 4.2 Request y response de bulk-sync
 

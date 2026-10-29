@@ -11,6 +11,7 @@ from core.config import settings
 from core.database import Base, SessionLocal, engine
 from core.dependencies import get_current_user, get_current_user_optional, require_role
 from main import app
+from models.ingreso_fisico import IngresoFisico
 from models.user import RoleEnum, User
 
 Base.metadata.create_all(bind=engine)
@@ -19,6 +20,9 @@ client = TestClient(app)
 
 # Rutas reales que ya están restringidas al administrador
 RUTAS_ADMIN = ["/reservas/", "/admin/descuentos", "/admin/alertas-clonacion"]
+
+# La PWA del guardia sincroniza sus ingresos acá: solo acepta el rol SEGURIDAD
+URL_BULK_SYNC = "/api/v1/ingresos/bulk-sync"
 
 # App mínima para probar las dependencias sin depender de ninguna ruta del proyecto
 app_prueba = FastAPI()
@@ -106,6 +110,78 @@ def test_rol_incorrecto_da_403(ruta, rol, ids):
 @pytest.mark.parametrize("ruta", RUTAS_ADMIN)
 def test_administrador_da_200(ruta, ids):
     assert client.get(ruta, headers=_headers(_token(ids["ADMIN"]))).status_code == 200
+
+
+# --- bulk-sync: solo el guardia ---
+
+def _lote_con_un_ingreso_manual() -> dict:
+    return {
+        "ingresos": [
+            {
+                "tipo_ingreso": "MANUAL",
+                "jti": f"manual-{uuid.uuid4()}",
+                "dispositivo_id": "dispositivo-test",
+                "fecha_escaneo": datetime.now(timezone.utc).isoformat(),
+                "cantidad_personas": 1,
+                "monto_cobrado": 1000,
+                "nombre": "Visitante Prueba",
+                "dni": "30123456",
+            }
+        ]
+    }
+
+
+def _cantidad_de_ingresos(jti: str) -> int:
+    db = SessionLocal()
+    try:
+        return db.query(IngresoFisico).filter(IngresoFisico.jti == jti).count()
+    finally:
+        db.close()
+
+
+def test_bulk_sync_sin_token_da_401():
+    lote = _lote_con_un_ingreso_manual()
+
+    assert client.post(URL_BULK_SYNC, json=lote).status_code == 401
+    assert _cantidad_de_ingresos(lote["ingresos"][0]["jti"]) == 0
+
+
+@pytest.mark.parametrize("rol", ["CLIENTE", "ADMIN"])
+def test_bulk_sync_con_otro_rol_da_403_y_no_guarda_nada(rol, ids):
+    lote = _lote_con_un_ingreso_manual()
+
+    response = client.post(URL_BULK_SYNC, json=lote, headers=_headers(_token(ids[rol])))
+
+    assert response.status_code == 403
+    assert _cantidad_de_ingresos(lote["ingresos"][0]["jti"]) == 0
+
+
+def test_bulk_sync_con_token_vencido_da_401(ids):
+    ahora = datetime.now(timezone.utc)
+    token = _token(ids["SEGURIDAD"], iat=ahora - timedelta(hours=2), exp=ahora - timedelta(hours=1))
+
+    response = client.post(URL_BULK_SYNC, json=_lote_con_un_ingreso_manual(), headers=_headers(token))
+
+    assert response.status_code == 401
+
+
+def test_bulk_sync_con_el_guardia_sincroniza_el_lote(ids):
+    lote = _lote_con_un_ingreso_manual()
+    jti = lote["ingresos"][0]["jti"]
+
+    try:
+        response = client.post(URL_BULK_SYNC, json=lote, headers=_headers(_token(ids["SEGURIDAD"])))
+
+        assert response.status_code == 200
+        assert response.json()["sincronizados_jti"] == [jti]
+        assert _cantidad_de_ingresos(jti) == 1
+    finally:
+        db = SessionLocal()
+        try:
+            db.query(IngresoFisico).filter(IngresoFisico.jti == jti).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
 
 
 # --- require_role con uno o varios roles ---

@@ -19,6 +19,8 @@ Base.metadata.create_all(bind=engine)
 
 client = TestClient(app)
 
+# bulk-sync exige rol SEGURIDAD; estos tests no prueban la autorización (eso está en test_autorizacion.py)
+pytestmark = pytest.mark.usefixtures("como_guardia")
 
 
 _creados: list[tuple[uuid.UUID, uuid.UUID]] = []  # (reserva_id, usuario_id)

@@ -48,13 +48,15 @@ function borrarToken() {
 }
 
 // El claim `rol` sirve solo para la interfaz: el backend revalida el rol en cada request.
-function sesionDesdeToken(token: string | null): Sesion | null {
+// Con `tolerarVencido`, un token vencido del guardia sigue valiendo para la interfaz (ver leerSesionGuardada).
+function sesionDesdeToken(token: string | null, tolerarVencido = false): Sesion | null {
   if (!token) return null;
   try {
     const { rol, exp } = decodeJwt(token);
-    if (typeof exp === 'number' && exp * 1000 <= Date.now()) return null;
     const rolNormalizado = typeof rol === 'string' ? rol.toUpperCase() : '';
     if (!ROLES.includes(rolNormalizado)) return null;
+    const vencido = typeof exp === 'number' && exp * 1000 <= Date.now();
+    if (vencido && !(tolerarVencido && rolNormalizado === 'SEGURIDAD')) return null;
     return { token, rol: rolNormalizado as Rol };
   } catch {
     return null;
@@ -68,7 +70,10 @@ function leerSesionGuardada(): Sesion | null {
   } catch {
     return null;
   }
-  const sesion = sesionDesdeToken(token);
+  // El guardia puede trabajar días sin red y con la red caída no puede volver a iniciar sesión:
+  // si su token venció y no hay conexión, se conserva la sesión para que pueda seguir escaneando.
+  // Al recuperar la red, bulk-sync responde 401 y ahí se le pide iniciar sesión de nuevo.
+  const sesion = sesionDesdeToken(token, !navigator.onLine);
   // Token vencido o ilegible: se descarta para no reintentarlo en cada carga.
   if (!sesion && token) borrarToken();
   return sesion;

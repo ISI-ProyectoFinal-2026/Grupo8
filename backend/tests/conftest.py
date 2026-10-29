@@ -69,6 +69,20 @@ def como_admin():
         app.dependency_overrides[get_current_user] = previo
 
 
+@pytest.fixture
+def como_guardia():
+    """Igual que como_admin, pero con un usuario de seguridad (el que sincroniza ingresos)."""
+    previo = app.dependency_overrides.get(get_current_user)
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id=uuid.uuid4(), email="guardia_test@grupo8.com", rol=RoleEnum.SEGURIDAD
+    )
+    yield
+    if previo is None:
+        app.dependency_overrides.pop(get_current_user, None)
+    else:
+        app.dependency_overrides[get_current_user] = previo
+
+
 class ResendFalso:
     """Reemplaza resend.Emails.send: registra cada envío y nunca sale a la red."""
 
