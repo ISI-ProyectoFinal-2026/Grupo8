@@ -16,6 +16,7 @@ from api.usuarios import router as usuarios_router
 from api.descuentos import router as descuentos_router
 from api.auth import router as auth_router
 from api.socios import router as socios_router
+from api.admin_socios import router as admin_socios_router
 from api.admin_alertas import router as admin_alertas_router
 
 # Configuración básica del logger
@@ -47,6 +48,7 @@ app.include_router(usuarios_router)
 app.include_router(descuentos_router)
 app.include_router(auth_router)
 app.include_router(socios_router)
+app.include_router(admin_socios_router)
 app.include_router(admin_alertas_router)
 
 # Middleware para loggeo de errores (Requisito del DoD)

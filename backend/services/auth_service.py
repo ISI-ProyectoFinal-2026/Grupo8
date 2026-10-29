@@ -8,14 +8,11 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from models.user import RoleEnum, User
-from schemas.auth import PASSWORD_MIN_LENGTH, UsuarioSesion
+from schemas.auth import PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH, UsuarioSesion
 from services.socio_service import membresia_vigente
 
 # El login usa solo HS256 con AUTH_SECRET_KEY; ES256 queda para los QR
 ALGORITMO_JWT = "HS256"
-
-# bcrypt no admite contraseñas de más de 72 bytes
-PASSWORD_MAX_BYTES = 72
 
 # Se compara contra este hash cuando el usuario no existe, para que la respuesta
 # tarde lo mismo y no deje adivinar qué DNI o email están registrados
