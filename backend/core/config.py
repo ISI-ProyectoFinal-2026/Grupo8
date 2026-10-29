@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     CAMPING_OFFLINE_BUFFER: int = 5
     MAX_PERSONAS_POR_RESERVA: int = 10
     MAX_NOCHES_POR_RESERVA: int = 10
+    # Minutos que una reserva PENDIENTE sigue ocupando cupo; pasado ese plazo se la considera abandonada
+    RESERVA_PENDIENTE_TTL_MINUTES: int = 30
 
     # --- Tarifas ---
     PRECIO_BASE_POR_PERSONA: float = 5000.0
