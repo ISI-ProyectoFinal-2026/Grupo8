@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { RutaProtegida } from "./components/auth/RutaProtegida";
+import { RutaSocio } from "./components/auth/RutaSocio";
 import { LayoutAcceso } from "./components/layout/LayoutAcceso";
 import { LayoutPublico } from "./components/layout/LayoutPublico";
 import { AuthProvider } from "./context/AuthContext";
@@ -60,8 +61,10 @@ function App() {
 
           {/* Solo para socios con sesión*/}
           <Route element={<RutaProtegida roles={["CLIENTE"]} />}>
-            <Route path="/perfil" element={<Perfil />} />
-            <Route path="/mis-reservas" element={<MisReservas />} />
+            <Route element={<RutaSocio />}>
+              <Route path="/perfil" element={<Perfil />} />
+              <Route path="/mis-reservas" element={<MisReservas />} />
+            </Route>
           </Route>
         </Route>
       </Routes>

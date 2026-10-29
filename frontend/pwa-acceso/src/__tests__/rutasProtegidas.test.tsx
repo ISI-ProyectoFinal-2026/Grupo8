@@ -19,6 +19,33 @@ function crearToken(rol: string) {
   return `${base64Url({ alg: 'HS256', typ: 'JWT' })}.${payload}.firma`;
 }
 
+const SOCIO = {
+  id: 'u-1',
+  nombre: 'Ana Pérez',
+  email: 'ana@correo.com',
+  dni: '41234567',
+  rol: 'CLIENTE',
+  is_socio: true,
+  membresia_vigente: true,
+  membresia_vence: '2030-12-31',
+};
+const NO_SOCIO = { ...SOCIO, is_socio: false, membresia_vigente: false, membresia_vence: null };
+
+function respuesta(status: number, cuerpo: unknown) {
+  return { ok: status < 400, status, json: async () => cuerpo } as unknown as Response;
+}
+
+// Simula el backend: /auth/me devuelve al usuario y /reservas/mias una lista vacía
+function simularBackend(usuario: object) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation(async (url: string) => {
+      if (String(url).endsWith('/auth/me')) return respuesta(200, usuario);
+      return respuesta(200, []);
+    })
+  );
+}
+
 function abrir(ruta: string, rol?: string) {
   if (rol) localStorage.setItem(TOKEN_KEY, crearToken(rol));
   window.history.pushState({}, '', ruta);
@@ -28,6 +55,7 @@ function abrir(ruta: string, rol?: string) {
 const formularioLogin = () => screen.queryByLabelText(/dni o email/i);
 const pantallaAcceso = () => screen.queryByText('Pantalla de control de acceso');
 const tituloPerfil = () => screen.queryByRole('heading', { level: 1, name: /mi perfil/i });
+const avisoSoloSocios = () => screen.findByRole('heading', { name: /solo para socios/i });
 
 describe('Rutas protegidas por rol', () => {
   beforeEach(() => {
@@ -35,6 +63,7 @@ describe('Rutas protegidas por rol', () => {
   });
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
     localStorage.clear();
     window.history.pushState({}, '', '/');
   });
@@ -66,10 +95,30 @@ describe('Rutas protegidas por rol', () => {
     expect(formularioLogin()).toBeNull();
   });
 
-  it('el socio entra a /perfil', () => {
+  it('el socio entra a /perfil y ve sus datos reales', async () => {
+    simularBackend(SOCIO);
+
     abrir('/perfil', 'CLIENTE');
 
-    expect(tituloPerfil()).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: /mi perfil/i })).toBeTruthy();
+    expect(screen.getByText('Ana Pérez')).toBeTruthy();
+  });
+
+  it('el socio entra a /mis-reservas', async () => {
+    simularBackend(SOCIO);
+
+    abrir('/mis-reservas', 'CLIENTE');
+
+    expect(await screen.findByRole('heading', { level: 1, name: /mis reservas/i })).toBeTruthy();
+  });
+
+  it.each(['/perfil', '/mis-reservas'])('un cliente que no es socio no entra a %s', async (ruta) => {
+    simularBackend(NO_SOCIO);
+
+    abrir(ruta, 'CLIENTE');
+
+    expect(await avisoSoloSocios()).toBeTruthy();
+    expect(tituloPerfil()).toBeNull();
   });
 
   it.each(['SEGURIDAD', 'ADMIN'])('el rol %s no entra a /perfil', (rol) => {

@@ -1,35 +1,33 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CalendarDays, Save, User } from "lucide-react";
-import { useState } from "react";
+import { useUsuarioSocio } from "@/components/auth/RutaSocio";
+import { formatearFecha } from "@/lib/fechas";
+import { CalendarDays, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function Perfil() {
   const navigate = useNavigate();
-  // Estado simulado del usuario
-  const [datos, setDatos] = useState({
-    nombre: "Emiliana Bianchi",
-    dni: "41234567",
-    email: "emiliana@ejemplo.com",
-    estadoSocio: "Activo",
-  });
+  // Los datos vienen de GET /auth/me, que consulta RutaSocio antes de mostrar esta pantalla
+  const usuario = useUsuarioSocio();
 
-  const handleGuardar = (e: React.FormEvent) => {
-    e.preventDefault();
-    alert("Datos actualizados correctamente (Simulación)");
-  };
+  const vence = usuario.membresia_vence ? formatearFecha(usuario.membresia_vence) : null;
+  const detalleMembresia = !vence
+    ? "Sin fecha de vencimiento registrada"
+    : usuario.membresia_vigente
+      ? `Vigente hasta el ${vence}`
+      : `Venció el ${vence}`;
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-2xl">
       <div className="flex justify-between items-end mb-8">
         <div>
           <h1 className="text-3xl font-bold text-zinc-900">Mi Perfil</h1>
-          <p className="text-zinc-600 mt-1">Gestioná tu información personal</p>
+          <p className="text-zinc-600 mt-1">Tu información personal y el estado de tu membresía</p>
         </div>
-        <Button 
+        <Button
           onClick={() => navigate("/mis-reservas")}
           className="bg-zinc-900 hover:bg-zinc-800 flex gap-2"
         >
@@ -44,40 +42,33 @@ export default function Perfil() {
             <User className="w-8 h-8" />
           </div>
           <div>
-            <CardTitle className="text-xl">{datos.nombre}</CardTitle>
-            <CardDescription className="flex items-center gap-2 mt-1">
-              Estado: 
-              <Badge variant={datos.estadoSocio === "Activo" ? "default" : "destructive"} className="bg-green-600">
-                Socio {datos.estadoSocio}
+            <CardTitle className="text-xl">{usuario.nombre}</CardTitle>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
+              <Badge
+                variant={usuario.membresia_vigente ? "default" : "destructive"}
+                className={usuario.membresia_vigente ? "bg-green-600" : ""}
+              >
+                {usuario.membresia_vigente ? "Membresía vigente" : "Membresía vencida"}
               </Badge>
-            </CardDescription>
+              <span>{detalleMembresia}</span>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="pt-6">
-          <form onSubmit={handleGuardar} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nombre completo</Label>
-                <Input value={datos.nombre} onChange={(e) => setDatos({...datos, nombre: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>DNI</Label>
-                <Input value={datos.dni} onChange={(e) => setDatos({...datos, dni: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>Correo electrónico</Label>
-                <Input type="email" value={datos.email} onChange={(e) => setDatos({...datos, email: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>Nueva contraseña</Label>
-                <Input type="password" placeholder="••••••••" />
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="perfil-nombre">Nombre completo</Label>
+              <Input id="perfil-nombre" value={usuario.nombre} readOnly />
             </div>
-            <Button type="submit" className="mt-6 flex gap-2">
-              <Save className="w-4 h-4" />
-              Guardar cambios
-            </Button>
-          </form>
+            <div className="space-y-2">
+              <Label htmlFor="perfil-dni">DNI</Label>
+              <Input id="perfil-dni" value={usuario.dni} readOnly />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="perfil-email">Correo electrónico</Label>
+              <Input id="perfil-email" type="email" value={usuario.email} readOnly />
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
