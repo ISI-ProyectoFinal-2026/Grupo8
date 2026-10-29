@@ -7,6 +7,9 @@ from pydantic import BaseModel
 # Regla compartida para cualquier contraseña que se guarde (login, alta de socios, seeds)
 PASSWORD_MIN_LENGTH = 8
 
+# bcrypt no admite contraseñas de más de 72 bytes
+PASSWORD_MAX_BYTES = 72
+
 RolSesion = Literal["ADMIN", "SEGURIDAD", "CLIENTE"]
 
 

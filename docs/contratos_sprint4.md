@@ -134,6 +134,12 @@ Ejemplo de alta:
 
 `POST /admin/socios` devuelve `201` con `SocioOut`; devuelve `409` si el DNI o el email ya existen. `GET /admin/socios` devuelve `SocioOut[]`.
 
+- Solo `ADMIN`; los demás roles reciben `403` y sin token, `401`.
+- El alta crea siempre un usuario con `rol = CLIENTE` e `is_socio = true`; cualquier otro valor enviado en el body se ignora. `membresia_vence` es obligatoria.
+- Validaciones (las mismas que `validaciones.ts`): `nombre` de 2 a 100 caracteres (letras, espacios, puntos, apóstrofes y guiones), `dni` de 7 u 8 dígitos, `email` válido, `password` de 8 a 72 bytes. Un dato inválido devuelve `422`.
+- El email se guarda en minúsculas y la comparación de duplicados no distingue mayúsculas, igual que el login.
+- `SocioOut`: `id`, `nombre`, `dni`, `email`, `membresia_vence` y `membresia_vigente`. El listado incluye a los socios con la cuota vencida, ordenados por nombre.
+
 ### 2.3 Schemas y tipos compartidos
 
 Los modelos ejecutables se mantienen en código. Esta documentación describe su finalidad y el contrato visible para el consumidor; no reemplaza la validación de Pydantic ni los tipos de TypeScript.
