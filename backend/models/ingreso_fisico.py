@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from core.database import Base
+from core.tiempo import ahora_utc
 
 class TipoIngresoEnum(enum.Enum):
     WEB = "Web"
@@ -22,7 +23,7 @@ class IngresoFisico(Base):
 
     reserva_id = Column(UUID(as_uuid=True), ForeignKey("reservas.id", ondelete="CASCADE"), nullable=True)
 
-    fecha_hora_ingreso = Column(DateTime, default=datetime.utcnow, index=True, nullable=False)
+    fecha_hora_ingreso = Column(DateTime(timezone=True), default=ahora_utc, index=True, nullable=False)
     tipo_ingreso = Column(Enum(TipoIngresoEnum), nullable=False)
     sincronizado_offline = Column(Boolean, default=False)
 

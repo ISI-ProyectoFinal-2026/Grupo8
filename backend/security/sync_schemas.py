@@ -4,14 +4,17 @@ from typing import Annotated, Any, List, Literal, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import AfterValidator
+from core.tiempo import a_utc
 
+FechaEscaneo = Annotated[datetime, AfterValidator(a_utc)]
 
 class IngresoQRItem(BaseModel):
     """Ingreso escaneado con QR (siempre trae reserva)."""
     tipo_ingreso: Literal["QR"]
     jti: str = Field(..., min_length=1, max_length=64)
     reserva_id: UUID
-    fecha_escaneo: datetime
+    fecha_escaneo: FechaEscaneo
     cantidad_personas: int = Field(1, ge=1)
     dispositivo_id: str = Field(..., min_length=1, max_length=64)
 
@@ -21,7 +24,7 @@ class IngresoManualItem(BaseModel):
     tipo_ingreso: Literal["MANUAL"]
     jti: str = Field(..., min_length=1, max_length=64)
     reserva_id: Optional[UUID] = None
-    fecha_escaneo: datetime
+    fecha_escaneo: FechaEscaneo
     cantidad_personas: int = Field(..., ge=1)
     monto_cobrado: Decimal = Field(..., ge=0, max_digits=10, decimal_places=2)
     nombre: str = Field(..., min_length=1, max_length=120)
