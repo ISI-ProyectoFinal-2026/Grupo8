@@ -11,7 +11,10 @@ import {
   type Cotizacion,
   type PersonaCotizar,
 } from "@/lib/cotizacion";
+import { obtenerUsuarioActual, type UsuarioSesion } from "@/lib/auth";
 import { formatearFecha } from "@/lib/fechas";
+import { mensajeMotivoSocio } from "@/lib/validacionSocio";
+import { useValidacionSocios, type Verificacion } from "@/lib/useValidacionSocios";
 import {
   limpiarNombre,
   soloDigitos,
@@ -70,13 +73,41 @@ const MensajeError = ({ texto }: { texto?: string }) =>
       {texto}
     </p>
   ) : null;
+
+// Resultado de verificar el DNI de un socio contra el backend
+const EstadoDni = ({ verificacion }: { verificacion?: Verificacion }) => {
+  if (!verificacion) return null;
+  switch (verificacion.estado) {
+    case "verificando":
+      return <p role="status" className="mt-2 text-sm text-zinc-500">Verificando DNI…</p>;
+    case "ok":
+      return (
+        <p role="status" className="mt-2 text-sm text-green-700">
+          Socio verificado{verificacion.nombre ? `: ${verificacion.nombre}` : ""}.
+        </p>
+      );
+    case "rechazado":
+      return <MensajeError texto={mensajeMotivoSocio(verificacion.motivo)} />;
+    case "error":
+      return <MensajeError texto="No pudimos verificar el DNI. Revisá tu conexión e intentá nuevamente." />;
+  }
+};
+
+// Lleva la vista al primer error, aunque esté fuera de pantalla
+const irAlPrimerError = () => {
+  setTimeout(() => {
+    document
+      .querySelector('[role="alert"]')
+      ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, 0);
+};
 // ---------------------------------------------------
 
 export default function Reservas() {
   const location = useLocation();
   const navigate = useNavigate();
   // Con sesión iniciada la reserva queda a nombre del usuario; sin sesión se reserva igual
-  const { token } = useAuth();
+  const { token, rol } = useAuth();
 
   // Rescatamos los datos que vienen del buscador y la disponibilidad con valores por defecto
   const { fecha, fechaEgreso, personas, tipo } = location.state || {};
@@ -98,10 +129,62 @@ export default function Reservas() {
 
   const [emailContacto, setEmailContacto] = useState("");
   const [errores, setErrores] = useState<Record<string, string>>({});
+  const [enviando, setEnviando] = useState(false);
+
+  // --- Datos de la cuenta: con sesión de cliente, el titular no vuelve a cargar sus datos ---
+  const [usuarioCargado, setUsuarioCargado] = useState<UsuarioSesion | null>(null);
+  const usuario = token && rol === "CLIENTE" ? usuarioCargado : null;
+  const titularPrecargado = usuario !== null;
+  const cuotaVencidaTitular = usuario !== null && usuario.is_socio && !usuario.membresia_vigente;
+
+  useEffect(() => {
+    if (!token || rol !== "CLIENTE") return;
+    const controlador = new AbortController();
+    obtenerUsuarioActual(token, controlador.signal)
+      .then(setUsuarioCargado)
+      .catch(() => {
+        // Sin los datos de la cuenta el formulario se completa a mano, como sin sesión
+      });
+    return () => controlador.abort();
+  }, [token, rol]);
+
+  useEffect(() => {
+    if (!usuario) return;
+    // Solo un socio con la cuota al día se reserva como socio; la edad no está en la cuenta
+    const vigente = usuario.is_socio && usuario.membresia_vigente;
+    setVisitantes((previos) =>
+      previos.map((v, i) =>
+        i === 0
+          ? { ...v, nombre: usuario.nombre, condicion: vigente ? "socio" : "visitante", dni: vigente ? usuario.dni : "" }
+          : v
+      )
+    );
+    setEmailContacto((previo) => previo || usuario.email);
+  }, [usuario]);
+
+  // --- Verificación del DNI de cada socio (el titular con sesión ya viene validado por /auth/me) ---
+  const { resultados, verificar } = useValidacionSocios();
+
+  const esTitularPrecargado = (indice: number) => titularPrecargado && indice === 0;
+
+  const verificarDni = (dni: string) => {
+    if (validarDni(dni) === null) void verificar(dni.trim());
+  };
+
+  // Socio confirmado = tiene el DNI verificado como socio vigente. Mientras no lo esté se cotiza
+  // como visitante, igual que hace el backend con un socio inválido.
+  const esSocioConfirmado = (v: Visitante, indice: number) =>
+    v.condicion === "socio" &&
+    (esTitularPrecargado(indice) || resultados[v.dni.trim()]?.estado === "ok");
 
   // El precio lo calcula el backend: acá solo se pide la cotización cuando cambia la edad
   // o la condición de alguien. Mientras falte alguna edad no hay nada que cotizar.
-  const personasACotizar = personasParaCotizar(visitantes);
+  const personasACotizar = personasParaCotizar(
+    visitantes.map((v, i) => ({
+      edad: v.edad,
+      condicion: esSocioConfirmado(v, i) ? "socio" : "visitante",
+    }))
+  );
   const claveCotizacion = JSON.stringify(personasACotizar);
   const [cotizacion, setCotizacion] = useState<Cotizacion | null>(null);
   const [errorCotizacion, setErrorCotizacion] = useState(false);
@@ -122,10 +205,14 @@ export default function Reservas() {
   }, [claveCotizacion]);
 
   const actualizarVisitante = (index: number, campo: keyof Visitante, valor: string) => {
-    const nuevosVisitantes = [...visitantes];
-    nuevosVisitantes[index][campo] = valor;
-    if (campo === "condicion" && valor === "visitante") nuevosVisitantes[index].dni = "";
-    setVisitantes(nuevosVisitantes);
+    setVisitantes((previos) =>
+      previos.map((v, i) => {
+        if (i !== index) return v;
+        const nuevo = { ...v, [campo]: valor };
+        if (campo === "condicion" && valor === "visitante") nuevo.dni = "";
+        return nuevo;
+      })
+    );
   };
 
   // Valida todo el formulario antes de tocar el backend
@@ -139,27 +226,34 @@ export default function Reservas() {
     if (eCantidad) nuevos.cantidad = eCantidad;
 
     visitantes.forEach((v, i) => {
-      const eNombre = validarNombre(v.nombre);
-      if (eNombre) nuevos[`nombre-${i}`] = eNombre;
+      // Los datos del titular con sesión vienen de su cuenta: el backend los valida
+      if (!esTitularPrecargado(i)) {
+        const eNombre = validarNombre(v.nombre);
+        if (eNombre) nuevos[`nombre-${i}`] = eNombre;
+      }
 
       const eEdad = validarEdad(v.edad);
       if (eEdad) nuevos[`edad-${i}`] = eEdad;
 
-      if (v.condicion === "socio") {
+      if (v.condicion === "socio" && !esTitularPrecargado(i)) {
         const eDni = validarDni(v.dni);
         if (eDni) nuevos[`dni-${i}`] = eDni;
       }
     });
 
+    // Un mismo DNI no puede estar dos veces en la reserva (el backend también lo rechaza)
+    const vistos = new Set<string>();
+    visitantes.forEach((v, i) => {
+      const dni = v.condicion === "socio" ? v.dni.trim() : "";
+      if (!dni || nuevos[`dni-${i}`]) return;
+      if (vistos.has(dni)) nuevos[`dni-${i}`] = "Este DNI ya está cargado en otra persona de la reserva.";
+      else vistos.add(dni);
+    });
+
     setErrores(nuevos);
 
     if (Object.keys(nuevos).length > 0) {
-      // Llevamos al usuario al primer error, aunque esté fuera de pantalla
-      setTimeout(() => {
-        document
-          .querySelector('[role="alert"]')
-          ?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 0);
+      irAlPrimerError();
       return false;
     }
     return true;
@@ -167,10 +261,21 @@ export default function Reservas() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (enviando) return;
 
     if (!validarFormulario()) return;
 
+    setEnviando(true);
     try {
+      // 0. ANTES DE COBRAR: cada socio tiene que tener el DNI verificado con la cuota al día.
+      // El resultado queda a la vista bajo el campo de DNI correspondiente.
+      const sociosAVerificar = visitantes.filter((v, i) => v.condicion === "socio" && !esTitularPrecargado(i));
+      const verificaciones = await Promise.all(sociosAVerificar.map((v) => verificar(v.dni.trim())));
+      if (verificaciones.some((v) => v.estado !== "ok")) {
+        irAlPrimerError();
+        return;
+      }
+
       // 1. PRIMERO: Guardamos la reserva en la base de datos.
       // Si hay sesión mandamos el token y el backend asocia la reserva al usuario;
       // el user_id nunca viaja desde acá.
@@ -230,6 +335,8 @@ export default function Reservas() {
     } catch (error) {
       console.error("Error en el proceso:", error);
       alert("Ocurrió un error de red. Verificá que el servidor backend esté encendido.");
+    } finally {
+      setEnviando(false);
     }
   };
 
@@ -263,70 +370,106 @@ export default function Reservas() {
             </CardContent>
           </Card>
 
-          {visitantes.map((visitante, index) => (
-            <Card key={index} className="border-zinc-200">
-              <CardHeader className="bg-zinc-50 border-b border-zinc-100 pb-4">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Users className="w-5 h-5 text-zinc-500" />
-                  Visitante {index + 1}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Nombre completo</Label>
-                  <Input
-                    required
-                    maxLength={100}
-                    value={visitante.nombre}
-                    aria-invalid={!!errores[`nombre-${index}`]}
-                    onChange={(e) => actualizarVisitante(index, "nombre", limpiarNombre(e.target.value))}
-                  />
-                  <MensajeError texto={errores[`nombre-${index}`]} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Edad</Label>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={3}
-                    required
-                    value={visitante.edad}
-                    aria-invalid={!!errores[`edad-${index}`]}
-                    onChange={(e) => actualizarVisitante(index, "edad", soloDigitos(e.target.value))}
-                  />
-                  <MensajeError texto={errores[`edad-${index}`]} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Condición</Label>
-                  <Select
-                    value={visitante.condicion}
-                    onValueChange={(val) => actualizarVisitante(index, "condicion", val)}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="visitante">Visitante General</SelectItem>
-                      <SelectItem value="socio">Socio del Camping</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {visitante.condicion === "socio" && (
+          {visitantes.map((visitante, index) => {
+            const precargado = esTitularPrecargado(index);
+            const errorDni = errores[`dni-${index}`];
+            const verificacion =
+              visitante.condicion === "socio" && !precargado
+                ? resultados[visitante.dni.trim()]
+                : undefined;
+
+            return (
+              <Card key={index} className="border-zinc-200">
+                <CardHeader className="bg-zinc-50 border-b border-zinc-100 pb-4">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="w-5 h-5 text-zinc-500" />
+                    Visitante {index + 1}
+                    {precargado && <span className="text-sm font-normal text-zinc-500">(titular)</span>}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {precargado ? (
+                    // Datos de la cuenta: se muestran, no se vuelven a pedir
+                    <div className="space-y-1 md:col-span-2">
+                      <p className="font-medium text-zinc-900">{visitante.nombre}</p>
+                      <p className="text-sm text-zinc-600">
+                        {visitante.condicion === "socio"
+                          ? `Socio del Camping · DNI ${visitante.dni}`
+                          : "Visitante General"}
+                      </p>
+                      {cuotaVencidaTitular && (
+                        <p role="status" className="text-sm text-amber-700">
+                          Tu cuota está vencida, por eso esta reserva se cotiza como visitante general.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>Nombre completo</Label>
+                      <Input
+                        required
+                        maxLength={100}
+                        value={visitante.nombre}
+                        aria-invalid={!!errores[`nombre-${index}`]}
+                        onChange={(e) => actualizarVisitante(index, "nombre", limpiarNombre(e.target.value))}
+                      />
+                      <MensajeError texto={errores[`nombre-${index}`]} />
+                    </div>
+                  )}
                   <div className="space-y-2">
-                    <Label>DNI (Obligatorio para socios)</Label>
+                    <Label>Edad</Label>
                     <Input
                       type="text"
                       inputMode="numeric"
-                      maxLength={8}
+                      maxLength={3}
                       required
-                      value={visitante.dni}
-                      aria-invalid={!!errores[`dni-${index}`]}
-                      onChange={(e) => actualizarVisitante(index, "dni", soloDigitos(e.target.value))}
+                      value={visitante.edad}
+                      aria-invalid={!!errores[`edad-${index}`]}
+                      onChange={(e) => actualizarVisitante(index, "edad", soloDigitos(e.target.value))}
                     />
-                    <MensajeError texto={errores[`dni-${index}`]} />
+                    <MensajeError texto={errores[`edad-${index}`]} />
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  {!precargado && (
+                    <div className="space-y-2">
+                      <Label>Condición</Label>
+                      <Select
+                        value={visitante.condicion}
+                        onValueChange={(val) => actualizarVisitante(index, "condicion", val)}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="visitante">Visitante General</SelectItem>
+                          <SelectItem value="socio">Socio del Camping</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {visitante.condicion === "socio" && !precargado && (
+                    <div className="space-y-2">
+                      <Label>DNI (Obligatorio para socios)</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={8}
+                        required
+                        value={visitante.dni}
+                        aria-invalid={!!errorDni || verificacion?.estado === "rechazado" || verificacion?.estado === "error"}
+                        onChange={(e) => {
+                          const dni = soloDigitos(e.target.value);
+                          actualizarVisitante(index, "dni", dni);
+                          // Con 8 dígitos el DNI está completo; los de 7 se verifican al salir del campo
+                          if (dni.length === 8) verificarDni(dni);
+                        }}
+                        onBlur={() => verificarDni(visitante.dni)}
+                      />
+                      <MensajeError texto={errorDni} />
+                      {!errorDni && <EstadoDni verificacion={verificacion} />}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {/* COLUMNA DERECHA: Resumen y Pago */}
@@ -384,7 +527,11 @@ export default function Reservas() {
               )}
             </CardContent>
             <CardFooter>
-              <Button type="submit" className="w-full bg-[#009EE3] hover:bg-[#0086c2] text-white h-14 text-lg font-semibold flex gap-2">
+              <Button
+                type="submit"
+                disabled={enviando}
+                className="w-full bg-[#009EE3] hover:bg-[#0086c2] text-white h-14 text-lg font-semibold flex gap-2"
+              >
                 <CreditCard className="w-5 h-5" />
                 Pagar con Mercado Pago
               </Button>
