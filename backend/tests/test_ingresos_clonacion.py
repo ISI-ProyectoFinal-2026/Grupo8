@@ -18,6 +18,9 @@ from models.reserva import EstadoPagoEnum, EstadoReservaEnum, Reserva
 from models.resolucion_alerta import ResolucionAlerta
 from models.user import RoleEnum, User
 from services.payment_service import payment_service
+from datetime import date, datetime, timedelta, timezone
+from sqlalchemy import inspect
+from core.tiempo import ZONA_NEGOCIO
 
 Base.metadata.create_all(bind=engine)
 
@@ -557,3 +560,84 @@ def test_marcar_alerta_dos_veces_conserva_el_primer_estado_guardado():
     reserva.marcar_alerta_clonacion()
 
     assert reserva.estado_antes_alerta == EstadoReservaEnum.CONFIRMADA
+    
+# ---------- Hora real del escaneo (16.4) ----------
+
+def _hora_guardada(jti: str) -> datetime:
+    db = SessionLocal()
+    try:
+        return db.query(IngresoFisico.fecha_hora_ingreso).filter(IngresoFisico.jti == jti).scalar()
+    finally:
+        db.close()
+
+
+def test_la_columna_de_la_hora_de_ingreso_guarda_zona_horaria():
+    # Si falla, falta correr alembic upgrade head
+    columnas = inspect(engine).get_columns("ingresos_fisicos")
+    columna = next(c for c in columnas if c["name"] == "fecha_hora_ingreso")
+
+    assert columna["type"].timezone is True
+
+
+def test_un_escaneo_de_hace_3_horas_conserva_su_hora_original(tokens, crear_reserva):
+    reserva_id = crear_reserva()
+    escaneo = datetime.now(timezone.utc) - timedelta(hours=3)
+    item = _item_qr(reserva_id)
+    item["fecha_escaneo"] = escaneo.isoformat()
+
+    data = _sincronizar(tokens, [item])  # llega ahora, horas después del escaneo
+
+    assert data["procesados"] == 1
+    guardada = _hora_guardada(str(item["jti"]))
+    assert guardada.utcoffset() is not None
+    assert guardada == escaneo  # la misma hora, no la de llegada
+    assert datetime.now(timezone.utc) - guardada >= timedelta(hours=3)
+
+
+@pytest.mark.parametrize(
+    "fecha_enviada",
+    [
+        "2026-10-25T14:30:00.000Z",       # como lo manda toISOString() del navegador
+        "2026-10-25T14:30:00+00:00",
+        "2026-10-25T11:30:00-03:00",      # la misma hora, escrita en Buenos Aires
+    ],
+)
+def test_el_mismo_instante_se_guarda_igual_sin_importar_como_llegue(fecha_enviada, tokens, crear_reserva):
+    item = _item_qr(crear_reserva())
+    item["fecha_escaneo"] = fecha_enviada
+
+    _sincronizar(tokens, [item])
+
+    guardada = _hora_guardada(str(item["jti"]))
+    assert guardada == datetime(2026, 10, 25, 14, 30, tzinfo=timezone.utc)
+    assert guardada.astimezone(ZONA_NEGOCIO).hour == 11
+
+
+def test_una_fecha_sin_zona_horaria_se_rechaza_y_no_se_guarda(tokens, crear_reserva):
+    item = _item_qr(crear_reserva())
+    item["fecha_escaneo"] = "2026-10-25T14:30:00"
+
+    data = _sincronizar(tokens, [item])
+
+    assert data["procesados"] == 0
+    assert data["sincronizados_jti"] == []
+    assert len(data["errores"]) == 1
+    assert "zona horaria" in data["errores"][0]["motivo"]
+    assert _contar_ingresos(str(item["jti"])) == 0
+
+
+def test_el_lote_se_procesa_en_el_orden_recibido_y_conserva_cada_hora(tokens, crear_reserva):
+    base = datetime.now(timezone.utc) - timedelta(hours=5)
+    minutos = (0, 7, 19)  # orden cronológico, como lo manda la cola de la PWA
+    items = []
+    for m in minutos:
+        item = _item_qr(crear_reserva())
+        item["fecha_escaneo"] = (base + timedelta(minutes=m)).isoformat()
+        items.append(item)
+
+    data = _sincronizar(tokens, items)
+
+    assert data["sincronizados_jti"] == [i["jti"] for i in items]
+    horas = [_hora_guardada(str(i["jti"])) for i in items]
+    assert horas == [base + timedelta(minutes=m) for m in minutos]
+    assert horas == sorted(horas)
