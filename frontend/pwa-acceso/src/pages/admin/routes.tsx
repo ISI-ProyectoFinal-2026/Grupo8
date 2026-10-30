@@ -12,6 +12,7 @@ import Incidentes from './Incidentes';
 import Inicio from './Inicio';
 import Ocupacion from './Ocupacion';
 import Socios from './Socios';
+import { Alertas } from './Alertas';
 
 export interface AdminRoute {
   /** Ruta relativa a /admin. Cadena vacía = inicio del panel. */
@@ -48,5 +49,11 @@ export const adminRoutes: AdminRoute[] = [
     titulo: 'Ocupación',
     icono: Gauge,
     element: <Ocupacion />,
+  },
+  {
+    path:'alertas',
+    titulo: 'Alertas',
+    icono: ShieldAlert,
+    element: <Alertas />,
   },
 ];

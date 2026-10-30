@@ -79,6 +79,7 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
         '/admin/descuentos',
         '/admin/incidentes',
         '/admin/ocupacion',
+        '/admin/alertas',
       ]);
     });
 
