@@ -19,7 +19,7 @@ Base.metadata.create_all(bind=engine)
 client = TestClient(app)
 
 # Rutas reales que ya están restringidas al administrador
-RUTAS_ADMIN = ["/reservas/", "/admin/descuentos", "/admin/alertas-clonacion"]
+RUTAS_ADMIN = ["/reservas/", "/admin/descuentos", "/api/v1/admin/alertas"]
 
 # La PWA del guardia sincroniza sus ingresos acá: solo acepta el rol SEGURIDAD
 URL_BULK_SYNC = "/api/v1/ingresos/bulk-sync"

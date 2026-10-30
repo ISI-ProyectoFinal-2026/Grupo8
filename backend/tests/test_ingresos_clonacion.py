@@ -15,14 +15,16 @@ from main import app
 from models.conflictos import ConflictosSincronizacion
 from models.ingreso_fisico import IngresoFisico
 from models.reserva import EstadoPagoEnum, EstadoReservaEnum, Reserva
+from models.resolucion_alerta import ResolucionAlerta
 from models.user import RoleEnum, User
+from services.payment_service import payment_service
 
 Base.metadata.create_all(bind=engine)
 
 client = TestClient(app)
 
 URL_SYNC = "/api/v1/ingresos/bulk-sync"
-URL_ALERTAS = "/admin/alertas-clonacion"
+URL_ALERTAS = "/api/v1/admin/alertas"
 
 
 @pytest.fixture(autouse=True)
@@ -119,6 +121,10 @@ def crear_reserva(camping_de_prueba: str) -> Iterator[Callable[..., str]]:
             db.query(ConflictosSincronizacion).filter(
                 ConflictosSincronizacion.reserva_id == reserva_id
             ).delete(synchronize_session=False)
+            # Las resoluciones de alertas de esta reserva (las crean los tests de la 16.3)
+            db.query(ResolucionAlerta).filter(
+                ResolucionAlerta.reserva_id == reserva_id
+            ).delete(synchronize_session=False)
             # Primero los ingresos: Postgres no deja borrar una reserva que todavía tiene ingresos
             db.query(IngresoFisico).filter(
                 IngresoFisico.reserva_id == reserva_id
@@ -134,7 +140,6 @@ def _item_qr(reserva_id: str, jti: Optional[str] = None, dispositivo: str = "dis
     return {
         "tipo_ingreso": "QR",
         "jti": jti or str(uuid.uuid4()),
-        "dispositivo_id": "dispositivo-test",
         "reserva_id": reserva_id,
         "fecha_escaneo": datetime.now(timezone.utc).isoformat(),
         "dispositivo_id": dispositivo,
@@ -335,9 +340,6 @@ def test_una_reserva_en_alerta_no_se_confirma_ni_se_cancela(nuevo):
 
     assert reserva.cambiar_estado_reserva(nuevo) is False
     assert reserva.estado_reserva == EstadoReservaEnum.ALERTA_CLONACION
-    
-    
-from services.payment_service import payment_service
 
 
 def test_reconcile_no_pisa_la_alerta(monkeypatch, crear_reserva):
@@ -370,3 +372,188 @@ def test_reconcile_no_pisa_la_alerta(monkeypatch, crear_reserva):
         assert reserva.estado_reserva == EstadoReservaEnum.ALERTA_CLONACION
     finally:
         db.close()
+
+
+# ---------- Resolver incidentes (16.3) ----------
+
+def _id_de(token: str) -> uuid.UUID:
+    return uuid.UUID(jwt.decode(token, settings.AUTH_SECRET_KEY, algorithms=["HS256"])["sub"])
+
+
+def _crear_alerta(tokens: Dict[str, str], reserva_id: str, dispositivo_clon: str = "dispositivo-B") -> None:
+    jti = str(uuid.uuid4())
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-A")])
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, dispositivo_clon)])
+
+
+def _resolver(reserva_id: str, token: str, nota: Optional[str] = None):
+    return client.post(
+        f"{URL_ALERTAS}/{reserva_id}/resolver",
+        json={"nota": nota},
+        headers=_headers(token),
+    )
+
+
+def _leer_reserva(reserva_id: str) -> Tuple[EstadoReservaEnum, Optional[EstadoReservaEnum], Optional[datetime]]:
+    db = SessionLocal()
+    try:
+        r = db.query(Reserva).filter(Reserva.id == uuid.UUID(reserva_id)).one()
+        return r.estado_reserva, r.estado_antes_alerta, r.fecha_alerta_clonacion
+    finally:
+        db.close()
+
+
+def _resoluciones(reserva_id: str) -> List[ResolucionAlerta]:
+    db = SessionLocal()
+    try:
+        return db.query(ResolucionAlerta).filter(
+            ResolucionAlerta.reserva_id == uuid.UUID(reserva_id)
+        ).all()
+    finally:
+        db.close()
+
+
+def test_la_alerta_guarda_el_estado_anterior_de_la_reserva(tokens, crear_reserva):
+    reserva_id = crear_reserva()
+
+    _crear_alerta(tokens, reserva_id)
+
+    estado, antes, _ = _leer_reserva(reserva_id)
+    assert estado == EstadoReservaEnum.ALERTA_CLONACION
+    assert antes == EstadoReservaEnum.CONFIRMADA
+
+
+def test_un_segundo_clon_no_pisa_el_estado_anterior(tokens, crear_reserva):
+    reserva_id = crear_reserva()
+    jti = str(uuid.uuid4())
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-A")])
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-B")])
+
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-C")])
+
+    assert _leer_reserva(reserva_id)[1] == EstadoReservaEnum.CONFIRMADA
+
+
+def test_admin_resuelve_y_la_reserva_vuelve_a_su_estado(tokens, crear_reserva):
+    reserva_id = crear_reserva()
+    _crear_alerta(tokens, reserva_id)
+
+    response = _resolver(reserva_id, tokens["ADMIN"], "Se verificó en la puerta")
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["reserva_id"] == reserva_id
+    assert data["resuelto_por_id"] == str(_id_de(tokens["ADMIN"]))
+    assert data["fecha_resolucion"] is not None
+
+    estado, antes, fecha = _leer_reserva(reserva_id)
+    assert estado == EstadoReservaEnum.CONFIRMADA
+    assert antes is None and fecha is None
+
+    # Ya no aparece en el listado
+    listado = client.get(URL_ALERTAS, headers=_headers(tokens["ADMIN"])).json()
+    assert reserva_id not in [a["reserva_id"] for a in listado]
+
+    # Y queda registrado quién la resolvió y cuándo
+    filas = _resoluciones(reserva_id)
+    assert len(filas) == 1
+    assert filas[0].resuelto_por_id == _id_de(tokens["ADMIN"])
+    assert filas[0].estado_restaurado == EstadoReservaEnum.CONFIRMADA
+    assert filas[0].fecha_resolucion is not None
+    assert filas[0].fecha_deteccion is not None
+    assert filas[0].nota == "Se verificó en la puerta"
+
+
+def test_resolver_dos_veces_devuelve_409(tokens, crear_reserva):
+    reserva_id = crear_reserva()
+    _crear_alerta(tokens, reserva_id)
+    assert _resolver(reserva_id, tokens["ADMIN"]).status_code == 200
+
+    assert _resolver(reserva_id, tokens["ADMIN"]).status_code == 409
+    assert len(_resoluciones(reserva_id)) == 1
+
+
+def test_resolver_una_reserva_que_no_esta_en_alerta_devuelve_409(tokens, crear_reserva):
+    reserva_id = crear_reserva()
+
+    assert _resolver(reserva_id, tokens["ADMIN"]).status_code == 409
+    assert _resoluciones(reserva_id) == []
+
+
+def test_resolver_una_reserva_inexistente_devuelve_404(tokens):
+    assert _resolver(str(uuid.uuid4()), tokens["ADMIN"]).status_code == 404
+
+
+def test_resolver_sin_token_devuelve_401():
+    response = client.post(f"{URL_ALERTAS}/{uuid.uuid4()}/resolver", json={})
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("rol", ["CLIENTE", "SEGURIDAD"])
+def test_resolver_con_roles_que_no_son_admin_devuelve_403_y_no_cambia_nada(rol, tokens, crear_reserva):
+    reserva_id = crear_reserva()
+    _crear_alerta(tokens, reserva_id)
+
+    assert _resolver(reserva_id, tokens[rol]).status_code == 403
+
+    assert _leer_reserva(reserva_id)[0] == EstadoReservaEnum.ALERTA_CLONACION
+    assert _resoluciones(reserva_id) == []
+
+
+def test_una_reserva_resuelta_puede_volver_a_entrar_en_alerta_y_el_historial_se_conserva(tokens, crear_reserva):
+    reserva_id = crear_reserva()
+    jti = str(uuid.uuid4())
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-A")])
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-B")])
+    assert _resolver(reserva_id, tokens["ADMIN"]).status_code == 200
+
+    _sincronizar(tokens, [_item_qr(reserva_id, jti, "dispositivo-C")])
+
+    estado, antes, fecha = _leer_reserva(reserva_id)
+    assert estado == EstadoReservaEnum.ALERTA_CLONACION
+    assert antes == EstadoReservaEnum.CONFIRMADA
+    assert fecha is not None  # fecha nueva, la del segundo incidente
+    assert _resolver(reserva_id, tokens["ADMIN"]).status_code == 200
+    assert len(_resoluciones(reserva_id)) == 2
+
+
+# ---------- Reglas del modelo (sin base de datos) ----------
+
+@pytest.mark.parametrize(
+    "antes, pago, esperado",
+    [
+        (None, EstadoPagoEnum.PAGADO, EstadoReservaEnum.CONFIRMADA),
+        (None, EstadoPagoEnum.PENDIENTE, EstadoReservaEnum.PENDIENTE),
+        (EstadoReservaEnum.CONFIRMADA, EstadoPagoEnum.PAGADO, EstadoReservaEnum.CONFIRMADA),
+        (EstadoReservaEnum.PENDIENTE, EstadoPagoEnum.PENDIENTE, EstadoReservaEnum.PENDIENTE),
+        # el pago entró mientras la reserva estaba en alerta
+        (EstadoReservaEnum.PENDIENTE, EstadoPagoEnum.PAGADO, EstadoReservaEnum.CONFIRMADA),
+    ],
+)
+def test_resolver_restaura_el_estado_segun_lo_guardado_y_el_pago(antes, pago, esperado):
+    reserva = Reserva(
+        estado_reserva=EstadoReservaEnum.ALERTA_CLONACION,
+        estado_antes_alerta=antes,
+        estado_pago=pago,
+    )
+
+    assert reserva.resolver_alerta_clonacion() == esperado
+    assert reserva.estado_reserva == esperado
+    assert reserva.estado_antes_alerta is None
+    assert reserva.fecha_alerta_clonacion is None
+
+
+def test_resolver_una_reserva_sin_alerta_levanta_error():
+    reserva = Reserva(estado_reserva=EstadoReservaEnum.CONFIRMADA)
+
+    with pytest.raises(ValueError):
+        reserva.resolver_alerta_clonacion()
+
+
+def test_marcar_alerta_dos_veces_conserva_el_primer_estado_guardado():
+    reserva = Reserva(estado_reserva=EstadoReservaEnum.CONFIRMADA)
+
+    reserva.marcar_alerta_clonacion()
+    reserva.marcar_alerta_clonacion()
+
+    assert reserva.estado_antes_alerta == EstadoReservaEnum.CONFIRMADA

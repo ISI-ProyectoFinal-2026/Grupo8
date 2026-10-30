@@ -56,6 +56,8 @@ class Reserva(Base):
 
     # Momento en que se detectó el primer QR clonado de esta reserva
     fecha_alerta_clonacion = Column(DateTime, nullable=True)
+    # Estado que tenía la reserva antes de pasar a alerta, para poder devolverla al resolver
+    estado_antes_alerta = Column(Enum(EstadoReservaEnum), nullable=True)
     # Identificador único del QR
     jwt_jti = Column(String, unique=True, index=True, nullable=True)
 
@@ -87,10 +89,35 @@ class Reserva(Base):
         return True
 
     def marcar_alerta_clonacion(self) -> None:
-        # Es la única transición hacia la alerta. La fecha queda con la primera detección.
-        self.estado_reserva = EstadoReservaEnum.ALERTA_CLONACION
+        # Es la única transición hacia la alerta
+        if not self.en_alerta:
+            # El estado de antes se guarda solo la primera vez: un segundo clon no lo pisa
+            self.estado_antes_alerta = self.estado_reserva
+            self.estado_reserva = EstadoReservaEnum.ALERTA_CLONACION
         if self.fecha_alerta_clonacion is None:
             self.fecha_alerta_clonacion = datetime.now(timezone.utc).replace(tzinfo=None)
+            
+    def resolver_alerta_clonacion(self) -> EstadoReservaEnum:
+        """Saca la reserva de la alerta y devuelve el estado al que volvió.
+        El pago puede haber entrado mientras estaba en alerta, así que el estado
+        guardado se ajusta con lo que dice el pago hoy."""
+        if not self.en_alerta:
+            raise ValueError("La reserva no está en alerta de clonación.")
+
+        estado = self.estado_antes_alerta
+        if estado is None or estado == EstadoReservaEnum.ALERTA_CLONACION:
+            estado = (
+                EstadoReservaEnum.CONFIRMADA
+                if self.estado_pago == EstadoPagoEnum.PAGADO
+                else EstadoReservaEnum.PENDIENTE
+            )
+        elif estado == EstadoReservaEnum.PENDIENTE and self.estado_pago == EstadoPagoEnum.PAGADO:
+            estado = EstadoReservaEnum.CONFIRMADA
+
+        self.estado_reserva = estado
+        self.estado_antes_alerta = None
+        self.fecha_alerta_clonacion = None
+        return estado
 
     def marcar_como_pagada(self) -> None:
         # El pago siempre se registra (la plata ya entró), pero el estado de la reserva
