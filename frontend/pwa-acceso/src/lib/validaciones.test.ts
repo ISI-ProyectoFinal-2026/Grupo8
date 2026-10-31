@@ -3,6 +3,7 @@ import {
   MAX_NOCHES,
   MAX_PERSONAS,
   validarCantidadPersonas,
+  validarConfirmacionEmail,
   validarDni,
   validarEdad,
   validarEmail,
@@ -34,6 +35,33 @@ describe('validarEmail', () => {
       expect(validarEmail(v)).not.toBeNull();
     }
   );
+});
+
+describe('validarConfirmacionEmail', () => {
+  it('acepta un email que coincide', () => {
+    expect(validarConfirmacionEmail('ana@test.com', 'ana@test.com')).toBeNull();
+  });
+  it('rechaza un email que no coincide', () => {
+    expect(validarConfirmacionEmail('ana@test.com', 'anna@test.com')).toMatch(/no coinciden/i);
+    expect(validarConfirmacionEmail('ana@test.com', 'ana@test.co')).toMatch(/no coinciden/i);
+  });
+  it('ignora las mayúsculas', () => {
+    expect(validarConfirmacionEmail('ana@test.com', 'ANA@Test.COM')).toBeNull();
+    expect(validarConfirmacionEmail('Ana.Perez@Correo.com', 'ana.perez@correo.com')).toBeNull();
+  });
+  it('ignora los espacios de los bordes', () => {
+    expect(validarConfirmacionEmail('ana@test.com', '  ana@test.com ')).toBeNull();
+    expect(validarConfirmacionEmail(' ana@test.com ', 'ana@test.com')).toBeNull();
+  });
+  it('no ignora los espacios dentro del email', () => {
+    expect(validarConfirmacionEmail('ana@test.com', 'ana @test.com')).toMatch(/no coinciden/i);
+  });
+  it.each(['', '   '])('exige confirmar cuando el campo está vacío ("%s")', (v) => {
+    expect(validarConfirmacionEmail('ana@test.com', v)).toMatch(/confirmá/i);
+  });
+  it('si ambos están vacíos también pide confirmar', () => {
+    expect(validarConfirmacionEmail('', '')).not.toBeNull();
+  });
 });
 
 describe('validarNombre', () => {

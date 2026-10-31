@@ -25,6 +25,16 @@ export function validarEmail(valor: string): string | null {
   return null;
 }
 
+// Para comparar emails se ignoran los espacios de los bordes y las mayúsculas
+const normalizarEmail = (valor: string) => valor.trim().toLowerCase();
+
+export function validarConfirmacionEmail(email: string, confirmacion: string): string | null {
+  const c = normalizarEmail(confirmacion);
+  if (!c) return 'Confirmá tu email.';
+  if (c !== normalizarEmail(email)) return 'Los emails no coinciden.';
+  return null;
+}
+
 export function validarNombre(valor: string): string | null {
   const v = valor.trim();
   if (!v) return 'El nombre es obligatorio.';
