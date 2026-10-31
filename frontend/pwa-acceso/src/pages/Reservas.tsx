@@ -19,6 +19,7 @@ import {
   limpiarNombre,
   soloDigitos,
   validarCantidadPersonas,
+  validarConfirmacionEmail,
   validarDni,
   validarEdad,
   validarEmail,
@@ -128,6 +129,7 @@ export default function Reservas() {
   );
 
   const [emailContacto, setEmailContacto] = useState("");
+  const [confirmacionEmail, setConfirmacionEmail] = useState("");
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [enviando, setEnviando] = useState(false);
 
@@ -160,6 +162,8 @@ export default function Reservas() {
       )
     );
     setEmailContacto((previo) => previo || usuario.email);
+    // El email de la cuenta no se tipea, así que no hace falta volver a confirmarlo
+    setConfirmacionEmail((previo) => previo || usuario.email);
   }, [usuario]);
 
   // --- Verificación del DNI de cada socio (el titular con sesión ya viene validado por /auth/me) ---
@@ -221,6 +225,9 @@ export default function Reservas() {
 
     const eEmail = validarEmail(emailContacto);
     if (eEmail) nuevos.email = eEmail;
+
+    const eConfirmacion = validarConfirmacionEmail(emailContacto, confirmacionEmail);
+    if (eConfirmacion) nuevos.confirmacionEmail = eConfirmacion;
 
     const eCantidad = validarCantidadPersonas(String(cantidadPersonas));
     if (eCantidad) nuevos.cantidad = eCantidad;
@@ -367,6 +374,22 @@ export default function Reservas() {
                 onChange={(e) => setEmailContacto(e.target.value)}
               />
               <MensajeError texto={errores.email} />
+              
+              <div className="mt-4 space-y-2">
+                <Label htmlFor="email-confirmacion">Confirmar correo electrónico</Label>
+                <Input
+                  id="email-confirmacion"
+                  type="email"
+                  required
+                  placeholder="Repetí tu correo"
+                  value={confirmacionEmail}
+                  aria-invalid={!!errores.confirmacionEmail}
+                  // Hay que escribirlo: si se pudiera pegar, la confirmación no serviría para detectar errores de tipeo
+                  onPaste={(e) => e.preventDefault()}
+                  onChange={(e) => setConfirmacionEmail(e.target.value)}
+                />
+                <MensajeError texto={errores.confirmacionEmail} />
+              </div>
             </CardContent>
           </Card>
 

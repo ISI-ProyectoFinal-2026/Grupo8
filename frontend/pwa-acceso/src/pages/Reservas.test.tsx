@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, TOKEN_KEY } from '@/context/AuthContext';
@@ -164,6 +164,16 @@ function camposDeNombre(contenedor: HTMLElement) {
   return Array.from(contenedor.querySelectorAll<HTMLInputElement>('input[maxlength="100"]'));
 }
 
+function campoConfirmacion(contenedor: HTMLElement) {
+  return contenedor.querySelector<HTMLInputElement>('#email-confirmacion')!;
+}
+
+// Completa el email de contacto y su confirmación
+function completarEmail(contenedor: HTMLElement, email = 'ana@test.com', confirmacion = email) {
+  fireEvent.change(contenedor.querySelector('input[type="email"]')!, { target: { value: email } });
+  fireEvent.change(campoConfirmacion(contenedor), { target: { value: confirmacion } });
+}
+
 function cargarEdades(contenedor: HTMLElement, edades: string[]) {
   camposDeEdad(contenedor).forEach((campo, i) =>
     fireEvent.change(campo, { target: { value: edades[i] } })
@@ -195,9 +205,7 @@ async function reservar(escenario: Escenario = {}) {
   const fetchFalso = simularBackend(escenario);
   const { container } = mostrarReservas();
 
-  fireEvent.change(container.querySelector('input[type="email"]')!, {
-    target: { value: 'ana@test.com' },
-  });
+  completarEmail(container);
   const nombres = camposDeNombre(container);
   fireEvent.change(nombres[0], { target: { value: 'Ana Pérez' } });
   fireEvent.change(nombres[1], { target: { value: 'Luis Pérez' } });
@@ -399,9 +407,7 @@ describe('Reservas: verificación del DNI de socios', () => {
     const fetchFalso = simularBackend({ socios: { [DNI_SOCIO]: rechazo(motivo) } });
     const { container } = mostrarReservas();
 
-    fireEvent.change(container.querySelector('input[type="email"]')!, {
-      target: { value: 'ana@test.com' },
-    });
+    completarEmail(container);
     fireEvent.change(camposDeNombre(container)[0], { target: { value: 'Ana Pérez' } });
     fireEvent.change(camposDeNombre(container)[1], { target: { value: 'Luis Pérez' } });
     cargarEdades(container, ['34', '8']);
@@ -416,9 +422,7 @@ describe('Reservas: verificación del DNI de socios', () => {
     const fetchFalso = simularBackend({ socios: { [DNI_SOCIO]: 'error' } });
     const { container } = mostrarReservas();
 
-    fireEvent.change(container.querySelector('input[type="email"]')!, {
-      target: { value: 'ana@test.com' },
-    });
+    completarEmail(container);
     fireEvent.change(camposDeNombre(container)[0], { target: { value: 'Ana Pérez' } });
     fireEvent.change(camposDeNombre(container)[1], { target: { value: 'Luis Pérez' } });
     cargarEdades(container, ['34', '8']);
@@ -435,9 +439,7 @@ describe('Reservas: verificación del DNI de socios', () => {
     const fetchFalso = simularBackend({ socios: { [DNI_SOCIO]: SOCIO_VIGENTE } });
     const { container } = mostrarReservas();
 
-    fireEvent.change(container.querySelector('input[type="email"]')!, {
-      target: { value: 'ana@test.com' },
-    });
+    completarEmail(container);
     fireEvent.change(camposDeNombre(container)[0], { target: { value: 'Ana Pérez' } });
     fireEvent.change(camposDeNombre(container)[1], { target: { value: 'Luis Pérez' } });
     cargarEdades(container, ['34', '8']);
@@ -455,9 +457,7 @@ describe('Reservas: verificación del DNI de socios', () => {
     const fetchFalso = simularBackend({ socios: { [DNI_SOCIO]: SOCIO_VIGENTE } });
     const { container } = mostrarReservas();
 
-    fireEvent.change(container.querySelector('input[type="email"]')!, {
-      target: { value: 'ana@test.com' },
-    });
+    completarEmail(container);
     fireEvent.change(camposDeNombre(container)[0], { target: { value: 'Ana Pérez' } });
     fireEvent.change(camposDeNombre(container)[1], { target: { value: 'Luis Pérez' } });
     cargarEdades(container, ['34', '36']);
@@ -489,6 +489,8 @@ describe('Reservas: datos del socio con sesión', () => {
     expect((container.querySelector('input[type="email"]') as HTMLInputElement).value).toBe(
       'ana@test.com'
     );
+    // El email de la cuenta no se tipea: la confirmación ya viene completa
+    expect(campoConfirmacion(container).value).toBe('ana@test.com');
     // De las dos personas solo la segunda pide nombre; el DNI no se pide a nadie
     expect(camposDeNombre(container)).toHaveLength(1);
     expect(camposDeDni(container)).toHaveLength(0);
@@ -564,5 +566,108 @@ describe('Reservas: datos del socio con sesión', () => {
     expect((container.querySelector('input[type="email"]') as HTMLInputElement).value).toBe(
       'ana@test.com'
     );
+  });
+});
+
+describe('Reservas: confirmación del email', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  // Completa nombres y edades; el email lo carga cada test
+  function completarPersonas(contenedor: HTMLElement) {
+    fireEvent.change(camposDeNombre(contenedor)[0], { target: { value: 'Ana Pérez' } });
+    fireEvent.change(camposDeNombre(contenedor)[1], { target: { value: 'Luis Pérez' } });
+    cargarEdades(contenedor, ['34', '8']);
+  }
+
+  it('muestra el campo "Confirmar correo electrónico" debajo del email de contacto', () => {
+    simularBackend();
+    const { container } = mostrarReservas();
+
+    const confirmacion = screen.getByLabelText(/confirmar correo electrónico/i);
+    const email = container.querySelector('input[type="email"]')!;
+
+    expect(confirmacion).toBe(campoConfirmacion(container));
+    // DOM: el campo de confirmación viene después del email
+    expect(email.compareDocumentPosition(confirmacion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('bloquea el pegado en el campo de confirmación', () => {
+    simularBackend();
+    const { container } = mostrarReservas();
+
+    const evento = createEvent.paste(campoConfirmacion(container));
+    fireEvent(campoConfirmacion(container), evento);
+
+    expect(evento.defaultPrevented).toBe(true);
+  });
+
+  it('no bloquea el pegado en el email de contacto', () => {
+    simularBackend();
+    const { container } = mostrarReservas();
+
+    const principal = container.querySelector('input[type="email"]')!;
+    const evento = createEvent.paste(principal);
+    fireEvent(principal, evento);
+
+    expect(evento.defaultPrevented).toBe(false);
+  });
+
+  it('no deja reservar si los emails no coinciden y avisa bajo el campo', async () => {
+    const fetchFalso = simularBackend();
+    const { container } = mostrarReservas();
+
+    completarPersonas(container);
+    completarEmail(container, 'ana@test.com', 'anaa@test.com');
+    apretarPagar();
+
+    await waitFor(() => expect(screen.getByText(/los emails no coinciden/i)).toBeTruthy());
+    expect(llamadasA(fetchFalso, '/reservas/')).toHaveLength(0);
+  });
+
+  it('no deja reservar si falta confirmar el email', async () => {
+    const fetchFalso = simularBackend();
+    const { container } = mostrarReservas();
+
+    completarPersonas(container);
+    fireEvent.change(container.querySelector('input[type="email"]')!, {
+      target: { value: 'ana@test.com' },
+    });
+    apretarPagar();
+
+    await waitFor(() => expect(screen.getByText(/confirmá tu email/i)).toBeTruthy());
+    expect(llamadasA(fetchFalso, '/reservas/')).toHaveLength(0);
+  });
+
+  it('si se cambia el email después de confirmarlo, vuelve a exigir la confirmación', async () => {
+    const fetchFalso = simularBackend();
+    const { container } = mostrarReservas();
+
+    completarPersonas(container);
+    completarEmail(container);
+    fireEvent.change(container.querySelector('input[type="email"]')!, {
+      target: { value: 'otro@test.com' },
+    });
+    apretarPagar();
+
+    await waitFor(() => expect(screen.getByText(/los emails no coinciden/i)).toBeTruthy());
+    expect(llamadasA(fetchFalso, '/reservas/')).toHaveLength(0);
+  });
+
+  it('acepta la confirmación aunque cambien las mayúsculas o haya espacios, y manda un solo email', async () => {
+    const fetchFalso = simularBackend();
+    const { container } = mostrarReservas();
+
+    completarPersonas(container);
+    completarEmail(container, 'ana@test.com', '  ANA@Test.com ');
+    apretarPagar();
+
+    await waitFor(() => expect(llamadasA(fetchFalso, '/reservas/')).toHaveLength(1));
+    const cuerpo = cuerpoDeLaReserva(fetchFalso);
+    expect(cuerpo.email).toBe('ana@test.com');
+    expect(cuerpo).not.toHaveProperty('confirmacion_email');
+    expect(cuerpo).not.toHaveProperty('confirmacionEmail');
   });
 });
