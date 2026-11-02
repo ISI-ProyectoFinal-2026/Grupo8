@@ -9,6 +9,7 @@ from models.user import User
 from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
 from services.camping_service import obtener_o_crear_camping
 from models.ingreso_fisico import IngresoFisico, TipoIngresoEnum
+from models.conflictos import ConflictosSincronizacion
 from decimal import Decimal
 from typing import Optional
 from sqlalchemy import func
@@ -25,16 +26,24 @@ pytestmark = pytest.mark.usefixtures("como_guardia")
 
 
 _creados: list[tuple[uuid.UUID, uuid.UUID]] = []  # (reserva_id, usuario_id)
+# Los ingresos manuales no tienen reserva: se borran por jti
+_jtis_manuales: list[str] = []
 
 @pytest.fixture(autouse=True, scope="module")
 def _limpiar_reservas_de_prueba():
     yield
+    reservas = [reserva_id for reserva_id, _ in _creados]
+    usuarios = [usuario_id for _, usuario_id in _creados]
     db = SessionLocal()
     try:
-        for reserva_id, usuario_id in _creados:
-            db.query(IngresoFisico).filter(IngresoFisico.reserva_id == reserva_id).delete(synchronize_session=False)
-            db.query(Reserva).filter(Reserva.id == reserva_id).delete(synchronize_session=False)
-            db.query(User).filter(User.id == usuario_id).delete(synchronize_session=False)
+        db.query(IngresoFisico).filter(IngresoFisico.jti.in_(_jtis_manuales)).delete(synchronize_session=False)
+        db.query(IngresoFisico).filter(IngresoFisico.reserva_id.in_(reservas)).delete(synchronize_session=False)
+        # conflictos_sincronizacion no tiene FK a reservas, así que no se borra sola con la reserva
+        db.query(ConflictosSincronizacion).filter(
+            ConflictosSincronizacion.reserva_id.in_(reservas)
+        ).delete(synchronize_session=False)
+        db.query(Reserva).filter(Reserva.id.in_(reservas)).delete(synchronize_session=False)
+        db.query(User).filter(User.id.in_(usuarios)).delete(synchronize_session=False)
         db.commit()
     finally:
         db.close()
@@ -228,6 +237,7 @@ def _item_manual(**cambios) -> dict:
         "dni": "30123456",
     }
     item.update(cambios)
+    _jtis_manuales.append(item["jti"])
     return item
 
 
