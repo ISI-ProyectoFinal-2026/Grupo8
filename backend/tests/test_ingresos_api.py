@@ -11,6 +11,7 @@ from services.camping_service import obtener_o_crear_camping
 from models.ingreso_fisico import IngresoFisico, TipoIngresoEnum
 from decimal import Decimal
 from typing import Optional
+from sqlalchemy import func
 import pytest
 
 # Aseguramos que las tablas existan, siguiendo el mismo patrón que
@@ -203,14 +204,16 @@ def test_bulk_sync_multiples_ingresos_en_un_solo_batch():
 URL_SYNC = "/api/v1/ingresos/bulk-sync"
 
 
-def _item_qr(reserva_id: str, jti: Optional[str] = None) -> dict:
-    return {
+def _item_qr(reserva_id: str, jti: Optional[str] = None, **cambios) -> dict:
+    item = {
         "tipo_ingreso": "QR",
         "jti": jti or str(uuid.uuid4()),
         "dispositivo_id": "dispositivo-test",
         "reserva_id": reserva_id,
         "fecha_escaneo": datetime.now(timezone.utc).isoformat(),
     }
+    item.update(cambios)
+    return item
 
 
 def _item_manual(**cambios) -> dict:
@@ -277,5 +280,75 @@ def test_bulk_sync_reenviar_el_mismo_manual_no_lo_duplica():
     db = SessionLocal()
     try:
         assert db.query(IngresoFisico).filter(IngresoFisico.jti == manual["jti"]).count() == 1
+    finally:
+        db.close()
+
+# ---------- Personas por ingreso con QR ----------
+
+def test_bulk_sync_lote_mixto_guarda_las_personas_de_cada_ingreso():
+    reserva_con_cantidad = _crear_reserva_de_prueba()
+    reserva_sin_cantidad = _crear_reserva_de_prueba()
+    qr = _item_qr(reserva_con_cantidad, cantidad_personas=4)
+    # Un ingreso viejo de la cola que no trae la cantidad se sigue aceptando con 1 persona
+    qr_viejo = _item_qr(reserva_sin_cantidad)
+    manual = _item_manual(cantidad_personas=2)
+
+    response = client.post(URL_SYNC, json={"ingresos": [qr, qr_viejo, manual]})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["procesados"] == 3
+    assert data["errores"] == []
+
+    db = SessionLocal()
+    try:
+        filas = db.query(IngresoFisico).filter(
+            IngresoFisico.jti.in_([qr["jti"], qr_viejo["jti"], manual["jti"]])
+        ).all()
+        por_jti = {f.jti: f for f in filas}
+        assert por_jti[qr["jti"]].cantidad_personas == 4
+        assert por_jti[qr_viejo["jti"]].cantidad_personas == 1
+        assert por_jti[manual["jti"]].cantidad_personas == 2
+    finally:
+        db.close()
+
+
+def test_bulk_sync_rechaza_qr_con_cantidad_invalida_sin_frenar_el_lote():
+    reserva_id = _crear_reserva_de_prueba()
+    invalido = _item_qr(_crear_reserva_de_prueba(), cantidad_personas=0)
+    valido = _item_qr(reserva_id, cantidad_personas=3)
+
+    response = client.post(URL_SYNC, json={"ingresos": [invalido, valido]})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sincronizados_jti"] == [valido["jti"]]
+    assert len(data["errores"]) == 1
+    assert data["errores"][0]["indice"] == 0
+
+
+def test_ingreso_viejo_sin_cantidad_se_lee_como_una_persona():
+    reserva_id = uuid.UUID(_crear_reserva_de_prueba())
+
+    db = SessionLocal()
+    try:
+        # Fila como las anteriores a 16.1: sin jti ni cantidad de personas
+        viejo = IngresoFisico(
+            reserva_id=reserva_id,
+            fecha_hora_ingreso=datetime.now(timezone.utc),
+            tipo_ingreso=TipoIngresoEnum.WEB,
+            sincronizado_offline=True,
+        )
+        db.add(viejo)
+        db.commit()
+        db.refresh(viejo)
+
+        assert viejo.cantidad_personas is None
+        assert viejo.personas == 1
+
+        total = db.query(func.sum(IngresoFisico.personas)).filter(
+            IngresoFisico.reserva_id == reserva_id
+        ).scalar()
+        assert total == 1
     finally:
         db.close()

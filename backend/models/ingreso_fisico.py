@@ -3,9 +3,10 @@ import enum
 from datetime import datetime
 from sqlalchemy import (
     Column, Boolean, DateTime, Enum, ForeignKey,
-    Integer, Numeric, String, UniqueConstraint,
+    Integer, Numeric, String, UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 
 from core.database import Base
@@ -37,3 +38,13 @@ class IngresoFisico(Base):
     dispositivo_id = Column(String(64), nullable=True)
 
     reserva = relationship("Reserva", back_populates="ingresos")
+
+    # Los ingresos anteriores a 16.1 no tienen cantidad guardada: se cuentan como 1 persona.
+    # Sirve tanto en Python (ingreso.personas) como en consultas (func.sum(IngresoFisico.personas)).
+    @hybrid_property
+    def personas(self) -> int:
+        return self.cantidad_personas if self.cantidad_personas is not None else 1
+
+    @personas.expression
+    def personas(cls):
+        return func.coalesce(cls.cantidad_personas, 1)

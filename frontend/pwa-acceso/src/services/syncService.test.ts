@@ -366,4 +366,57 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer token-nuevo');
     expect(await db.ingresos_pendientes.toArray()).toHaveLength(0);
   });
+    // ---------- Personas por ingreso con QR ----------
+
+  // Guarda en la cola un QR tal como lo deja ControlAcceso: el payload completo del token
+  async function encolarQR(jti: string, payload: Record<string, unknown>, fecha = new Date()) {
+    await db.ingresos_pendientes.add({ jti, qr_payload: payload, fecha_escaneo: fecha, sincronizado: false });
+  }
+
+  const RESERVA_QR = '3f2b8c1e-5d4a-4b6f-9a7e-1c2d3e4f5a6b';
+
+  it('Test 15 — el QR viaja con la cantidad de personas que trae su payload', async () => {
+    await encolarQR('jti-qr-1', {
+      jti: 'jti-qr-1',
+      reserva_id: RESERVA_QR,
+      camping_id: 'CAMP-01',
+      cantidad_personas: 4,
+      typ: 'visitante',
+    });
+
+    await syncService.sincronizarIngresosPendientes();
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const { ingresos } = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(ingresos[0]).toMatchObject({
+      tipo_ingreso: 'QR',
+      jti: 'jti-qr-1',
+      reserva_id: RESERVA_QR,
+      cantidad_personas: 4,
+    });
+    expect(ingresos[0]).not.toHaveProperty('monto_cobrado');
+  });
+
+  it('Test 16 — en un lote mixto cada ingreso lleva su propia cantidad', async () => {
+    await encolarQR('jti-qr-2', { jti: 'jti-qr-2', reserva_id: RESERVA_QR, cantidad_personas: 5, typ: 'socio' }, new Date(Date.now() - 60_000));
+    await dbService.registrarIngresoManual('40123456', 'Visitante Efectivo', 1, 'Espontaneo', 1000);
+
+    await syncService.sincronizarIngresosPendientes();
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const { ingresos } = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(ingresos).toHaveLength(2);
+    expect(ingresos[0]).toMatchObject({ tipo_ingreso: 'QR', cantidad_personas: 5 });
+    expect(ingresos[1]).toMatchObject({ tipo_ingreso: 'MANUAL', cantidad_personas: 2 });
+  });
+
+  it('Test 17 — un QR viejo de la cola sin cantidad se sigue enviando con 1 persona', async () => {
+    await encolarQR('jti-qr-viejo', { jti: 'jti-qr-viejo', reserva_id: RESERVA_QR, typ: 'visitante' });
+
+    await syncService.sincronizarIngresosPendientes();
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const { ingresos } = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(ingresos[0]).toMatchObject({ tipo_ingreso: 'QR', cantidad_personas: 1 });
+  });
 });
