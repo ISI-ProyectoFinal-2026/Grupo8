@@ -1,21 +1,20 @@
+import type { FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 
-// Definimos el contrato de nuestro componente (Props)
 interface ScannerQRProps {
   onScanSuccess: (token: string) => void;
 }
 
 export const ScannerQR = ({ onScanSuccess }: ScannerQRProps) => {
   const [permisoDenegado, setPermisoDenegado] = useState<boolean>(false);
-  const [tokenManual, setTokenManual] = useState<string>(''); 
+  const [tokenManual, setTokenManual] = useState<string>('');
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
-  // Agregamos esta bandera para frenar el StrictMode de React
-  const inicializado = useRef<boolean>(false); 
+  // Bandera para frenar el doble montaje de StrictMode
+  const inicializado = useRef<boolean>(false);
 
   useEffect(() => {
-    // 2. Si ya pasó por aquí en este render, abortamos para evitar duplicar el HTML
     if (inicializado.current) return;
     inicializado.current = true;
 
@@ -47,7 +46,7 @@ export const ScannerQR = ({ onScanSuccess }: ScannerQRProps) => {
     inicializarCamara();
 
     return () => {
-      //3. Mejoramos la limpieza para asegurar que borre el HTML residual al desmontar
+      // Al desmontar se detiene la cámara y se borra el HTML residual
       if (scannerRef.current) {
         if (scannerRef.current.isScanning) {
           scannerRef.current.stop().catch(console.error).finally(() => {
@@ -60,19 +59,17 @@ export const ScannerQR = ({ onScanSuccess }: ScannerQRProps) => {
     };
   }, [onScanSuccess]);
 
-  //  2. Función para manejar el envío del token manual
-  const handleSimularEscaneo = (e: React.FormEvent) => {
-    e.preventDefault(); // Evita que la página se recargue al enviar el form
+  // Ingreso manual del token, por si la cámara no funciona. Pasa por la misma validación que el QR escaneado.
+  const handleTokenManual = (e: FormEvent) => {
+    e.preventDefault();
     if (tokenManual.trim() !== '') {
-      // Engañamos a la app llamando al éxito con el texto del input
-      onScanSuccess(tokenManual.trim()); 
-      setTokenManual(''); // Limpiamos el input para el siguiente test
+      onScanSuccess(tokenManual.trim());
+      setTokenManual('');
     }
   };
 
   return (
     <div style={{ width: '100%', maxWidth: '400px', margin: '0 auto' }}>
-      {/* Lector de cámara original */}
       {permisoDenegado ? (
         <div style={{ color: 'red', textAlign: 'center', padding: '20px' }}>
           <p>⚠️ No se pudo acceder a la cámara (Normal en PC sin cámara).</p>
@@ -81,38 +78,37 @@ export const ScannerQR = ({ onScanSuccess }: ScannerQRProps) => {
         <div id="lector-qr" style={{ borderRadius: '12px', overflow: 'hidden', border: '2px solid #ccc' }}></div>
       )}
 
-      {/*  3. Nueva barra de testeo manual (Modo Developer) */}
-      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f8f9fa', border: '2px dashed #007bff', borderRadius: '8px' }}>
-        <h4 style={{ margin: '0 0 10px 0', color: '#007bff', textAlign: 'center', fontFamily: 'sans-serif' }}>
-          🔧 Modo Test (Simular QR)
+      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f8f9fa', border: '1px solid #ccc', borderRadius: '8px' }}>
+        <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', fontFamily: 'sans-serif' }}>
+          Ingresar token manualmente
         </h4>
-        <form onSubmit={handleSimularEscaneo} style={{ display: 'flex', gap: '8px' }}>
+        <form onSubmit={handleTokenManual} style={{ display: 'flex', gap: '8px' }}>
           <input
             type="text"
             placeholder="Pega el JWT aquí..."
             value={tokenManual}
             onChange={(e) => setTokenManual(e.target.value)}
-            style={{ 
-              flex: 1, 
-              padding: '10px', 
-              borderRadius: '6px', 
+            style={{
+              flex: 1,
+              padding: '10px',
+              borderRadius: '6px',
               border: '1px solid #ccc',
               outline: 'none'
             }}
           />
-          <button 
-            type="submit" 
-            style={{ 
-              padding: '10px 15px', 
-              backgroundColor: '#007bff', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer', 
-              fontWeight: 'bold' 
+          <button
+            type="submit"
+            style={{
+              padding: '10px 15px',
+              backgroundColor: '#0056b3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 'bold'
             }}
           >
-            Simular
+            Validar
           </button>
         </form>
       </div>

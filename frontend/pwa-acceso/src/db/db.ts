@@ -40,14 +40,16 @@ class SgicDatabase extends Dexie {
     // Nombre de la base de datos local
     super('SgicOfflineDB');
     
-    // 3. Definimos el esquema
-    // Subimos a version(2) y agregamos la blacklist buscando por 'id'
-    this.version(2).stores({
-      configuracion: 'clave',
-      ingresos_pendientes: '++id, jti, sincronizado',
-      historial: '++id, reserva_id, fecha_ingreso',
-      blacklist: 'id' 
-    });
+    // v3: la app guardaba una capacidad fija de 500 en cada arranque. Ese valor era inventado:
+    // se borra y se vuelve a descargar del servidor.
+    this.version(3)
+      .stores({
+        configuracion: 'clave',
+        ingresos_pendientes: '++id, jti, sincronizado',
+        historial: '++id, reserva_id, fecha_ingreso',
+        blacklist: 'id'
+      })
+      .upgrade((tx) => tx.table('configuracion').delete('capacidad_maxima'));
   }
 }
 

@@ -19,9 +19,15 @@ export const dbService = {
     return ocupacion ? parseInt(ocupacion.valor, 10) : 0;
   },
 
-  async obtenerCapacidadMaxima(): Promise<number> {
-    const capacidad = await db.configuracion.get('capacidad_maxima');
-    return capacidad ? parseInt(capacidad.valor, 10) : 500; 
+  async obtenerCapacidadMaxima(): Promise<number | null> {
+    const config = await db.configuracion.get('capacidad_maxima');
+    if (!config) return null;
+    const capacidad = Number(config.valor);
+    return Number.isInteger(capacidad) && capacidad > 0 ? capacidad : null;
+  },
+
+  async guardarCapacidadMaxima(capacidad: number): Promise<void> {
+    await db.configuracion.put({ clave: 'capacidad_maxima', valor: String(capacidad) });
   },
 
   // ==========================================
@@ -39,7 +45,8 @@ export const dbService = {
       const capacidadMaxima = await this.obtenerCapacidadMaxima();
       const nuevasPersonas = payload.cantidad_personas;
 
-      if (ocupacionActual + nuevasPersonas > capacidadMaxima) {
+      // Sin capacidad descargada no se controla el cupo (la pantalla ya avisa)
+      if (capacidadMaxima !== null && ocupacionActual + nuevasPersonas > capacidadMaxima) {
         const lugaresDisponibles = capacidadMaxima - ocupacionActual;
         throw new Error(`CAPACIDAD_EXCEDIDA: Solo quedan ${lugaresDisponibles} lugares disponibles, y el grupo es de ${nuevasPersonas}.`);
       }

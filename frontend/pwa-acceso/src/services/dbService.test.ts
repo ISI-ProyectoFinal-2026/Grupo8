@@ -115,3 +115,39 @@ describe('dbService — Encolamiento de ingresos en IndexedDB (Issue 8.3)', () =
     expect(pendientes).toHaveLength(0);
   });
 });
+describe('dbService — capacidad máxima (Issue 16.5)', () => {
+  beforeEach(async () => {
+    await db.ingresos_pendientes.clear();
+    await db.configuracion.clear();
+  });
+
+  afterEach(async () => {
+    await db.ingresos_pendientes.clear();
+    await db.configuracion.clear();
+  });
+
+  it('sin capacidad guardada devuelve null y no inventa un valor', async () => {
+    expect(await dbService.obtenerCapacidadMaxima()).toBeNull();
+  });
+
+  it('guarda y devuelve la capacidad como número', async () => {
+    await dbService.guardarCapacidadMaxima(80);
+
+    expect(await dbService.obtenerCapacidadMaxima()).toBe(80);
+  });
+
+  it('sin capacidad descargada no se frena el ingreso por cupo', async () => {
+    await expect(
+      dbService.registrarIngresoManual('30111222', 'Grupo Grande', 999, 'Espontaneo')
+    ).resolves.toBeUndefined();
+  });
+
+  it('con capacidad conocida, un grupo que no entra se rechaza', async () => {
+    await dbService.guardarCapacidadMaxima(10);
+
+    await expect(
+      dbService.registrarIngresoManual('30111222', 'Grupo Grande', 10, 'Espontaneo') // 11 personas
+    ).rejects.toThrow('CAPACIDAD_EXCEDIDA');
+    expect(await db.ingresos_pendientes.count()).toBe(0);
+  });
+});
