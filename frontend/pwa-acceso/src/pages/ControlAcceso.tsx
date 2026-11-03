@@ -1,14 +1,15 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { ScannerQR } from '../components/ScannerQR';
+import { useCapacidad } from '../hooks/useCapacidad';
 import { dbService } from '../services/dbService';
 import { syncService } from '../services/syncService';
 import type { IJwtPayload } from '../types/security';
 import { verifyQRToken } from '../utils/security';
 
 export default function ControlAcceso() {
+  const { capacidadMaxima, estado: estadoCapacidad } = useCapacidad();
   const [ocupacion, setOcupacion] = useState<number>(0);
-  const [capacidadMaxima, setCapacidadMaxima] = useState<number>(500);
   const [escaneando, setEscaneando] = useState<boolean>(false);
   const [resultadoValidacion, setResultadoValidacion] = useState<{
     exito: boolean;
@@ -21,7 +22,6 @@ export default function ControlAcceso() {
   const [formNombre, setFormNombre] = useState('');
   const [formAcompanantes, setFormAcompanantes] = useState(0);
   const [formTipo, setFormTipo] = useState('Espontaneo');
-  const [idABloquear, setIdABloquear] = useState('');
   const [formMonto, setFormMonto] = useState('');
   const [syncStatus, setSyncStatus] = useState<{ estado: string; mensaje: string } | null>(null);
 
@@ -29,11 +29,8 @@ export default function ControlAcceso() {
     const inicializarDB = async () => {
       try {
         await dbService.guardarConfiguracion('version_app', '1.0.0');
-        await dbService.guardarConfiguracion('capacidad_maxima', '500');
         const ocupacionActual = await dbService.obtenerOcupacion();
-        const max = await dbService.obtenerCapacidadMaxima();
         setOcupacion(ocupacionActual);
-        setCapacidadMaxima(max);
         await syncService.iniciarBackgroundSync();
       } catch (error) {
         console.error('❌ Error al inicializar IndexedDB:', error);
@@ -49,7 +46,7 @@ export default function ControlAcceso() {
         setSyncStatus({ estado: 'warning', mensaje: `⏳ Sincronizando ${detalles.cantidad} registros pendientes...` });
       } else if (estado === 'completado') {
         setSyncStatus({ estado: 'success', mensaje: `✅ ¡Datos Actualizados! (${detalles.cantidad} enviados)` });
-        setTimeout(() => setSyncStatus(null), 4000); 
+        setTimeout(() => setSyncStatus(null), 4000);
       } else if (estado === 'error') {
         setSyncStatus({ estado: 'error', mensaje: `⚠️ ${detalles.mensaje}` });
         setTimeout(() => setSyncStatus(null), 5000);
@@ -60,18 +57,18 @@ export default function ControlAcceso() {
   }, []);
 
   const procesarQR = async (token: string) => {
-    navigator.vibrate?.(200); 
-    setEscaneando(false); 
+    navigator.vibrate?.(200);
+    setEscaneando(false);
     const payload = await verifyQRToken(token);
     if (!payload) {
       setResultadoValidacion({ exito: false, mensaje: '❌ Acceso Denegado: Código QR inválido.' });
-      return; 
+      return;
     }
     try {
       const estaRevocado = await dbService.verificarAccesoRevocado(payload.reserva_id.toString());
       if (estaRevocado) {
         setResultadoValidacion({ exito: false, mensaje: '⚠️ Reserva Cancelada / Acceso Revocado' });
-        return; 
+        return;
       }
       await dbService.registrarIngresoOffline(payload.jti, payload);
       setOcupacion(prev => prev + payload.cantidad_personas);
@@ -91,13 +88,13 @@ export default function ControlAcceso() {
       alert("⚠️ Por favor, complete el DNI y Nombre del visitante.");
       return;
     }
-  
+
     const monto = Number(formMonto);
     if (formMonto.trim() === '' || !Number.isFinite(monto) || monto < 0) {
       alert("⚠️ Ingrese el monto cobrado (0 si no se cobró nada).");
       return;
     }
-  
+
     try {
       await dbService.registrarIngresoManual(formDni, formNombre, formAcompanantes, formTipo, monto);
       const totalIngresan = formAcompanantes + 1;
@@ -118,37 +115,55 @@ export default function ControlAcceso() {
     }
   };
 
-  const lugaresDisponibles = capacidadMaxima - ocupacion;
-  const porcentajeOcupacion = (ocupacion / capacidadMaxima) * 100;
+  // Con la capacidad desconocida no hay cupo que calcular ni nada que bloquear
+  const lugaresDisponibles = capacidadMaxima === null ? null : capacidadMaxima - ocupacion;
+  const campingLleno = lugaresDisponibles !== null && lugaresDisponibles <= 0;
+  const porcentajeOcupacion = capacidadMaxima === null ? null : (ocupacion / capacidadMaxima) * 100;
 
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
-      <h1 style={{ textAlign: 'center' }}>Sistema de Acceso</h1>
+      <h1 style={{ textAlign: 'center' }}>Sistema de Acceso - Grupo 8</h1>
       {syncStatus && (
         <div style={{ backgroundColor: syncStatus.estado === 'warning' ? '#fff3cd' : syncStatus.estado === 'success' ? '#d4edda' : '#f8d7da', color: syncStatus.estado === 'warning' ? '#856404' : syncStatus.estado === 'success' ? '#155724' : '#721c24', padding: '12px', borderRadius: '5px', textAlign: 'center', marginBottom: '15px', fontWeight: 'bold', border: '1px solid', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
           {syncStatus.mensaje}
         </div>
       )}
-      <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px', border: '1px solid #dee2e6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <p style={{ margin: 0, fontSize: '14px', color: '#6c757d' }}>Capacidad Disponible</p>
-          <h2 style={{ margin: '5px 0 0 0', color: lugaresDisponibles < 20 ? '#dc3545' : '#28a745' }}>
-            {lugaresDisponibles} <span style={{ fontSize: '16px' }}>/ {capacidadMaxima}</span>
-          </h2>
+
+      {lugaresDisponibles !== null && capacidadMaxima !== null && porcentajeOcupacion !== null ? (
+        <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px', border: '1px solid #dee2e6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <p style={{ margin: 0, fontSize: '14px', color: '#6c757d' }}>Capacidad Disponible</p>
+            <h2 style={{ margin: '5px 0 0 0', color: lugaresDisponibles < 20 ? '#dc3545' : '#28a745' }}>
+              {lugaresDisponibles} <span style={{ fontSize: '16px' }}>/ {capacidadMaxima}</span>
+            </h2>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ margin: 0, fontSize: '14px', color: '#6c757d' }}>Ocupación</p>
+            <p style={{ margin: '5px 0 0 0', fontWeight: 'bold' }}>{porcentajeOcupacion.toFixed(1)}%</p>
+          </div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <p style={{ margin: 0, fontSize: '14px', color: '#6c757d' }}>Ocupación</p>
-          <p style={{ margin: '5px 0 0 0', fontWeight: 'bold' }}>{porcentajeOcupacion.toFixed(1)}%</p>
+      ) : (
+        <div role="status" style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '15px', borderRadius: '8px', border: '1px solid #ffeeba' }}>
+          <strong>
+            {estadoCapacidad === 'cargando' ? 'Consultando la capacidad del camping…' : 'Capacidad no disponible'}
+          </strong>
+          {estadoCapacidad === 'sin_dato' && (
+            <p style={{ margin: '8px 0 0' }}>
+              Este dispositivo todavía no descargó la capacidad máxima. Podés seguir registrando ingresos,
+              pero sin control de cupo. Conectate a internet una vez para descargarla.
+            </p>
+          )}
+          <p style={{ margin: '8px 0 0', fontSize: '14px' }}>Ocupación registrada: {ocupacion} personas</p>
         </div>
-      </div>
-      
+      )}
+
       <div style={{ textAlign: 'center', marginTop: '30px' }}>
         {!escaneando && !mostrarFormulario ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <button onClick={() => { setResultadoValidacion(null); setEscaneando(true); }} disabled={lugaresDisponibles <= 0} style={{ padding: '15px', fontSize: '18px', backgroundColor: lugaresDisponibles <= 0 ? '#6c757d' : '#0056b3', color: 'white', border: 'none', borderRadius: '8px', cursor: lugaresDisponibles <= 0 ? 'not-allowed' : 'pointer' }}>
-              {lugaresDisponibles <= 0 ? '🛑 CAMPING LLENO' : '📸 Escanear QR'}
+            <button onClick={() => { setResultadoValidacion(null); setEscaneando(true); }} disabled={campingLleno} style={{ padding: '15px', fontSize: '18px', backgroundColor: campingLleno ? '#6c757d' : '#0056b3', color: 'white', border: 'none', borderRadius: '8px', cursor: campingLleno ? 'not-allowed' : 'pointer' }}>
+              {campingLleno ? '🛑 CAMPING LLENO' : '📸 Escanear QR'}
             </button>
-            <button onClick={() => { setResultadoValidacion(null); setMostrarFormulario(true); }} disabled={lugaresDisponibles <= 0} style={{ padding: '15px', fontSize: '18px', backgroundColor: lugaresDisponibles <= 0 ? '#6c757d' : '#28a745', color: 'white', border: 'none', borderRadius: '8px', cursor: lugaresDisponibles <= 0 ? 'not-allowed' : 'pointer' }}>
+            <button onClick={() => { setResultadoValidacion(null); setMostrarFormulario(true); }} disabled={campingLleno} style={{ padding: '15px', fontSize: '18px', backgroundColor: campingLleno ? '#6c757d' : '#28a745', color: 'white', border: 'none', borderRadius: '8px', cursor: campingLleno ? 'not-allowed' : 'pointer' }}>
               📝 Ingreso Manual (Contingencia)
             </button>
           </div>
@@ -213,46 +228,12 @@ export default function ControlAcceso() {
               {resultadoValidacion.payload.nombre && <p><strong>Nombre:</strong> {resultadoValidacion.payload.nombre}</p>}
               <p><strong>Personas Ingresadas:</strong> {resultadoValidacion.payload.cantidad_personas}</p>
               {resultadoValidacion.payload.monto_cobrado !== undefined && (
-              <p><strong>Monto cobrado:</strong> ${Number(resultadoValidacion.payload.monto_cobrado).toFixed(2)}</p>
+                <p><strong>Monto cobrado:</strong> ${Number(resultadoValidacion.payload.monto_cobrado).toFixed(2)}</p>
               )}
             </div>
           )}
         </div>
       )}
-
-      <div style={{ marginTop: '50px', padding: '15px', border: '2px dashed #ccc', borderRadius: '8px', backgroundColor: '#fdfdfd' }}>
-        <h4 style={{ margin: '0 0 10px 0', color: '#666' }}>🛠️ Panel de Pruebas QA</h4>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-          <input type="text" placeholder="N° de reserva a bloquear..." value={idABloquear} onChange={(e) => setIdABloquear(e.target.value)} style={{ padding: '8px', flex: 1 }} />
-          <button onClick={async () => { if(!idABloquear) return; await dbService.agregarABlacklist(idABloquear); alert(`¡Reserva ${idABloquear} agregada a la libreta negra!`); setIdABloquear(''); }} style={{ padding: '8px 15px', backgroundColor: '#ff4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-            Bloquear Reserva
-          </button>
-        </div>
-        <hr style={{ border: '1px solid #eee', marginBottom: '15px' }} />
-        <p style={{ fontSize: '13px', color: '#666', marginTop: 0 }}>Simulador de Cámara (Bypass QR sin webcam):</p>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={async () => {
-            const estaRevocado = await dbService.verificarAccesoRevocado('9999');
-            if (estaRevocado) {
-              setResultadoValidacion({ exito: false, mensaje: '⚠️ Reserva Cancelada / Acceso Revocado' });
-            } else {
-              await dbService.registrarIngresoOffline('mock-jti-9999', { reserva_id: 9999, cantidad_personas: 1, typ: 'qr' });
-              setOcupacion(prev => prev + 1);
-              setResultadoValidacion({ exito: true, mensaje: `✅ INGRESO SIMULADO (QR 9999)`, payload: { reserva_id: 9999, cantidad_personas: 1 } });
-            }
-          }} style={{ flex: 1, padding: '8px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-            Simular QR (Reserva 9999)
-          </button>
-          <button onClick={async () => {
-            const jti = `mock-jti-${Date.now()}`;
-            await dbService.registrarIngresoOffline(jti, { reserva_id: 1234, cantidad_personas: 2, typ: 'qr' });
-            setOcupacion(prev => prev + 2);
-            setResultadoValidacion({ exito: true, mensaje: `✅ INGRESO SIMULADO (QR Válido)`, payload: { reserva_id: 1234, cantidad_personas: 2 } });
-          }} style={{ flex: 1, padding: '8px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-            Simular QR (Válido)
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
