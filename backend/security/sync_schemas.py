@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, TypeAdapter
 from pydantic import AfterValidator
 from core.tiempo import a_utc
 
+# Se parsea el ISO 8601 que manda la PWA, se exige zona y se normaliza a UTC
 FechaEscaneo = Annotated[datetime, AfterValidator(a_utc)]
 
 class IngresoQRItem(BaseModel):
