@@ -18,6 +18,7 @@ from api.auth import router as auth_router
 from api.socios import router as socios_router
 from api.admin_socios import router as admin_socios_router
 from api.admin_alertas import router as admin_alertas_router
+from api.egresos import router as egresos_router
 
 # Configuración básica del logger
 logging.basicConfig(level=logging.INFO)
@@ -50,6 +51,7 @@ app.include_router(auth_router)
 app.include_router(socios_router)
 app.include_router(admin_socios_router)
 app.include_router(admin_alertas_router)
+app.include_router(egresos_router)
 
 # Middleware para loggeo de errores (Requisito del DoD)
 @app.middleware("http")

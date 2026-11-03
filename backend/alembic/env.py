@@ -20,6 +20,7 @@ from models.descuento import Descuento
 from models.ingreso_fisico import IngresoFisico
 from models.configuracion import ConfiguracionCamping
 from models.conflictos import ConflictosSincronizacion
+from models.egreso_fisico import EgresoFisico
 
 # Cargar las variables del archivo .env
 load_dotenv()
