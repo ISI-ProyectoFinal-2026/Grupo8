@@ -14,6 +14,7 @@ from models.descuento import AplicaDescuentoEnum, Descuento
 from models.ingreso_fisico import IngresoFisico
 from models.configuracion import ConfiguracionCamping
 from models.conflictos import ConflictosSincronizacion
+from models.pago import Pago
 from services.camping_service import obtener_o_crear_camping
 from services.pricing_service import PricingService
 from services.qr_service import QRService, qr_service
