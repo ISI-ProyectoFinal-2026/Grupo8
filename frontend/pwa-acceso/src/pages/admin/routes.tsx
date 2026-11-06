@@ -1,5 +1,5 @@
 import {
-  Gauge,
+  DoorOpen,
   LayoutDashboard,
   Percent,
   ShieldAlert,
@@ -8,9 +8,9 @@ import {
 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import Descuentos from './Descuentos';
+import Egresos from './Egresos';
 import Incidentes from './Incidentes';
 import Inicio from './Inicio';
-import Ocupacion from './Ocupacion';
 import Socios from './Socios';
 import { Alertas } from './Alertas';
 
@@ -45,10 +45,10 @@ export const adminRoutes: AdminRoute[] = [
     element: <Incidentes />,
   },
   {
-    path: 'ocupacion',
-    titulo: 'Ocupación',
-    icono: Gauge,
-    element: <Ocupacion />,
+    path: 'egresos',
+    titulo: 'Egresos',
+    icono: DoorOpen,
+    element: <Egresos />,
   },
   {
     path:'alertas',

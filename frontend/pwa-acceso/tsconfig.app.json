@@ -23,13 +23,11 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Alias para Shadcn */
-    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*"
       ]
-    },
-    "ignoreDeprecations": "6.0"
+    }
   },
   "include": ["src"]
 }

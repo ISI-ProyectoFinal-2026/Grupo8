@@ -11,6 +11,12 @@ import AdminRoutes from './AdminRoutes';
 // de este flujo, así que se aísla.
 vi.mock('../ControlAcceso', () => ({ default: () => null }));
 
+// Inicio y Egresos consultan la ocupación: acá no se prueba eso, así que la consulta queda pendiente
+vi.mock('@/services/ocupacionService', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/services/ocupacionService')>();
+  return { ...original, obtenerOcupacion: vi.fn(() => new Promise(() => {})) };
+});
+
 const NOMBRE_NAV = /navegación del panel de administración/i;
 
 function base64Url(objeto: object) {
@@ -56,7 +62,7 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
       ['/admin/socios', 'Socios'],
       ['/admin/descuentos', 'Descuentos'],
       ['/admin/incidentes', 'Incidentes'],
-      ['/admin/ocupacion', 'Ocupación'],
+      ['/admin/egresos', 'Egresos'],
     ])('renderiza %s con su página inicial', (ruta, titulo) => {
       renderizarEn(ruta);
 
@@ -78,7 +84,7 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
         '/admin/socios',
         '/admin/descuentos',
         '/admin/incidentes',
-        '/admin/ocupacion',
+        '/admin/egresos',
         '/admin/alertas',
       ]);
     });
