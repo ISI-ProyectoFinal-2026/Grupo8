@@ -1,4 +1,5 @@
 import { MonitorOcupacion } from '@/components/admin/MonitorOcupacion';
+import { ResumenCobros } from '@/components/admin/ResumenCobros';
 import { useOcupacion } from '@/hooks/useOcupacion';
 
 export default function Inicio() {
@@ -8,6 +9,7 @@ export default function Inicio() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-zinc-900">Inicio</h1>
       <MonitorOcupacion ocupacion={ocupacion} estado={estado} error={error} recargar={recargar} />
+      <ResumenCobros />
     </div>
   );
 }

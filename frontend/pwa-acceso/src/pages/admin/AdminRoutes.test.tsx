@@ -17,6 +17,9 @@ vi.mock('@/services/ocupacionService', async (importOriginal) => {
   return { ...original, obtenerOcupacion: vi.fn(() => new Promise(() => {})) };
 });
 
+// El resumen de cobros del inicio tampoco es parte de este flujo
+vi.mock('@/components/admin/ResumenCobros', () => ({ ResumenCobros: () => null }));
+
 const NOMBRE_NAV = /navegación del panel de administración/i;
 
 function base64Url(objeto: object) {
