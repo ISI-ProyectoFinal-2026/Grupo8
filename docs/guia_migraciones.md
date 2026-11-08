@@ -22,11 +22,16 @@ Si dos migraciones tienen el mismo `down_revision`, aparecen dos heads y `alembi
 | initial_schema | `f30ae74360fe` | — |
 | corregir_tabla_conflictos | `7224388d1b53` | `f30ae74360fe` |
 | normalizar_reserva | `a3c91e5d7b42` | `7224388d1b53` |
-| reserva_personas (Issue 14.1) | `b7d4e2a91c58` | `a3c91e5d7b42` |
-| descuentos (Issue 14.2) | `c1e8f5a37d92` | `b7d4e2a91c58` |
-| ingreso_manual_efectivo (Issue 16.1) | `c3f81a5d9e07` | `c1e8f5a37d92` |
-| reservas_user_id_nullable (Issue 14.5) | `d5b3c8e1f742` | `c3f81a5d9e07` |
-
+| reserva_personas (subissue 14.1) | `b7d4e2a91c58` | `a3c91e5d7b42` |
+| descuentos (subissue 14.2) | `c1e8f5a37d92` | `b7d4e2a91c58` |
+| ingreso_manual_efectivo (subissue 16.1) | `c3f81a5d9e07` | `c1e8f5a37d92` |
+| reservas_user_id_nullable (subissue 14.5) | `d5b3c8e1f742` | `c3f81a5d9e07` |
+| alerta_clonacion (subissue 16.2) | `e5b3a7c91d24` | `d5b3c8e1f742` |
+| membresia_vence (subissue 13.3) | `f7a2d9c41b60` | `e5b3a7c91d24` |
+| resolucion_alertas (subissue 16.3) | `a8c4e1f92b37` | `f7a2d9c41b60` |
+| hora_escaneo_con_zona (subissue 16.4) | `b9e6d3a47c15` | `a8c4e1f92b37` |
+| egresos_fisicos (subissue 18.2) | `e6cd5a417191` | `b9e6d3a47c15` |
+| pagos (subissue 17.1) | `d2f7b4c8e913` | `e6cd5a417191` |
 Cada vez que se integra una migración nueva hay que sumarla a esta tabla.
 
 ## Crear una migración

@@ -2,7 +2,7 @@ from sqlalchemy import text
 from fastapi import APIRouter, HTTPException, Request, Depends, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from services.payment_service import payment_service
+from services.payment_service import payment_service, registrar_pago
 from services.email_service import email_service
 from core.database import get_db
 from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
@@ -18,6 +18,19 @@ router = APIRouter(
     prefix="/api/payments",
     tags=["Pagos"]
 )
+
+def _registrar_pagos(db: Session, pagos_mp: list) -> None:
+    """Guarda en la tabla pagos lo que informó Mercado Pago.
+    Si falla, se registra el error y se sigue: no debe frenar la confirmación de la reserva."""
+    try:
+        for datos in pagos_mp:
+            if isinstance(datos, dict):
+                registrar_pago(db, datos)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Error registrando el pago en la tabla pagos: {e}")
+
 
 class PaymentRequest(BaseModel):
     title: str
@@ -103,6 +116,9 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                 payment_info = payment_service.mp.payment().get(payment_id)
                 
                 if payment_info["status"] == 200:
+                    # Cada aviso queda registrado, sea cual sea el estado del pago
+                    _registrar_pagos(db, [payment_info["response"]])
+
                     estado_pago = payment_info["response"]["status"]
                     
                     # Recuperamos el ID de la reserva que mandamos en /create
@@ -210,6 +226,9 @@ def reconciliar_pago(reserva_id: str, db: Session = Depends(get_db)):
         # El SDK busca todos los intentos de pago asociados a ese external_reference
         respuesta_mp = payment_service.mp.payment().search(filtros_busqueda)
         pagos_encontrados = respuesta_mp.get("response", {}).get("results", [])
+
+        # Se registran todos los intentos que informa Mercado Pago, no solo el aprobado
+        _registrar_pagos(db, pagos_encontrados)
 
         # 3. Filtramos a ver si al menos uno de esos intentos fue exitoso
         pago_aprobado = next((pago for pago in pagos_encontrados if pago.get("status") == "approved"), None)
