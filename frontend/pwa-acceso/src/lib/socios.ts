@@ -1,7 +1,8 @@
-// Alta y listado de socios desde el panel de administración (GET/POST /admin/socios).
+// Padrón de socios desde el panel de administración (/admin/socios): alta, listado con búsqueda
+// y filtros, edición, renovación, baja y reactivación.
 // Las reglas de validación son las mismas que aplica el backend (y las de validaciones.ts).
 import { ErrorApi } from '@/lib/descuentos';
-import { validarDni, validarEmail, validarFecha, validarNombre } from '@/lib/validaciones';
+import { hoyISO, validarDni, validarEmail, validarFecha, validarNombre } from '@/lib/validaciones';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -17,6 +18,52 @@ export interface Socio {
   /** Fecha AAAA-MM-DD, o null si no tiene una cargada. */
   membresia_vence: string | null;
   membresia_vigente: boolean;
+  /** false si fue dado de baja: no puede iniciar sesión ni valida como socio. */
+  activo: boolean;
+}
+
+// ---------- Estado de la membresía ----------
+
+/** Los mismos valores que acepta el filtro `estado` del backend. */
+export type EstadoSocio = 'vigente' | 'vencida' | 'baja';
+
+export const ETIQUETA_ESTADO: Record<EstadoSocio, string> = {
+  vigente: 'Vigente',
+  vencida: 'Vencida',
+  baja: 'De baja',
+};
+
+/** La baja manda sobre la fecha: un dado de baja figura de baja aunque su cuota esté al día. */
+export function estadoDeSocio(socio: Socio): EstadoSocio {
+  if (!socio.activo) return 'baja';
+  return socio.membresia_vigente ? 'vigente' : 'vencida';
+}
+
+// ---------- Búsqueda y filtros ----------
+
+export interface FiltrosSocios {
+  /** DNI (o su comienzo) o palabras del nombre. */
+  buscar: string;
+  /** Vacío = todos los estados. */
+  estado: EstadoSocio | '';
+}
+
+export const filtrosVacios: FiltrosSocios = { buscar: '', estado: '' };
+
+export const BUSCAR_MAX = 100;
+
+export function hayFiltros(filtros: FiltrosSocios): boolean {
+  return filtros.buscar.trim() !== '' || filtros.estado !== '';
+}
+
+/** Arma "?buscar=...&estado=..." solo con los filtros que tienen valor. */
+export function construirConsulta(filtros: FiltrosSocios): string {
+  const parametros = new URLSearchParams();
+  const buscar = filtros.buscar.trim();
+  if (buscar) parametros.set('buscar', buscar);
+  if (filtros.estado) parametros.set('estado', filtros.estado);
+  const consulta = parametros.toString();
+  return consulta ? `?${consulta}` : '';
 }
 
 /** Valores del formulario tal como se escriben. */
@@ -78,6 +125,71 @@ export function construirPayload(form: SocioFormulario) {
   };
 }
 
+// ---------- Edición ----------
+
+/** Datos que se pueden corregir. La fecha se cambia con la renovación. */
+export interface EdicionFormulario {
+  nombre: string;
+  dni: string;
+  email: string;
+}
+
+export type ErroresEdicion = Partial<Record<keyof EdicionFormulario, string>>;
+
+export function formularioEdicion(socio: Socio): EdicionFormulario {
+  return { nombre: socio.nombre, dni: socio.dni, email: socio.email };
+}
+
+export function validarEdicion(form: EdicionFormulario): ErroresEdicion {
+  const errores: ErroresEdicion = {};
+  const campos: [keyof EdicionFormulario, string | null][] = [
+    ['nombre', validarNombre(form.nombre)],
+    ['dni', validarDni(form.dni)],
+    ['email', validarEmail(form.email)],
+  ];
+  for (const [campo, error] of campos) {
+    if (error) errores[campo] = error;
+  }
+  return errores;
+}
+
+/** Solo los campos que cambiaron: el backend aplica únicamente lo que recibe. */
+export function cambiosEdicion(socio: Socio, form: EdicionFormulario): Partial<EdicionFormulario> {
+  const cambios: Partial<EdicionFormulario> = {};
+  const nombre = form.nombre.trim();
+  const dni = form.dni.trim();
+  const email = form.email.trim();
+  if (nombre !== socio.nombre) cambios.nombre = nombre;
+  if (dni !== socio.dni) cambios.dni = dni;
+  if (email.toLowerCase() !== socio.email.toLowerCase()) cambios.email = email;
+  return cambios;
+}
+
+// ---------- Renovación ----------
+
+/** Suma años a una fecha AAAA-MM-DD sin pasar por la zona horaria (el 29/2 pasa al 1/3). */
+export function sumarAnios(fechaIso: string, anios: number): string {
+  const [anio, mes, dia] = fechaIso.split('-').map(Number);
+  return new Date(Date.UTC(anio + anios, mes - 1, dia)).toISOString().slice(0, 10);
+}
+
+/**
+ * Fecha que se propone al renovar: un año más desde el vencimiento actual,
+ * o desde hoy si ya venció o no tiene fecha.
+ */
+export function fechaRenovacionSugerida(socio: Socio, hoy: string = hoyISO()): string {
+  const desde = socio.membresia_vence && socio.membresia_vence > hoy ? socio.membresia_vence : hoy;
+  return sumarAnios(desde, 1);
+}
+
+/** Hoy se acepta: la membresía vale hasta el final de ese día. */
+export function validarRenovacion(valor: string, hoy: string = hoyISO()): string | null {
+  const error = validarFecha(valor, 'La nueva fecha de vencimiento');
+  if (error) return error;
+  if (valor < hoy) return 'La nueva fecha de vencimiento no puede ser anterior a hoy.';
+  return null;
+}
+
 // ---------- Llamadas a la API ----------
 
 async function extraerMensaje(response: Response): Promise<string> {
@@ -95,10 +207,15 @@ async function extraerMensaje(response: Response): Promise<string> {
   return 'No se pudo completar la operación. Intentá de nuevo.';
 }
 
-async function pedir<T>(token: string, metodo: 'GET' | 'POST', cuerpo?: object): Promise<T> {
+async function pedir<T>(
+  token: string,
+  ruta: string,
+  metodo: 'GET' | 'POST' | 'PUT',
+  cuerpo?: object
+): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${API_URL}/admin/socios`, {
+    response = await fetch(`${API_URL}/admin/socios${ruta}`, {
       method: metodo,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -113,7 +230,20 @@ async function pedir<T>(token: string, metodo: 'GET' | 'POST', cuerpo?: object):
   return (await response.json()) as T;
 }
 
-export const listarSocios = (token: string) => pedir<Socio[]>(token, 'GET');
+export const listarSocios = (token: string, filtros: FiltrosSocios = filtrosVacios) =>
+  pedir<Socio[]>(token, construirConsulta(filtros), 'GET');
 
 export const crearSocio = (token: string, form: SocioFormulario) =>
-  pedir<Socio>(token, 'POST', construirPayload(form));
+  pedir<Socio>(token, '', 'POST', construirPayload(form));
+
+export const editarSocio = (token: string, id: string, cambios: Partial<EdicionFormulario>) =>
+  pedir<Socio>(token, `/${id}`, 'PUT', cambios);
+
+export const renovarMembresia = (token: string, id: string, membresiaVence: string) =>
+  pedir<Socio>(token, `/${id}/renovar`, 'POST', { membresia_vence: membresiaVence });
+
+export const darDeBaja = (token: string, id: string) =>
+  pedir<Socio>(token, `/${id}/baja`, 'POST');
+
+export const reactivarSocio = (token: string, id: string) =>
+  pedir<Socio>(token, `/${id}/reactivar`, 'POST');
