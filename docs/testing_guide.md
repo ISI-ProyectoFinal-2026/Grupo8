@@ -37,6 +37,14 @@ El backend implementa una suite de pruebas automatizadas utilizando `pytest` jun
 
 * Ajustes de Capacidad: El test test_limite_de_capacidad se adaptó para inyectar y evaluar cantidades válidas (menores o iguales al máximo permitido) antes de forzar el fallo de aforo.
 
+### 1.5. Tests sobre Totales de toda la Base (Ocupación y Cobros)
+
+* La ocupación y el resumen de cobros suman todas las filas de `ingresos_fisicos`, `egresos_fisicos` y `pagos`, así que cualquier dato que haya quedado en la base cambiaría sus resultados.
+
+* Por eso `test_ocupacion_api.py` y `test_cobros_api.py` usan el fixture `db_aislada`: abre una transacción, vacía esas tablas dentro de ella y reemplaza `get_db` para que los endpoints usen esa misma sesión. Con `join_transaction_mode="create_savepoint"`, los `commit()` de los endpoints no guardan nada y al final se deshace todo, por lo que la base local queda igual que antes.
+
+* Los tests que crean filas sin esta transacción (por ejemplo, los de `bulk-sync` o egresos) deben borrar al terminar lo que crearon, incluidos los ingresos manuales, que no tienen reserva asociada.
+
 
 ## 2. Pruebas de Frontend (`vitest`)
 

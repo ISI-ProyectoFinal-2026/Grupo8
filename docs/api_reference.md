@@ -29,6 +29,11 @@ El sistema utiliza SQLAlchemy como ORM, mapeando clases Python a tablas en Postg
 * **Reservas anteriores:** Las reservas guardan su propia copia del porcentaje y del precio (`reserva_personas`), por lo que modificar un descuento no cambia reservas ya creadas.
 * **Modelo de Ingresos Físicos (`IngresoFisico`)**
 * **Campos Principales:** `reserva_id`, `fecha_hora_ingreso`, `tipo_ingreso` (ej. WEB), `sincronizado_offline` (Booleano que permite métricas analíticas).
+* **Personas:** `cantidad_personas` guarda cuántas personas entraron con ese ingreso (la que trae el QR o la que anota el guardia). Los ingresos anteriores a la Issue 16 no la tienen y cuentan como 1 persona a través de la propiedad `personas`, que también sirve en consultas (`func.sum(IngresoFisico.personas)`).
+* **Modelo de Egresos Físicos (`EgresoFisico`)**
+* **Tabla:** `egresos_fisicos`
+* **Campos Principales:** ID (`UUID`), `cantidad_personas` (al menos 1, con restricción en la base), `fecha_hora_egreso` (`timestamptz`, en UTC) y `registrado_por_id` (administrador que lo cargó).
+* **Uso:** Registra las salidas del camping. Junto con los ingresos permite calcular cuántas personas hay dentro.
 * **Modelo de Conflictos de Sincronización (`ConflictosSincronizacion`)**
 * **Campos Principales:** ID (`UUID`), `reserva_id` (`UUID`), `jti_involucrado`, `motivo`, `fecha_registro`.
 * **Uso:** Tabla de auditoría para derivar reservas que presentan colisiones de concurrencia o duplicidad durante el escaneo offline.
@@ -121,11 +126,28 @@ Rutas operativas que soportan el comportamiento *offline-first* de la Progressiv
 * **Tag:** Ingresos y Sincronización.
 * **Seguridad:** Requiere el JWT de sesión de un usuario con rol `SEGURIDAD` (Header: `Authorization: Bearer <token>`). Emite código 401 si no hay un token válido o está vencido, y 403 si el usuario tiene otro rol (incluido `ADMIN`). En ambos casos no se procesa el lote.
 * **Descripción:** Recibe en lote los ingresos registrados por la PWA sin conexión. Procesa el arreglo verificando cada reserva, detectando duplicidades y efectuando un *commit* único.
-* **Request Body (`SyncIngresosRequest`):**
+* **Request Body (`SyncIngresosRequest`):** Cada ingreso es de tipo `QR` o `MANUAL`. Los dos llevan `cantidad_personas`: en un QR es la que trae su payload (si un registro viejo de la cola no la trae, se guarda 1) y en uno manual es la que anota el guardia, junto con el monto cobrado.
 ```json
 {
   "ingresos": [
-    { "jti": "abc-123", "reserva_id": 41, "fecha_escaneo": "2026-10-03T14:22:05Z" }
+    {
+      "tipo_ingreso": "QR",
+      "jti": "abc-123",
+      "reserva_id": "3f2b8c1e-5d4a-4b6f-9a7e-1c2d3e4f5a6b",
+      "fecha_escaneo": "2026-10-03T14:22:05Z",
+      "cantidad_personas": 4,
+      "dispositivo_id": "dispositivo-A"
+    },
+    {
+      "tipo_ingreso": "MANUAL",
+      "jti": "manual-7c1d…",
+      "fecha_escaneo": "2026-10-03T14:25:00Z",
+      "cantidad_personas": 2,
+      "monto_cobrado": 4500.50,
+      "nombre": "Visitante Efectivo",
+      "dni": "30123456",
+      "dispositivo_id": "dispositivo-A"
+    }
   ]
 }
 
@@ -134,18 +156,67 @@ Rutas operativas que soportan el comportamiento *offline-first* de la Progressiv
 * **Respuesta Exitosa (200 OK):**
 ```json
 {
-  "procesados": 1,
-  "conflictos": 1,
-  "sincronizados_jti": ["abc-123", "def-456"],
-  "errores": ["Reserva 99 no encontrada en el sistema."]
+  "procesados": 2,
+  "conflictos": 0,
+  "sincronizados_jti": ["abc-123", "manual-7c1d…"],
+  "errores": []
 }
 
 ```
 
+Un registro inválido va a `errores` (`indice`, `jti`, `motivo`) y no frena el resto del lote.
+
 * **Manejo de Errores:** Retorna HTTP 500 realizando un *rollback* de todo el lote ante un fallo crítico en la base de datos.
 
 
-## 5. Endpoints de Pasarela de Pagos
+## 5. Endpoints del Panel: Ocupación, Egresos y Cobros
+
+Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las horas se guardan en UTC y los días se cuentan con la hora de Buenos Aires (ver `zonas-horarias.md`).
+
+### `GET /api/v1/ocupacion`
+
+* **Descripción:** Personas dentro del camping, capacidad máxima y buffer offline. Lo consume el monitor del inicio del panel.
+* **Cálculo:** Personas de todos los ingresos aceptados menos personas egresadas. Cuenta todos los movimientos y no solo los del día, porque hay estadías de varias noches. Nunca es negativa.
+* **Qué no suma:** Los QR clonados, que quedan en `conflictos_sincronizacion` y nunca llegan a `ingresos_fisicos`.
+* **Capacidad y buffer:** Se leen de `CAMPING_TOTAL_CAPACITY` y `CAMPING_OFFLINE_BUFFER` (en personas) hasta que la configuración del camping (Issue 19) los pase a la base.
+* **Atraso:** Los ingresos que el guardia registra sin conexión se cuentan recién cuando la PWA los sincroniza.
+```json
+{ "ocupacion_actual": 32, "capacidad_maxima": 50, "buffer_offline": 5 }
+```
+
+### `POST /api/v1/egresos`
+
+* **Descripción:** Registra una salida del camping.
+* **Request Body (`EgresoCreate`):** `cantidad_personas` (entero, al menos 1) y `fecha_hora_egreso` (opcional, ISO 8601 con zona; si no se manda, se usa la hora en que llega el pedido).
+* **Respuesta (201 Created):** El egreso guardado y `personas_dentro`, las personas que quedan después de registrarlo.
+* **Manejo de Errores:**
+  * 422 si la cantidad es menor a 1, si la hora no trae zona horaria o si está en el futuro (con 5 minutos de margen).
+  * 409 si se quiere egresar más gente de la que hay dentro; el mensaje indica cuántas personas hay.
+* **Concurrencia:** Un candado de PostgreSQL (`pg_advisory_xact_lock`) evita que dos egresos simultáneos se validen contra la misma ocupación.
+
+### `GET /api/v1/admin/cobros`
+
+* **Descripción:** Lo cobrado por día, separado en efectivo y Mercado Pago, con los totales del período.
+* **Parámetros Query:** `desde` y `hasta` (AAAA-MM-DD, ambos incluidos). Sin fechas devuelve la última semana, contando hoy. El rango máximo es de 92 días; un rango invertido o más largo devuelve 422.
+* **Efectivo:** `monto_cobrado` de los ingresos manuales, en el día en que se escaneó el ingreso.
+* **Mercado Pago:** Solo pagos de la tabla `pagos` con estado `approved`, en el día de la aprobación (o el de creación, si no hay fecha de aprobación). Si un pago se reembolsa, cambia de estado y deja de contarse.
+* **Respuesta (200 OK):** Incluye todos los días del rango, también los que no tuvieron cobros.
+```json
+{
+  "desde": "2026-11-03",
+  "hasta": "2026-11-04",
+  "total_efectivo": 2000.0,
+  "total_mercado_pago": 20000.25,
+  "total": 22000.25,
+  "dias": [
+    { "fecha": "2026-11-03", "efectivo": 2000.0, "mercado_pago": 15000.0, "total": 17000.0 },
+    { "fecha": "2026-11-04", "efectivo": 0.0, "mercado_pago": 5000.25, "total": 5000.25 }
+  ]
+}
+```
+
+
+## 6. Endpoints de Pasarela de Pagos
 
 Módulo encargado de la comunicación con los servidores de Mercado Pago (MP) y la acreditación de reservas.
 
@@ -160,7 +231,7 @@ Módulo encargado de la comunicación con los servidores de Mercado Pago (MP) y 
 * **Lógica Interna:** Utiliza el método `.search()` del SDK de MP filtrando por el `external_reference`. Si detecta un pago exitoso omitido localmente, ejecuta la actualización de estado.
 
 
-## 6. Dominios de Autenticación y Seguridad
+## 7. Dominios de Autenticación y Seguridad
 
 FastAPI gestiona dos tipos de llaves criptográficas completamente separadas para evitar exposición sistémica.
 

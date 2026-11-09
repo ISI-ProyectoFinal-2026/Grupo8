@@ -9,11 +9,12 @@ Manual operativo del software. Cubre:
 - El ciclo de vida de una reserva y la emisión del código QR.
 - Cómo los guardias deben operar la aplicación móvil (PWA) sin conexión a internet.
 - Navegación del cliente en el buscador, pasarela de pagos y autogestión de perfil.
+- Uso del panel de administración: monitor de ocupación, egresos y resumen de cobros.
 
 ### 2. [Documentación Técnica](./technical_documentation.md)
 Arquitectura y decisiones de diseño interno:
 - **Backend:** FastAPI, PostgreSQL, SQLAlchemy y migraciones con Alembic.
-- **Frontend:** React, Vite y arquitecturas de interfaz con Shadcn UI.
+- **Frontend:** React, Vite y arquitecturas de interfaz con Shadcn UI; sesión y rutas por rol, y estructura del panel de administración.
 - **Seguridad Offline:** Criptografía asimétrica (ES256), IndexedDB, Dexie.js y el motor de validación local mediante la *Web Crypto API*.
 - **Comunicaciones:** Orquestación asíncrona para la generación de correos electrónicos y códigos QR en memoria RAM (Resend + Jinja2).
 
@@ -28,6 +29,7 @@ Definición estricta de contratos de datos y endpoints:
 - Modelos principales (Usuarios, Reservas, Configuraciones).
 - Motor de reglas, cálculo dinámico de tarifas y validaciones de cupos.
 - Endpoints de sincronización transaccional (`/bootstrap`, `/bulk-sync`) y webhooks financieros (Mercado Pago).
+- Endpoints del panel: ocupación, egresos y resumen de cobros.
 
 ### 5. [Guía de Despliegue (Deployment)](./deployment.md)
 Cómo llevar la plataforma a entornos de producción:

@@ -20,7 +20,7 @@ Cada integrante modifica libremente sus archivos. Para cambiar un archivo de otr
 | Responsable | Backend | Frontend |
 |---|---|---|
 | P1 | `api/payments.py`, `services/payment_service.py`, `services/email_service.py`, modelo `pagos` | `PagoExito.tsx`, `PagoPendiente.tsx`, `PagoRechazado.tsx`, `MisReservas.tsx`, componente de cuenta regresiva |
-| P2 | `api/ingresos.py`, modelo y endpoint de egresos, servicio de ocupación, endpoint de cobros | `syncService.ts`, `pages/admin/Inicio.tsx`, `pages/admin/Ocupacion.tsx` |
+| P2 | `api/ingresos.py`, modelo y endpoint de egresos (`api/egresos.py`), servicio y endpoint de ocupación (`services/ocupacion_service.py`, `api/ocupacion.py`), servicio y endpoint de cobros (`services/cobros_service.py`, `api/admin_cobros.py`) | `syncService.ts`, `pages/admin/Inicio.tsx`, `pages/admin/Egresos.tsx` (reemplaza a `Ocupacion.tsx`), `MonitorOcupacion.tsx`, `FormularioEgreso.tsx`, `ResumenCobros.tsx` |
 | P3 | `models/configuracion.py`, modelo `tipos_reserva`, `services/pricing_service.py`, `schemas/reserva.py`, endpoints de configuración y tipos | `Home.tsx`, `Disponibilidad.tsx`, `Reservas.tsx`, pantallas Configuración y Tipos de reserva del panel |
 | P4 | `api/admin_socios.py`, `api/socios.py`, `services/socio_service.py`, `services/alta_socio_service.py`, `services/auth_service.py` (bloqueo de socios dados de baja), `models/user.py` | `pages/admin/Socios.tsx` |
 
@@ -79,7 +79,7 @@ Solo se agrega lo propio. No se reordena, no se reformatea y no se borra lo de o
 | S9 | La cabaña (cobro por unidad) se cobra por noche: noches = egreso − ingreso. |
 | S10 | Un socio dado de baja no puede iniciar sesión. |
 | S11 | Desde el panel se definen el cupo máximo, el porcentaje de buffer offline y el máximo de personas por reserva. El buffer es la parte del cupo que no se vende online y queda para los ingresos que el guardia registra en la puerta, aunque no haya internet. Se guarda como porcentaje, con 10 % recomendado por defecto. |
-| S12 | Los colores del monitor de ocupación los define quien lo implementa. |
+| S12 | Los colores del monitor de ocupación los define quien lo implementa. Quedaron en verde por debajo del 70 %, amarillo desde el 70 % y rojo desde el 90 % (18.4). |
 
 ## 7. Pendiente de confirmar antes de empezar
 

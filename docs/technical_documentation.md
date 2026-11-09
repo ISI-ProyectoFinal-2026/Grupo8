@@ -215,11 +215,112 @@ Orquesta el proceso inmediato desde la validación del pago hasta el envío del 
 
 
 
-## 8. Calidad de Software (QA), Pruebas y Cobertura
+## 8. Web de Reservas y Panel de Administración (Frontend)
+
+Las pantallas del cliente, la PWA del guardia y el panel del administrador conviven en la misma aplicación de React (`frontend/pwa-acceso`) y comparten una única sesión.
+
+### 8.1. Sesión y Rutas por Rol
+
+* **Sesión:** `context/AuthContext.tsx` guarda el token de `POST /auth/login` en `localStorage` (`qamp_token`) y lee el rol del claim `rol`. Ese rol solo decide qué se muestra: el backend vuelve a validar el rol en cada request.
+
+
+* **Redirección:** Después del login, cada rol va a su pantalla (`RUTA_POR_ROL` en `lib/auth.ts`): `SEGURIDAD` a `/acceso`, `ADMIN` a `/admin` y `CLIENTE` a `/perfil`. El menú del `Header` cambia según el rol.
+
+
+* **Sesión vencida:** Cuando una pantalla recibe un 401, dispara el evento `AUTH_EXPIRED_EVENT` y el contexto cierra la sesión. La excepción es el guardia: si su token vence sin conexión, la sesión se conserva para que pueda seguir escaneando, y se le pide iniciar sesión cuando `bulk-sync` responde 401 al volver la red.
+
+
+* **Guards:** `RutaProtegida` deja pasar solo a los roles indicados (sin sesión redirige a `/login`; con otro rol muestra "Acceso denegado"). `RutaSocio` consulta `GET /auth/me` y limita "Perfil" y "Mis reservas" a los socios; un socio con la cuota vencida entra igual para ver su estado.
+
+
+
+### 8.2. Panel de Administración
+
+* **Estructura:** `/admin/*` está protegido para `ADMIN` en `pages/admin/AdminRoutes.tsx` y usa un layout común con el menú lateral.
+
+
+* **Agregar una pantalla:** Cada pantalla se registra con una entrada en `pages/admin/routes.tsx` (`path`, `titulo`, `icono`, `element`). El menú y las rutas se arman a partir de esa lista, por lo que no hace falta tocar `App.tsx` ni el layout.
+
+
+* **Pantallas actuales:** Inicio (monitor de ocupación y resumen de cobros), Socios, Descuentos, Incidentes, Egresos y Alertas.
+
+
+
+### 8.3. Formulario de Reserva
+
+* **Personas:** Se piden los datos de cada persona y se envía la lista completa al crear la reserva.
+
+
+* **Total:** Sale siempre de `POST /reservas/cotizar`; el frontend no tiene precios ni descuentos propios.
+
+
+* **Socios:** El DNI de cada persona marcada como socio se verifica con `GET /socios/validar/{dni}`. Si el DNI no existe, no es de un socio o tiene la cuota vencida, la reserva se bloquea. Si quien reserva es un socio con sesión, sus datos aparecen precargados.
+
+
+* **Correo:** Se pide confirmar el email (no se puede pegar en ese campo) para evitar errores al enviar el QR. Si el email sale de la cuenta con sesión, no se pide confirmarlo. Es una validación solo del frontend: el backend recibe un único email.
+
+
+
+## 9. Ocupación, Egresos y Cobros
+
+Permite al administrador saber cuántas personas hay dentro del camping y cuánto se cobró. La lógica vive en `services/ocupacion_service.py` y `services/cobros_service.py`.
+
+### 9.1. Cálculo de la Ocupación
+
+* **Fórmula:** Personas de los ingresos aceptados menos personas egresadas. Se cuentan todos los movimientos y no solo los del día, porque hay estadías de varias noches.
+
+
+* **Personas por ingreso:** Los ingresos con QR guardan la cantidad que trae el token y los manuales la que anota el guardia. Los registros anteriores sin cantidad cuentan como 1 persona.
+
+
+* **QR clonados:** No suman, porque el segundo escaneo de un mismo `jti` queda en `conflictos_sincronizacion` y nunca llega a `ingresos_fisicos`.
+
+
+* **Nunca negativa:** Si se registran egresos antes de que lleguen los ingresos offline, la ocupación queda en 0 hasta que los guardias sincronicen.
+
+
+* **Capacidad y buffer:** Hoy se leen de `CAMPING_TOTAL_CAPACITY` y `CAMPING_OFFLINE_BUFFER`. Cuando la configuración del camping (Issue 19) los guarde en la base, solo cambia la función `_capacidad_y_buffer()`.
+
+
+
+### 9.2. Egresos
+
+* El administrador registra las salidas desde el panel. No se puede egresar más gente de la que hay dentro (409).
+
+
+* Un candado de PostgreSQL (`pg_advisory_xact_lock`) evita que dos egresos simultáneos se validen contra la misma ocupación.
+
+
+
+### 9.3. Resumen de Cobros
+
+* **Efectivo:** Lo cobrado en los ingresos manuales, en el día del escaneo.
+
+
+* **Mercado Pago:** Solo los pagos aprobados de la tabla `pagos`, en el día de la aprobación. Un reembolso cambia el estado del pago y deja de contarse.
+
+
+* **Días:** Se agrupa por día de Buenos Aires, no de UTC, para que un cobro a las 23:30 cuente en el día correcto.
+
+
+
+### 9.4. Monitor del Panel
+
+* El Inicio muestra la ocupación sobre la capacidad, el porcentaje y el tramo de la barra reservado al buffer offline. Se actualiza cada 30 segundos y al registrar un egreso.
+
+
+* **Colores:** Verde por debajo del 70 %, amarillo desde el 70 % y rojo desde el 90 % (`lib/ocupacion.ts`). El nivel también se muestra en texto ("normal", "alta", "crítica").
+
+
+* Debajo del monitor está el resumen de cobros, con la última semana por defecto y un rango elegible de hasta 92 días.
+
+
+
+## 10. Calidad de Software (QA), Pruebas y Cobertura
 
 Se consolidó un esfuerzo masivo de aserción elevando la calidad técnica de las bases estructurales.
 
-### 8.1. Pruebas de Backend (`pytest`)
+### 10.1. Pruebas de Backend (`pytest`)
 
 * Se desarrollaron tests asíncronos configurando `AnyIO` y evadiendo errores de integridad referencial inyectando usuarios efímeros pre-reservas en GitHub Actions.
 
@@ -231,7 +332,7 @@ Se consolidó un esfuerzo masivo de aserción elevando la calidad técnica de la
 
 
 
-### 8.2. Pruebas de Frontend (`vitest`)
+### 10.2. Pruebas de Frontend (`vitest`)
 
 * Se utilizó la dependencia de desarrollo `fake-indexeddb` para someter a prueba a Dexie fuera del navegador.
 
