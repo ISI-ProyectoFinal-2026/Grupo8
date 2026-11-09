@@ -1,6 +1,10 @@
 import { Plus } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import AccionesSocio from '@/components/admin/AccionesSocio';
+import FiltrosSocios from '@/components/admin/FiltrosSocios';
+import FormularioEdicionSocio from '@/components/admin/FormularioEdicionSocio';
+import FormularioRenovacionSocio from '@/components/admin/FormularioRenovacionSocio';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,15 +14,39 @@ import { ErrorApi } from '@/lib/descuentos';
 import { formatearFecha } from '@/lib/fechas';
 import {
   crearSocio,
+  darDeBaja,
+  editarSocio,
+  estadoDeSocio,
+  ETIQUETA_ESTADO,
+  filtrosVacios,
   formularioVacio,
+  hayFiltros,
   listarSocios,
   PASSWORD_MIN,
+  reactivarSocio,
+  renovarMembresia,
   validarSocio,
+  type EdicionFormulario,
   type ErroresSocio,
+  type EstadoSocio,
+  type FiltrosSocios as Filtros,
   type Socio,
   type SocioFormulario,
 } from '@/lib/socios';
+import { useValorDiferido } from '@/lib/useValorDiferido';
 import { limpiarNombre, soloDigitos } from '@/lib/validaciones';
+
+// Espera después de la última tecla antes de pedir la lista filtrada
+const DEMORA_BUSQUEDA_MS = 300;
+
+const VARIANTE_ESTADO: Record<EstadoSocio, BadgeProps['variant']> = {
+  vigente: 'default',
+  vencida: 'secondary',
+  baja: 'outline',
+};
+
+// Un solo panel abierto a la vez: alta, edición o renovación de un socio
+type Panel = { tipo: 'alta' } | { tipo: 'editar'; socio: Socio } | { tipo: 'renovar'; socio: Socio } | null;
 
 function MensajeError({ texto }: { texto?: string }) {
   return texto ? (
@@ -35,11 +63,27 @@ export default function Socios() {
   const [errorCarga, setErrorCarga] = useState('');
   const [aviso, setAviso] = useState('');
 
-  const [formularioAbierto, setFormularioAbierto] = useState(false);
+  const [filtros, setFiltros] = useState<Filtros>(filtrosVacios);
+  const buscarDiferido = useValorDiferido(filtros.buscar, DEMORA_BUSQUEDA_MS);
+  // El estado se aplica enseguida; el texto, cuando se deja de escribir
+  const filtrosAplicados = useMemo<Filtros>(
+    () => ({ buscar: buscarDiferido, estado: filtros.estado }),
+    [buscarDiferido, filtros.estado]
+  );
+
+  const [panel, setPanel] = useState<Panel>(null);
   const [form, setForm] = useState<SocioFormulario>(formularioVacio);
   const [errores, setErrores] = useState<ErroresSocio>({});
   const [errorServidor, setErrorServidor] = useState('');
   const [guardando, setGuardando] = useState(false);
+
+  // Socio con una baja o reactivación en curso, y el error de esa operación
+  const [ocupadoId, setOcupadoId] = useState<string | null>(null);
+  const [errorAccion, setErrorAccion] = useState('');
+
+  // Si se escribe rápido, una respuesta vieja puede llegar después de una nueva:
+  // solo se muestra la del último pedido
+  const ultimoPedido = useRef(0);
 
   // Una sesión vencida cierra la sesión desde el AuthContext
   const manejarError = useCallback((error: unknown): string => {
@@ -52,33 +96,87 @@ export default function Socios() {
 
   const cargar = useCallback(async () => {
     if (!token) return;
+    const pedido = ++ultimoPedido.current;
     setCargando(true);
     setErrorCarga('');
     try {
-      setSocios(await listarSocios(token));
+      const lista = await listarSocios(token, filtrosAplicados);
+      if (pedido === ultimoPedido.current) setSocios(lista);
     } catch (error) {
-      setErrorCarga(manejarError(error));
+      if (pedido === ultimoPedido.current) setErrorCarga(manejarError(error));
     } finally {
-      setCargando(false);
+      if (pedido === ultimoPedido.current) setCargando(false);
     }
-  }, [token, manejarError]);
+  }, [token, filtrosAplicados, manejarError]);
 
   useEffect(() => {
     void cargar();
   }, [cargar]);
 
+  const formularioAbierto = panel?.tipo === 'alta';
+
+  const abrirPanel = (nuevo: Exclude<Panel, null>) => {
+    setPanel(nuevo);
+    setAviso('');
+    setErrorAccion('');
+  };
+
   const abrirAlta = () => {
-    setFormularioAbierto(true);
+    abrirPanel({ tipo: 'alta' });
     setForm(formularioVacio);
     setErrores({});
     setErrorServidor('');
-    setAviso('');
   };
 
   const cerrarFormulario = () => {
-    setFormularioAbierto(false);
+    setPanel(null);
     setErrores({});
     setErrorServidor('');
+  };
+
+  // Edición y renovación: si falla, el formulario muestra el mensaje y queda abierto
+  const guardarEdicion = async (socio: Socio, cambios: Partial<EdicionFormulario>) => {
+    if (!token) return;
+    try {
+      await editarSocio(token, socio.id, cambios);
+    } catch (error) {
+      throw new Error(manejarError(error), { cause: error });
+    }
+    setPanel(null);
+    setAviso('Datos del socio actualizados.');
+    await cargar();
+  };
+
+  const renovar = async (socio: Socio, membresiaVence: string) => {
+    if (!token) return;
+    try {
+      await renovarMembresia(token, socio.id, membresiaVence);
+    } catch (error) {
+      throw new Error(manejarError(error), { cause: error });
+    }
+    setPanel(null);
+    setAviso('Membresía renovada.');
+    await cargar();
+  };
+
+  // Baja y reactivación se aplican desde la fila; el error se muestra arriba del listado
+  const cambiarActivo = async (socio: Socio, operacion: 'baja' | 'reactivar') => {
+    if (!token) return;
+    setOcupadoId(socio.id);
+    setAviso('');
+    setErrorAccion('');
+    try {
+      if (operacion === 'baja') await darDeBaja(token, socio.id);
+      else await reactivarSocio(token, socio.id);
+      // Si estaba abierto un formulario de ese socio, ya no corresponde
+      setPanel((actual) => (actual && actual.tipo !== 'alta' && actual.socio.id === socio.id ? null : actual));
+      setAviso(operacion === 'baja' ? `${socio.nombre} fue dado de baja.` : `${socio.nombre} fue reactivado.`);
+      await cargar();
+    } catch (error) {
+      setErrorAccion(manejarError(error));
+    } finally {
+      setOcupadoId(null);
+    }
   };
 
   const cambiar = (campo: keyof SocioFormulario, valor: string) =>
@@ -112,8 +210,8 @@ export default function Socios() {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Socios</h1>
           <p className="mt-1 text-zinc-600">
-            Das de alta a los socios y definís hasta cuándo tienen la cuota al día. Cada socio
-            ingresa con su DNI o email y la contraseña inicial que cargues acá.
+            Das de alta a los socios, corregís sus datos, renovás su membresía y los das de baja.
+            Cada socio ingresa con su DNI o email y la contraseña inicial que cargues acá.
           </p>
         </div>
         {!formularioAbierto && (
@@ -227,8 +325,39 @@ export default function Socios() {
         </Card>
       )}
 
+      {panel?.tipo === 'editar' && (
+        <FormularioEdicionSocio
+          key={panel.socio.id}
+          socio={panel.socio}
+          onGuardar={(cambios) => guardarEdicion(panel.socio, cambios)}
+          onCancelar={() => setPanel(null)}
+        />
+      )}
+
+      {panel?.tipo === 'renovar' && (
+        <FormularioRenovacionSocio
+          key={panel.socio.id}
+          socio={panel.socio}
+          onRenovar={(fecha) => renovar(panel.socio, fecha)}
+          onCancelar={() => setPanel(null)}
+        />
+      )}
+
+      <FiltrosSocios filtros={filtros} onCambiar={setFiltros} />
+
+      {errorAccion && (
+        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {errorAccion}
+        </p>
+      )}
+
       <Card>
         <CardContent className="p-0">
+          {cargando && socios.length > 0 && (
+            <p role="status" className="border-b px-4 py-2 text-xs text-zinc-500">
+              Buscando…
+            </p>
+          )}
           {cargando && socios.length === 0 ? (
             <p className="p-6 text-zinc-600">Cargando socios…</p>
           ) : errorCarga ? (
@@ -241,7 +370,16 @@ export default function Socios() {
               </Button>
             </div>
           ) : socios.length === 0 ? (
-            <p className="p-6 text-zinc-600">Todavía no hay socios cargados.</p>
+            hayFiltros(filtrosAplicados) ? (
+              <div className="space-y-3 p-6">
+                <p className="text-zinc-600">Ningún socio coincide con la búsqueda.</p>
+                <Button variant="outline" onClick={() => setFiltros(filtrosVacios)}>
+                  Limpiar filtros
+                </Button>
+              </div>
+            ) : (
+              <p className="p-6 text-zinc-600">Todavía no hay socios cargados.</p>
+            )
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
@@ -251,6 +389,9 @@ export default function Socios() {
                     <th className="px-4 py-3 font-medium">DNI</th>
                     <th className="px-4 py-3 font-medium">Vence</th>
                     <th className="px-4 py-3 font-medium">Estado</th>
+                    <th className="px-4 py-3 text-right font-medium">
+                      <span className="sr-only">Acciones</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -265,9 +406,19 @@ export default function Socios() {
                         {socio.membresia_vence ? formatearFecha(socio.membresia_vence) : '—'}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant={socio.membresia_vigente ? 'default' : 'secondary'}>
-                          {socio.membresia_vigente ? 'Vigente' : 'Vencida'}
+                        <Badge variant={VARIANTE_ESTADO[estadoDeSocio(socio)]}>
+                          {ETIQUETA_ESTADO[estadoDeSocio(socio)]}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <AccionesSocio
+                          socio={socio}
+                          ocupado={ocupadoId === socio.id}
+                          onEditar={() => abrirPanel({ tipo: 'editar', socio })}
+                          onRenovar={() => abrirPanel({ tipo: 'renovar', socio })}
+                          onDarDeBaja={() => cambiarActivo(socio, 'baja')}
+                          onReactivar={() => void cambiarActivo(socio, 'reactivar')}
+                        />
                       </td>
                     </tr>
                   ))}

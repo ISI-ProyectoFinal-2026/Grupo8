@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
@@ -51,8 +51,15 @@ function renderizarEn(ruta: string) {
 }
 
 describe('Shell del panel de administración (Issue 15.1)', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    // Las páginas del panel piden datos al montarse (socios, descuentos...). Acá solo se
+    // prueba la navegación: los pedidos quedan pendientes y nunca salen al backend real
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+  });
   afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
     localStorage.clear();
     window.history.pushState({}, '', '/');
   });
