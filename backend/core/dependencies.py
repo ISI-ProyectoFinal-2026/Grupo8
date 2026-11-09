@@ -45,7 +45,9 @@ def _usuario_desde_token(token: str, db: Session) -> User:
     # El usuario y su rol se leen de la base en cada request: el claim "rol" del token
     # sirve solo para la interfaz y nunca reemplaza esta consulta
     user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
+    # Un usuario dado de baja se trata como si no existiera: su sesión abierta
+    # deja de valer en la siguiente petición, aunque el token no haya vencido
+    if user is None or not user.activo:
         raise credentials_exception
 
     return user

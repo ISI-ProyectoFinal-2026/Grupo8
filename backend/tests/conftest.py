@@ -15,6 +15,7 @@ from models.ingreso_fisico import IngresoFisico
 from models.configuracion import ConfiguracionCamping
 from models.conflictos import ConflictosSincronizacion
 from models.pago import Pago
+from services import socio_service
 from services.camping_service import obtener_o_crear_camping
 from services.pricing_service import PricingService
 from services.qr_service import QRService, qr_service
@@ -51,6 +52,25 @@ def descuentos_fijos(monkeypatch):
     )
     monkeypatch.setattr(PricingService, "_descuentos_activos", staticmethod(lambda db: [socio]))
     return DESCUENTO_SOCIO_PRUEBA
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "socios_reales: el test usa la verificación real de socios al crear reservas",
+    )
+
+
+@pytest.fixture(autouse=True)
+def socios_sin_verificar(request, monkeypatch):
+    """
+    Autouse: al crear una reserva, las personas marcadas como socio se dan por válidas,
+    así los tests de precios y reservas no tienen que dar de alta un socio por cada DNI.
+    Los tests que prueban la verificación usan @pytest.mark.socios_reales.
+    """
+    if request.node.get_closest_marker("socios_reales"):
+        return
+    monkeypatch.setattr(socio_service, "verificar_personas_socias", lambda db, personas: None)
 
 
 @pytest.fixture

@@ -55,6 +55,10 @@ def autenticar(db: Session, identificador: str, password: str) -> Optional[User]
         return None
     if not verificar_password(password, usuario.password_hash):
         return None
+    # Recién después de comprobar la contraseña: así un dado de baja recibe la misma
+    # respuesta que una contraseña incorrecta y no se puede averiguar quién fue dado de baja
+    if not usuario.activo:
+        return None
     return usuario
 
 

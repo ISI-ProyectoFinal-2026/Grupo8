@@ -131,7 +131,7 @@ def test_alta_correcta_devuelve_201_y_los_datos_del_socio(admin):
 def test_la_respuesta_nunca_incluye_la_contrasena(admin):
     body = client.post(URL, json=_payload(), headers=admin).json()
 
-    assert set(body) == {"id", "nombre", "dni", "email", "membresia_vence", "membresia_vigente"}
+    assert set(body) == {"id", "nombre", "dni", "email", "membresia_vence", "membresia_vigente", "activo"}
     assert PASSWORD not in str(body)
 
 
@@ -372,4 +372,4 @@ def test_el_listado_no_expone_contrasenas(admin):
     client.post(URL, json=_payload(), headers=admin)
 
     for socio in client.get(URL, headers=admin).json():
-        assert set(socio) == {"id", "nombre", "dni", "email", "membresia_vence", "membresia_vigente"}
+        assert set(socio) == {"id", "nombre", "dni", "email", "membresia_vence", "membresia_vigente", "activo"}
