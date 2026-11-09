@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, Date, DateTime, Enum
+from sqlalchemy import Column, String, Boolean, Date, DateTime, Enum, true
 from sqlalchemy.dialects.postgresql import UUID
 
 # Importamos la clase Base que creaste en la Sub-issue 1.2
@@ -31,6 +31,9 @@ class User(Base):
     membresia_vence = Column(Date, nullable=True)
     # En desuso: se conserva por compatibilidad, pero ya no se usa para decidir nada
     estado_cuota = Column(String, nullable=True)
+    # La baja no borra al usuario (sus reservas lo siguen referenciando): lo desactiva.
+    # Un usuario inactivo no puede iniciar sesión ni valida como socio
+    activo = Column(Boolean, default=True, server_default=true(), nullable=False)
 
     # Atributos de auditoría estándar
     created_at = Column(DateTime, default=datetime.utcnow)

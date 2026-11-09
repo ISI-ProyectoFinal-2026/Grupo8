@@ -17,6 +17,7 @@ from models.reserva import (
 from models.configuracion import ConfiguracionCamping
 from services.capacity_service import CapacityService
 from services.pricing_service import Cotizacion, PersonaPrecio, PricingService
+from services import socio_service
 
 router = APIRouter(prefix="/reservas", tags=["Reservas"])
 capacity_service = CapacityService()
@@ -84,7 +85,14 @@ def crear_reserva(
         reservas_activas=lugares_ocupados
     )
 
-    # 5. Precio de cada persona y total, con la misma cuenta que usa la cotización
+    # 5. Las personas marcadas como socio tienen que validar como socio en la base
+    # (membresía vigente y sin baja). Sin esto, el descuento quedaría a cargo del formulario
+    try:
+        socio_service.verificar_personas_socias(db, reserva_in.personas)
+    except socio_service.SocioNoValidoError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+
+    # 6. Precio de cada persona y total, con la misma cuenta que usa la cotización
     # El monto lo calcula el backend, no lo manda el cliente
     cotizacion = PricingService.cotizar(
         db, [PersonaPrecio(p.edad, p.condicion) for p in reserva_in.personas]
@@ -104,7 +112,7 @@ def crear_reserva(
     ]
     monto_total = float(cotizacion.total)
 
-    # 6. Preparar el objeto para la base de datos (el titular es la primera persona)
+    # 7. Preparar el objeto para la base de datos (el titular es la primera persona)
     nueva_reserva = Reserva(
         user_id=user_id,
         camping_id=camping.camping_id,
@@ -119,7 +127,7 @@ def crear_reserva(
         personas=personas
     )
 
-    # 7. Transacción Atómica: la reserva y todas sus personas se guardan juntas
+    # 8. Transacción Atómica: la reserva y todas sus personas se guardan juntas
     try:
         db.add(nueva_reserva)
         db.commit()               # Se ejecuta la transacción
