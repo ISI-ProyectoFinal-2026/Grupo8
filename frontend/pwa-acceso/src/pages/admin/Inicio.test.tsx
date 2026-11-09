@@ -19,6 +19,8 @@ vi.mock('@/context/AuthContext', () => ({
   useAuth: () => ({ token: 'token-de-prueba' }),
   AUTH_EXPIRED_EVENT: 'qamp:auth-expired',
 }));
+// El resumen de cobros tiene sus propios tests; acá solo se prueba el monitor
+vi.mock('@/components/admin/ResumenCobros', () => ({ ResumenCobros: () => null }));
 
 const ocupacion = (actual: number, capacidad = 50, buffer = 5): Ocupacion => ({
   ocupacion_actual: actual,
