@@ -10,6 +10,9 @@ from schemas.reserva import DNI_REGEX, NOMBRE_REGEX, hoy_argentina
 
 MotivoSocio = Literal["NO_EXISTE", "NO_ES_SOCIO", "CUOTA_VENCIDA"]
 
+# Filtro del padrón: membresía al día, vencida (sigue activo) o dado de baja
+EstadoMembresia = Literal["vigente", "vencida", "baja"]
+
 
 class SocioValidacion(BaseModel):
     """Resultado de validar un DNI. Nombre y condición solo se informan si la membresía está vigente."""

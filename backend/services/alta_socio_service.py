@@ -1,12 +1,14 @@
 from typing import List, Literal, Optional
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.user import RoleEnum, User
-from schemas.socio import SocioCreate, SocioOut, SocioRenovacion, SocioUpdate
+from schemas.reserva import hoy_argentina
+from schemas.socio import EstadoMembresia, SocioCreate, SocioOut, SocioRenovacion, SocioUpdate
 from services.auth_service import hash_password
 from services.socio_service import membresia_vigente
 
@@ -88,8 +90,64 @@ def crear_socio(db: Session, datos: SocioCreate) -> User:
     return usuario
 
 
-def listar_socios(db: Session) -> List[User]:
-    return db.query(User).filter(User.is_socio.is_(True)).order_by(User.nombre, User.dni).all()
+# Letras con acento y su versión sin acento, para buscar nombres sin importar cómo se escribieron.
+# Se usa igual en Python (el texto buscado) y en SQL (translate sobre la columna), así no hace
+# falta la extensión unaccent. Van las mayúsculas también: con algunas configuraciones de
+# PostgreSQL, lower() no convierte las mayúsculas acentuadas.
+CON_ACENTO = "ÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇáàäâãéèëêíìïîóòöôõúùüûñç"
+SIN_ACENTO = "AAAAAEEEEIIIIOOOOOUUUUNCaaaaaeeeeiiiiooooouuuunc"
+_TABLA_ACENTOS = str.maketrans(CON_ACENTO, SIN_ACENTO)
+
+
+def normalizar(texto: str) -> str:
+    """Minúsculas y sin acentos: "Núñez" → "nunez"."""
+    return texto.translate(_TABLA_ACENTOS).lower()
+
+
+def _nombre_normalizado() -> ColumnElement[str]:
+    return func.lower(func.translate(User.nombre, CON_ACENTO, SIN_ACENTO))
+
+
+def _condicion_busqueda(buscar: str) -> Optional[ColumnElement[bool]]:
+    """
+    Si el texto son solo números (se aceptan puntos, como en "30.111.222") se busca por DNI:
+    los que empiezan con esos dígitos. Si no, por nombre: cada palabra tiene que aparecer
+    en el nombre, sin importar el orden, las mayúsculas ni los acentos.
+    """
+    texto = buscar.strip()
+    digitos = texto.replace(".", "")
+    if digitos.isdigit():
+        return User.dni.startswith(digitos, autoescape=True)
+    palabras = normalizar(texto).split()
+    if not palabras:
+        return None
+    nombre = _nombre_normalizado()
+    return and_(*(nombre.contains(palabra, autoescape=True) for palabra in palabras))
+
+
+def _condicion_estado(estado: EstadoMembresia) -> ColumnElement[bool]:
+    """Misma regla que membresia_vigente, escrita como consulta."""
+    if estado == "baja":
+        return User.activo.is_(False)
+    hoy = hoy_argentina()
+    if estado == "vigente":
+        return and_(User.activo.is_(True), User.membresia_vence >= hoy)
+    # Vencida: sigue activo, pero sin fecha o con la fecha ya pasada
+    return and_(User.activo.is_(True), or_(User.membresia_vence.is_(None), User.membresia_vence < hoy))
+
+
+def listar_socios(
+    db: Session, buscar: Optional[str] = None, estado: Optional[EstadoMembresia] = None
+) -> List[User]:
+    """Padrón de socios, ordenado por nombre. La búsqueda y el filtro se pueden combinar."""
+    consulta = db.query(User).filter(User.is_socio.is_(True))
+    if buscar:
+        condicion = _condicion_busqueda(buscar)
+        if condicion is not None:
+            consulta = consulta.filter(condicion)
+    if estado:
+        consulta = consulta.filter(_condicion_estado(estado))
+    return consulta.order_by(User.nombre, User.dni).all()
 
 
 def obtener_socio(db: Session, socio_id: UUID) -> User:

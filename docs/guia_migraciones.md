@@ -32,6 +32,7 @@ Si dos migraciones tienen el mismo `down_revision`, aparecen dos heads y `alembi
 | hora_escaneo_con_zona (subissue 16.4) | `b9e6d3a47c15` | `a8c4e1f92b37` |
 | egresos_fisicos (subissue 18.2) | `e6cd5a417191` | `b9e6d3a47c15` |
 | pagos (subissue 17.1) | `d2f7b4c8e913` | `e6cd5a417191` |
+| usuarios activos | `a6e2c9d14f83` | `d2f7b4c8e913` |
 Cada vez que se integra una migración nueva hay que sumarla a esta tabla.
 
 ## Crear una migración

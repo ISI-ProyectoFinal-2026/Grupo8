@@ -1,13 +1,13 @@
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.dependencies import require_role
 from models.user import RoleEnum
-from schemas.socio import SocioCreate, SocioOut, SocioRenovacion, SocioUpdate
+from schemas.socio import EstadoMembresia, SocioCreate, SocioOut, SocioRenovacion, SocioUpdate
 from services.alta_socio_service import (
     EstadoSocioError,
     SocioDuplicadoError,
@@ -41,8 +41,15 @@ def _no_encontrado() -> HTTPException:
 
 
 @router.get("", response_model=List[SocioOut])
-def listar(db: Session = Depends(get_db)):
-    return [socio_out(socio) for socio in listar_socios(db)]
+def listar(
+    buscar: Optional[str] = Query(
+        None, max_length=100, description="DNI (o su comienzo) o palabras del nombre"
+    ),
+    estado: Optional[EstadoMembresia] = Query(None, description="vigente, vencida o baja"),
+    db: Session = Depends(get_db),
+):
+    """Padrón de socios. Sin parámetros devuelve todos, incluidos los dados de baja."""
+    return [socio_out(socio) for socio in listar_socios(db, buscar, estado)]
 
 
 @router.post("", response_model=SocioOut, status_code=status.HTTP_201_CREATED)
