@@ -110,8 +110,8 @@ def servicios_falsos(monkeypatch):
     """QR y correo nunca son reales en estos tests."""
     SecurityServiceFalso.payloads = []
     EmailServiceFalso.enviados = []
-    monkeypatch.setattr("api.payments.SecurityService", SecurityServiceFalso)
-    monkeypatch.setattr("api.payments.email_service", EmailServiceFalso())
+    monkeypatch.setattr("services.payment_service.SecurityService", SecurityServiceFalso)
+    monkeypatch.setattr("services.payment_service.email_service", EmailServiceFalso())
 
 
 @pytest.fixture

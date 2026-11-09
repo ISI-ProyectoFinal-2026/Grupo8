@@ -1,15 +1,26 @@
+import logging
+import time
 import uuid
-from datetime import datetime
+from datetime import datetime, time as dtime, timedelta
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 
 import mercadopago
+from fastapi import BackgroundTasks
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.tiempo import a_utc, ahora_utc
 from models.pago import Pago
-from models.reserva import Reserva
+from models.reserva import CondicionPersonaEnum, EstadoPagoEnum, Reserva
+from security.schemas import JWTPayloadSchema
+from security.services import SecurityService
+from services.email_service import email_service
+
+logger = logging.getLogger(__name__)
+
+ZONA_ARGENTINA = ZoneInfo("America/Argentina/Buenos_Aires")
 
 # Campos de la respuesta de Mercado Pago que se guardan en pagos.respuesta_mp.
 # Es una lista de permitidos: cualquier campo nuevo que agregue Mercado Pago queda afuera
@@ -125,6 +136,81 @@ def registrar_pago(db: Session, datos_mp: dict) -> Pago | None:
     ).returning(Pago.id)
     pago_id = db.execute(sentencia).scalar_one()
     return db.get(Pago, pago_id, populate_existing=True)
+
+
+def tipo_qr(reserva: Reserva) -> str:
+    """El QR sale como socio solo si todas las personas de la reserva son socias.
+    Con algún visitante, o en reservas anteriores a la carga de personas, sale como visitante."""
+    personas = reserva.personas
+    if personas and all(persona.condicion == CondicionPersonaEnum.socio for persona in personas):
+        return "socio"
+    return "visitante"
+
+
+def _programar_correo_con_qr(reserva: Reserva, background_tasks: BackgroundTasks) -> None:
+    # El QR vence al terminar el día de egreso (hora de Argentina)
+    vencimiento = datetime.combine(reserva.fecha_egreso + timedelta(days=1), dtime.min, tzinfo=ZONA_ARGENTINA)
+    payload = JWTPayloadSchema(
+        jti=str(uuid.uuid4()),
+        reserva_id=str(reserva.id),
+        camping_id=reserva.camping_id,
+        iat=int(time.time()),
+        cantidad_personas=reserva.cantidad_personas,
+        typ=tipo_qr(reserva),
+        exp=int(vencimiento.timestamp()),
+        dat=reserva.fecha_ingreso.isoformat(),
+    )
+    jwt_generado = SecurityService().generate_offline_qr_token(payload)
+
+    datos_html = {
+        "reserva_id": str(reserva.id),
+        "nombre_cliente": reserva.titular,
+        "email": reserva.email,
+        "fecha_ingreso": str(reserva.fecha_ingreso),
+        "cantidad_personas": reserva.cantidad_personas,
+    }
+    # El correo se manda después de responder, para no demorar la respuesta
+    background_tasks.add_task(
+        email_service.enviar_confirmacion_sync,
+        destinatario=reserva.email,
+        datos_reserva=datos_html,
+        jwt_token=jwt_generado,
+    )
+
+
+def confirmar_pago(db: Session, reserva_id, background_tasks: BackgroundTasks) -> bool:
+    """Marca la reserva como pagada y programa el correo con el QR.
+
+    Lo usan el webhook y la reconciliación. El correo sale solo cuando la reserva pasa
+    a pagada: si ya lo estaba (aviso repetido o reconciliación posterior), no se hace nada.
+    Devuelve True si la reserva se confirmó en esta llamada.
+    """
+    try:
+        reserva_uuid = uuid.UUID(str(reserva_id))
+    except ValueError:
+        return False
+
+    # El bloqueo evita que el webhook y la reconciliación confirmen (y manden el correo) a la vez
+    reserva = (
+        db.query(Reserva)
+        .filter(Reserva.id == reserva_uuid)
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+    if reserva is None or reserva.estado_pago == EstadoPagoEnum.PAGADO:
+        db.rollback()  # libera el bloqueo
+        return False
+
+    reserva.marcar_como_pagada()
+    db.commit()
+
+    # La reserva ya quedó pagada: si falla el QR o el correo, no se deshace el pago
+    try:
+        _programar_correo_con_qr(reserva, background_tasks)
+    except Exception as e:
+        logger.error(f"No se pudo generar el QR de la reserva {reserva.id}: {e}")
+    return True
 
 
 # Instancia global para importar en los endpoints

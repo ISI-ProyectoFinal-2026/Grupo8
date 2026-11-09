@@ -371,8 +371,8 @@ def test_el_webhook_confirma_una_reserva_sin_cuenta_y_manda_el_qr_al_email(limpi
     SecurityServiceFalso.payloads = []
     EmailServiceFalso.enviados = []
     monkeypatch.setattr(payment_service, "mp", MercadoPagoFalso(reserva_id=reserva["id"]))
-    monkeypatch.setattr("api.payments.SecurityService", SecurityServiceFalso)
-    monkeypatch.setattr("api.payments.email_service", EmailServiceFalso())
+    monkeypatch.setattr("services.payment_service.SecurityService", SecurityServiceFalso)
+    monkeypatch.setattr("services.payment_service.email_service", EmailServiceFalso())
 
     response = client.post("/api/payments/webhook", json={"type": "payment", "data": {"id": "123"}})
 

@@ -112,8 +112,8 @@ def respuesta_mp(payment_id, reserva_id, estado="approved", detalle="accredited"
 @pytest.fixture(autouse=True)
 def servicios_falsos(monkeypatch):
     """QR y correo nunca son reales en estos tests."""
-    monkeypatch.setattr("api.payments.SecurityService", SecurityServiceFalso)
-    monkeypatch.setattr("api.payments.email_service", EmailServiceFalso())
+    monkeypatch.setattr("services.payment_service.SecurityService", SecurityServiceFalso)
+    monkeypatch.setattr("services.payment_service.email_service", EmailServiceFalso())
 
 
 @pytest.fixture

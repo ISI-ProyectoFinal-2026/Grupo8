@@ -21,7 +21,7 @@ from PIL import Image
 from core.config import settings
 from core.database import Base, SessionLocal, engine
 from main import app
-from models.reserva import EstadoPagoEnum, EstadoReservaEnum, Reserva
+from models.reserva import CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum, Reserva, ReservaPersona
 from models.user import User
 from security.services import SecurityService
 from services.payment_service import payment_service
@@ -80,9 +80,9 @@ def claves_es256():
 @pytest.fixture(autouse=True)
 def seguridad_con_clave_efimera(monkeypatch, claves_es256):
     privada_pem, _ = claves_es256
-    # El webhook instancia SecurityService() sin argumentos; se le inyecta la clave de prueba
+    # La confirmación del pago instancia SecurityService() sin argumentos; se le inyecta la clave de prueba
     monkeypatch.setattr(
-        "api.payments.SecurityService", lambda: SecurityService(private_key=privada_pem)
+        "services.payment_service.SecurityService", lambda: SecurityService(private_key=privada_pem)
     )
 
 
@@ -155,6 +155,26 @@ def _estados(reserva_id):
     try:
         reserva = db.query(Reserva).filter(Reserva.id == reserva_id).first()
         return reserva.estado_pago, reserva.estado_reserva
+    finally:
+        db.close()
+
+
+def _cargar_personas(reserva_id, condiciones):
+    db = SessionLocal()
+    try:
+        for orden, condicion in enumerate(condiciones):
+            db.add(ReservaPersona(
+                reserva_id=reserva_id,
+                orden=orden,
+                nombre=f"Persona {orden}",
+                edad=30,
+                condicion=CondicionPersonaEnum(condicion),
+                dni=f"P{uuid.uuid4().hex[:10]}" if condicion == "socio" else None,
+                precio_base=5000,
+                descuento_pct=0,
+                precio_final=5000,
+            ))
+        db.commit()
     finally:
         db.close()
 
@@ -253,11 +273,20 @@ def test_el_correo_adjunta_el_qr_como_png(resend_falso, espia_qr, instalar_mp, c
     assert png == espia_qr[0]["png"]
 
 
-@pytest.mark.parametrize("es_socio, tipo", [(False, "visitante"), (True, "socio")])
+# El tipo del QR sale de las personas de la reserva, no del usuario que la creó
+@pytest.mark.parametrize(
+    "usuario_socio, condiciones, tipo",
+    [
+        (False, [], "visitante"),  # reserva anterior a la carga de personas
+        (False, ["socio", "socio"], "socio"),
+        (True, ["socio", "visitante"], "visitante"),
+    ],
+)
 def test_el_qr_adjunto_se_genera_con_un_jwt_firmado_con_los_datos_de_la_reserva(
-    resend_falso, espia_qr, instalar_mp, crear_reserva, claves_es256, es_socio, tipo
+    resend_falso, espia_qr, instalar_mp, crear_reserva, claves_es256, usuario_socio, condiciones, tipo
 ):
-    reserva_id = crear_reserva(es_socio=es_socio)
+    reserva_id = crear_reserva(es_socio=usuario_socio)
+    _cargar_personas(reserva_id, condiciones)
     instalar_mp(reserva_id)
 
     _webhook()
