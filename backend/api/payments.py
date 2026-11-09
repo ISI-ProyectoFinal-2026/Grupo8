@@ -2,17 +2,10 @@ from sqlalchemy import text
 from fastapi import APIRouter, HTTPException, Request, Depends, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from services.payment_service import payment_service, registrar_pago
-from services.email_service import email_service
+from services.payment_service import confirmar_pago, payment_service, registrar_pago
 from core.database import get_db
 from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
-from models.user import User
-from security.services import SecurityService # Ajusta la ruta si es necesario
-from security.schemas import JWTPayloadSchema # Ajusta la ruta si es necesario
 import uuid
-import time
-from datetime import datetime, time as dtime, timedelta
-from zoneinfo import ZoneInfo
 
 router = APIRouter(
     prefix="/api/payments",
@@ -127,67 +120,11 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                     print(f"El pago {payment_id} es real y su estado es: {estado_pago}")
                     
                     if estado_pago == "approved" and reserva_id:
-                        # ==========================================
-                        # LÓGICA DE BASE DE DATOS
-                        # ==========================================
-                        # 1. Buscar la reserva por el ID
-                        reserva = db.query(Reserva).filter(Reserva.id == reserva_id).with_for_update().first()
-                        
-                        if reserva:
-                            # 2. EVITAR DUPLICADOS (DoD 3): Si ya está pagada, no hacemos nada
-                            if reserva.estado_pago == EstadoPagoEnum.PAGADO:
-                                print(f"La reserva {reserva_id} ya figuraba como PAGADA. Ignorando aviso duplicado.")
-                            else:
-                                # 3. ACTUALIZAR (DoD 2): La pasamos a Pagada y guardamos
-                                reserva.marcar_como_pagada()
-                                db.commit()
-                                print(f"¡Éxito! Reserva {reserva_id} actualizada a PAGADO en PostgreSQL.")
-                                
-                                # TODO: Acá iría la llamada a la función que manda el QR por mail
-                                
-                                # ==========================================
-                                # AUTOMATIZACIÓN DE CORREOS (Issue 11.4)
-                                # ==========================================
-                                # 1. Mapear los datos reales de la base de datos para la plantilla
-                                # El nombre sale del titular de la reserva, no del user_id
-                                datos_html = {
-                                    "reserva_id": str(reserva.id),
-                                    "nombre_cliente": reserva.titular,
-                                    "email": reserva.email,
-                                    "fecha_ingreso": str(reserva.fecha_ingreso),
-                                    "cantidad_personas": reserva.cantidad_personas 
-                                }
-                                
-                                # 2. Generar el JWT real y único para esta reserva
-                                usuario = db.query(User).filter(User.id == reserva.user_id).first()
-                                # El QR vence al terminar el día de egreso
-                                AR = ZoneInfo("America/Argentina/Buenos_Aires")
-                                vencimiento = datetime.combine(reserva.fecha_egreso + timedelta(days=1), dtime.min, tzinfo=AR)
-                                
-                                payload = JWTPayloadSchema(
-                                    jti=str(uuid.uuid4()), # ID único para este token
-                                    reserva_id=str(reserva.id),
-                                    camping_id=reserva.camping_id,
-                                    iat=int(time.time()),
-                                    cantidad_personas=reserva.cantidad_personas,
-                                    typ="socio" if usuario and usuario.is_socio else "visitante",
-                                    exp=int(vencimiento.timestamp()),
-                                    dat=reserva.fecha_ingreso.isoformat()
-                                )
-                                
-                                # Llamamos a la funcion que genera el QR de fomra offline
-                                jwt_generado = SecurityService().generate_offline_qr_token(payload)
-                                
-                                # 3. Despachar el correo en un hilo secundario sin bloquear la respuesta a MP
-                                background_tasks.add_task(
-                                    email_service.enviar_confirmacion_sync,
-                                    destinatario=reserva.email, # email del titular de la reserva
-                                    datos_reserva=datos_html,
-                                    jwt_token=jwt_generado
-                                )
+                        if confirmar_pago(db, reserva_id, background_tasks):
+                            print(f"Reserva {reserva_id} actualizada a PAGADO. Correo con el QR en camino.")
                         else:
-                            print(f"Alerta: No se encontró la reserva {reserva_id} en la BD.")
-                            
+                            print(f"La reserva {reserva_id} ya figuraba como pagada o no existe. Aviso ignorado.")
+
                     elif estado_pago == "rejected":
                         print("El pago fue rechazado. Lógica de cancelación pendiente...")
 
@@ -206,7 +143,7 @@ def get_test_user(db: Session = Depends(get_db)):
 
 # Subissue 10.5 :) 
 @router.get("/reconcile/{reserva_id}", summary="Reconciliar operación huérfana manual")
-def reconciliar_pago(reserva_id: str, db: Session = Depends(get_db)):
+def reconciliar_pago(reserva_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     # 1. Buscamos la reserva en tu base de datos local
     reserva = db.query(Reserva).filter(Reserva.id == reserva_id).first()
     
@@ -234,14 +171,8 @@ def reconciliar_pago(reserva_id: str, db: Session = Depends(get_db)):
         pago_aprobado = next((pago for pago in pagos_encontrados if pago.get("status") == "approved"), None)
 
         if pago_aprobado:
-            # Se bloquea y se relee la reserva recién ahora, para no mantener la fila
-            # bloqueada mientras se esperaba la respuesta de Mercado Pago
-            db.refresh(reserva, with_for_update=True)
-
-            # Si la reserva está en alerta, el pago se registra pero el estado de la
-            # reserva no cambia (lo resuelve marcar_como_pagada)
-            reserva.marcar_como_pagada()
-            db.commit()
+            # Mismo camino que el webhook: confirma la reserva y manda el QR una sola vez
+            confirmar_pago(db, reserva.id, background_tasks)
 
             return {
                 "status": "reconciliado",

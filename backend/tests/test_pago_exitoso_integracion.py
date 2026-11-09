@@ -6,6 +6,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 import api.payments as payments_module
+import services.payment_service as payment_service_module
 from core.config import settings
 from core.database import Base, SessionLocal, engine
 from main import app
@@ -129,11 +130,10 @@ def mp_mock(monkeypatch):
     """Reemplaza el SDK de Mercado Pago (sin red) y el servicio de email."""
     mp = MagicMock()
     monkeypatch.setattr(payments_module.payment_service, "mp", mp)
-    # Defensivo: si más adelante se corrige el bloque de email del webhook,
-    # estos tests no deben intentar enviar correos reales.
-    monkeypatch.setattr(payments_module, "email_service", MagicMock())
-    # Tampoco dependemos de las claves JWT: el webhook genera el QR con SecurityService
-    monkeypatch.setattr(payments_module, "SecurityService", MagicMock())
+    # Estos tests no deben enviar correos reales
+    monkeypatch.setattr(payment_service_module, "email_service", MagicMock())
+    # Tampoco dependemos de las claves JWT: la confirmación del pago genera el QR con SecurityService
+    monkeypatch.setattr(payment_service_module, "SecurityService", MagicMock())
     return mp
 
 
