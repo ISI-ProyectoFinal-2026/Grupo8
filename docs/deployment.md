@@ -66,7 +66,7 @@ La plataforma depende de dos proveedores en la nube externos que requieren confi
 * **Mercado Pago (Pasarela de Pagos):**
 * Requiere la configuración de `MP_ACCESS_TOKEN` (y opcionalmente `MP_PUBLIC_KEY` para el SDK de frontend en testing) en el archivo `.env` o en el panel de Render.
 
-* **Simulación Local de Webhooks:** Mercado Pago no envía notificaciones a `localhost`. Durante el desarrollo local, es obligatorio exponer el puerto del backend (8000) utilizando un túnel (ej. `ngrok http 8000`) e inyectar la URL pública generada en el parámetro `notification_url` de la preferencia de pago.
+* **Simulación Local de Webhooks:** Mercado Pago no envía notificaciones a `localhost`. Durante el desarrollo local, es obligatorio exponer el puerto del backend (8000) utilizando un túnel (ej. `ngrok http 8000`) y cargar la URL pública generada en la variable `BACKEND_PUBLIC_URL` del `.env`, de la que sale la `notification_url` de la preferencia de pago. En producción, `FRONTEND_URL` y `BACKEND_PUBLIC_URL` deben ser las direcciones https publicadas del frontend y del backend.
 
 * **Restricción de Redireccionamiento:** La opción `auto_return` es bloqueada por seguridad hacia orígenes locales (`http://localhost`). En el entorno de producción (Render + Vercel), la presencia de certificados HTTPS nativos levanta este bloqueo automáticamente.
 

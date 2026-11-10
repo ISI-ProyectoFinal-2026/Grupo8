@@ -137,7 +137,7 @@ El sistema integra cobros en línea mediante el SDK oficial de Mercado Pago y Fa
 4. **Pantallas de Retorno:** Vistas dedicadas (\/pago/exito`, `/pago/rechazado` y `/pago/pendiente`) para la respuesta visual al usuario.
 
 **⚠️ Consideraciones de Entorno Local:**
-- **Túnel ngrok para Webhooks:** En desarrollo, se requiere exponer el puerto `8000` con `ngrok http 8000` y definir la URL en `notification_url` (MP no notifica a localhost).
+- **Túnel ngrok para Webhooks:** MP no notifica a localhost. Para recibir avisos en desarrollo, exponer el puerto `8000` con `ngrok http 8000` y poner la URL pública en `BACKEND_PUBLIC_URL` del `.env`. Sin túnel, el pago se confirma con "Verificar pago".
 - **Restricción de retorno:** Mercado Pago bloquea por seguridad el retorno automático (`auto_return`) hacia `http://localhost`. En producción (con HTTPS), este bloqueo se levanta automáticamente.
 
 ---

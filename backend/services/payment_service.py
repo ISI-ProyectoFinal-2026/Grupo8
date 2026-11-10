@@ -4,6 +4,7 @@ import time
 import uuid
 from datetime import datetime, time as dtime, timedelta
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import mercadopago
@@ -59,10 +60,33 @@ CAMPOS_DETALLE_TRANSACCION = {
 }
 
 
+# Mercado Pago no acepta estas direcciones como notification_url
+HOSTS_LOCALES = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+
+
 class PaymentService:
     def __init__(self):
         # Inicializamos el SDK con el Access Token de las variables de entorno
         self.mp = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
+
+
+def urls_de_retorno() -> dict:
+    """back_urls de la preferencia: páginas del frontend a las que vuelve el cliente después de pagar."""
+    frontend = settings.FRONTEND_URL.rstrip("/")
+    return {
+        "success": f"{frontend}/pago/exito",
+        "failure": f"{frontend}/pago/rechazado",
+        "pending": f"{frontend}/pago/pendiente",
+    }
+
+
+def url_de_avisos() -> str | None:
+    """notification_url de la preferencia, o None si el backend no tiene una dirección pública.
+    Sin ella Mercado Pago no envía avisos y el pago se confirma con la reconciliación."""
+    backend = settings.BACKEND_PUBLIC_URL.rstrip("/")
+    if not backend or urlparse(backend).hostname in HOSTS_LOCALES:
+        return None
+    return f"{backend}/api/payments/webhook"
 
 
 def limpiar_respuesta_mp(respuesta: dict) -> dict:
