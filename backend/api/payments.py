@@ -8,6 +8,8 @@ from services.payment_service import (
     confirmar_pago,
     payment_service,
     registrar_pago,
+    url_de_avisos,
+    urls_de_retorno,
 )
 from core.config import settings
 from core.database import get_db
@@ -62,21 +64,17 @@ async def create_payment_preference(request: PaymentRequest, db: Session = Depen
                 "currency_id": "ARS"
             }
         ],
-        "back_urls": {
-            "success": "http://localhost:5173/pago/exito",
-            "failure": "http://localhost:5173/pago/rechazado",
-            "pending": "http://localhost:5173/pago/pendiente"
-        },
+        "back_urls": urls_de_retorno(),
 
-        # Descomentar auto_return cuando se suba a producción, Mercado Pago no permite la función auto_return con dominios locales.
-        # Pasa lo mismo con querer hacer el flujo completo con las back_urls. MP no permite redireccionar a direcciones tipo localhost. En producción deberian andar bien (pq no va a hacer localhost, va a ser una https).
+        # Mercado Pago no permite auto_return con direcciones locales; se activa al publicar (17.6)
         #"auto_return": "approved",
         
         "external_reference": str(reserva.id),
-
-        # le pasamos la url directamente a Mercado Pago
-        "notification_url": "https://party-unhook-ambiguous.ngrok-free.dev/api/payments/webhook"
     }
+
+    notification_url = url_de_avisos()
+    if notification_url:
+        preference_data["notification_url"] = notification_url
 
     try:
         # 2) Chequeo contra MP: si ya cobró (p. ej. el webhook falló), no se abre otro checkout.

@@ -1,9 +1,11 @@
 import uuid
 from datetime import date
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+import api.payments as payments_module
 from core.config import settings
 from core.database import Base, SessionLocal, engine
 from main import app
@@ -203,6 +205,22 @@ def test_webhook_pago_rechazado_no_cambia_los_estados(
 
 # ---------- Crear preferencia ----------
 
+def _crear_preferencia(monkeypatch, reserva_id, frontend_url, backend_url):
+    """Crea la preferencia con las direcciones indicadas y devuelve lo que se le mandó a Mercado Pago."""
+    monkeypatch.setattr(settings, "FRONTEND_URL", frontend_url)
+    monkeypatch.setattr(settings, "BACKEND_PUBLIC_URL", backend_url)
+    mp = MercadoPagoFalso()
+    monkeypatch.setattr(payment_service, "mp", mp)
+
+    response = client.post(
+        "/api/payments/create",
+        json={"title": "Entrada General - 3 personas", "reserva_id": str(reserva_id)},
+    )
+
+    assert response.status_code == 200
+    return mp.preferencia
+
+
 def test_crear_preferencia_cobra_el_monto_guardado_en_la_reserva(monkeypatch, reserva_pendiente):
     mp = MercadoPagoFalso()
     monkeypatch.setattr(payment_service, "mp", mp)
@@ -216,7 +234,55 @@ def test_crear_preferencia_cobra_el_monto_guardado_en_la_reserva(monkeypatch, re
     assert response.json()["init_point"] == "https://mp.test/init"
     assert mp.preferencia["items"][0]["unit_price"] == 15000.0
     assert mp.preferencia["external_reference"] == str(reserva_pendiente)
-    assert mp.preferencia["back_urls"]["pending"].endswith("/pago/pendiente")
+
+
+def test_crear_preferencia_usa_las_direcciones_de_la_configuracion(monkeypatch, reserva_pendiente):
+    preferencia = _crear_preferencia(
+        monkeypatch, reserva_pendiente,
+        frontend_url="https://qamp-web.example.com",
+        backend_url="https://qamp-api.example.com",
+    )
+
+    assert preferencia["back_urls"] == {
+        "success": "https://qamp-web.example.com/pago/exito",
+        "failure": "https://qamp-web.example.com/pago/rechazado",
+        "pending": "https://qamp-web.example.com/pago/pendiente",
+    }
+    assert preferencia["notification_url"] == "https://qamp-api.example.com/api/payments/webhook"
+
+
+def test_crear_preferencia_tolera_la_barra_final_en_las_direcciones(monkeypatch, reserva_pendiente):
+    preferencia = _crear_preferencia(
+        monkeypatch, reserva_pendiente,
+        frontend_url="https://qamp-web.example.com/",
+        backend_url="https://qamp-api.example.com/",
+    )
+
+    assert preferencia["back_urls"]["success"] == "https://qamp-web.example.com/pago/exito"
+    assert preferencia["notification_url"] == "https://qamp-api.example.com/api/payments/webhook"
+
+
+@pytest.mark.parametrize(
+    "backend_url",
+    ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost", ""],
+)
+def test_con_backend_local_no_se_envia_notification_url(monkeypatch, reserva_pendiente, backend_url):
+    # Mercado Pago no acepta direcciones locales: el pago se confirma con "Verificar pago"
+    preferencia = _crear_preferencia(
+        monkeypatch, reserva_pendiente,
+        frontend_url="http://localhost:5173",
+        backend_url=backend_url,
+    )
+
+    assert "notification_url" not in preferencia
+    assert preferencia["back_urls"]["success"] == "http://localhost:5173/pago/exito"
+
+
+def test_payments_no_tiene_direcciones_fijas():
+    codigo = Path(payments_module.__file__).read_text(encoding="utf-8")
+
+    assert "localhost" not in codigo
+    assert "ngrok" not in codigo
 
 
 def test_crear_preferencia_con_reserva_inexistente_devuelve_404(monkeypatch):

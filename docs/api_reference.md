@@ -222,7 +222,7 @@ Módulo encargado de la comunicación con los servidores de Mercado Pago (MP) y 
 
 * **`POST /api/payments/create`**
 * **Descripción:** Configura el SDK de MP y genera la preferencia de pago. El `unit_price` que se envía es el `monto_total` guardado en la reserva; el cliente no manda ningún importe.
-* **Vínculo:** Inyecta el UUID local de la reserva en el atributo `external_reference` de MP para garantizar trazabilidad. Configura el diccionario `back_urls` (rutas de éxito, fallo, pendiente) y la `notification_url`.
+* **Vínculo:** Inyecta el UUID local de la reserva en el atributo `external_reference` de MP para garantizar trazabilidad. Configura el diccionario `back_urls` (rutas de éxito, fallo, pendiente) a partir de `FRONTEND_URL` y la `notification_url` a partir de `BACKEND_PUBLIC_URL`. Si `BACKEND_PUBLIC_URL` es una dirección local (`localhost`, `127.0.0.1`), la preferencia se crea sin `notification_url`.
 * **`POST /api/payments/webhook`**
 * **Descripción:** Ruta de escucha asíncrona para notificaciones de MP.
 * **Seguridad y Lógica:** Valida la firma `x-signature` del aviso con `MERCADOPAGO_WEBHOOK_SECRET` (HMAC-SHA256 sobre el `data.id` de la URL, el `x-request-id` y el `ts`); si no es válida responde `401` y no procesa nada. Para prevenir *spoofing*, ignora el contenido del aviso y ejecuta un `payment().get()` contra la API de MP. Si está "approved" y el importe cobrado coincide al centavo con el `monto_total`, actualiza atómicamente la reserva a estado `PAGADO` en PostgreSQL y dispara la emisión del código QR y correo mediante `BackgroundTasks` devolviendo inmediatamente `200 OK` a MP. Si el importe no coincide, la reserva no se confirma y el pago queda en la tabla `pagos` para revisarlo. Un pago rechazado deja la reserva pendiente.

@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     MERCADOPAGO_PUBLIC_KEY: str
     # Clave secreta de los webhooks (Tus integraciones > Webhooks). Sin ella se rechazan todos los avisos.
     MERCADOPAGO_WEBHOOK_SECRET: str = ""
+    # Web a la que Mercado Pago devuelve al cliente después de pagar (back_urls)
+    FRONTEND_URL: str = "http://localhost:5173"
+    # Dirección pública del backend, donde Mercado Pago envía los avisos de pago.
+    # Con localhost no se envía notification_url: Mercado Pago no acepta direcciones locales.
+    BACKEND_PUBLIC_URL: str = "http://localhost:8000"
     RESEND_API_KEY: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
