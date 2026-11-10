@@ -180,7 +180,7 @@ def test_webhook_confirma_la_reserva_y_envia_el_correo_con_el_qr(mp, correo, cre
     ]
 
 
-def test_reconciliacion_confirma_la_reserva_y_envia_el_correo_con_el_qr(mp, correo, crear_reserva):
+def test_reconciliacion_confirma_la_reserva_y_envia_el_correo_con_el_qr(mp, correo, crear_reserva, como_admin):
     reserva_id = crear_reserva()
     _pago_aprobado(mp, reserva_id)
 
@@ -209,7 +209,7 @@ def test_aviso_repetido_no_reenvia_el_correo(mp, correo, crear_reserva):
     assert len(SecurityServiceFalso.payloads) == 1
 
 
-def test_reconciliacion_repetida_no_reenvia_el_correo(mp, correo, crear_reserva):
+def test_reconciliacion_repetida_no_reenvia_el_correo(mp, correo, crear_reserva, como_admin):
     reserva_id = crear_reserva()
     _pago_aprobado(mp, reserva_id)
 
@@ -222,7 +222,7 @@ def test_reconciliacion_repetida_no_reenvia_el_correo(mp, correo, crear_reserva)
     assert len(correo.enviados) == 1
 
 
-def test_reconciliacion_despues_del_webhook_no_reenvia_el_correo(mp, correo, crear_reserva):
+def test_reconciliacion_despues_del_webhook_no_reenvia_el_correo(mp, correo, crear_reserva, como_admin):
     reserva_id = crear_reserva()
     payment_id = _pago_aprobado(mp, reserva_id)
 

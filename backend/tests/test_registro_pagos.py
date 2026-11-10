@@ -289,7 +289,7 @@ def test_respuesta_mp_se_guarda_sin_datos_sensibles(mp, crear_reserva, nuevo_pay
 
 # ---------- Reconciliación ----------
 
-def test_reconciliacion_registra_todos_los_intentos(mp, crear_reserva, nuevo_payment_id):
+def test_reconciliacion_registra_todos_los_intentos(mp, crear_reserva, nuevo_payment_id, como_admin):
     reserva_id = crear_reserva()
     rechazado, aprobado = nuevo_payment_id(), nuevo_payment_id()
     mp.pagos[rechazado] = respuesta_mp(rechazado, reserva_id, estado="rejected", detalle="cc_rejected_other_reason")
@@ -304,7 +304,7 @@ def test_reconciliacion_registra_todos_los_intentos(mp, crear_reserva, nuevo_pay
     assert _estado_pago(reserva_id) == EstadoPagoEnum.PAGADO
 
 
-def test_webhook_y_reconciliacion_del_mismo_pago_dejan_un_solo_registro(mp, crear_reserva, nuevo_payment_id):
+def test_webhook_y_reconciliacion_del_mismo_pago_dejan_un_solo_registro(mp, crear_reserva, nuevo_payment_id, como_admin):
     reserva_id = crear_reserva()
     payment_id = nuevo_payment_id()
     # El webhook lo informa pendiente y la reconciliación ya aprobado

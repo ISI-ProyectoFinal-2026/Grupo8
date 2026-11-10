@@ -2,9 +2,18 @@ from sqlalchemy import text
 from fastapi import APIRouter, HTTPException, Request, Depends, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from services.payment_service import confirmar_pago, payment_service, registrar_pago
+from services.payment_service import (
+    ResultadoConfirmacion,
+    aviso_autentico,
+    confirmar_pago,
+    payment_service,
+    registrar_pago,
+)
+from core.config import settings
 from core.database import get_db
+from core.dependencies import get_current_user
 from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
+from models.user import RoleEnum, User
 import uuid
 
 router = APIRouter(
@@ -97,36 +106,52 @@ async def create_payment_preference(request: PaymentRequest, db: Session = Depen
 
 @router.post("/webhook", summary="Recibir notificaciones de Mercado Pago")
 async def payment_webhook(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    # La firma cubre el data.id de la URL: un aviso falso o modificado no se procesa
+    id_url = request.query_params.get("data.id")
+    if not aviso_autentico(request.headers.get("x-signature"), request.headers.get("x-request-id"), id_url):
+        raise HTTPException(status_code=401, detail="Firma del aviso inválida.")
+
     try:
         body = await request.json()
         print("====== AVISO DE MERCADO PAGO RECIBIDO ======")
         
         if body.get("type") == "payment" or body.get("topic") == "payment":
-            payment_id = body.get("data", {}).get("id")
+            # El id del cuerpo solo se usa si no vino en la URL; en ese caso la firma
+            # se validó sin id, algo que Mercado Pago no envía para avisos de pago reales
+            payment_id = id_url or body.get("data", {}).get("id")
             
             if payment_id:
                 # SEGURIDAD: Consultamos el estado real a Mercado Pago
                 payment_info = payment_service.mp.payment().get(payment_id)
                 
                 if payment_info["status"] == 200:
-                    # Cada aviso queda registrado, sea cual sea el estado del pago
-                    _registrar_pagos(db, [payment_info["response"]])
+                    datos_pago = payment_info["response"]
 
-                    estado_pago = payment_info["response"]["status"]
+                    # Cada aviso queda registrado, sea cual sea el estado del pago
+                    _registrar_pagos(db, [datos_pago])
+
+                    estado_pago = datos_pago["status"]
                     
                     # Recuperamos el ID de la reserva que mandamos en /create
-                    reserva_id = payment_info["response"].get("external_reference")
+                    reserva_id = datos_pago.get("external_reference")
                     
                     print(f"El pago {payment_id} es real y su estado es: {estado_pago}")
                     
                     if estado_pago == "approved" and reserva_id:
-                        if confirmar_pago(db, reserva_id, background_tasks):
+                        resultado = confirmar_pago(
+                            db, reserva_id, background_tasks, monto_cobrado=datos_pago.get("transaction_amount")
+                        )
+                        if resultado == ResultadoConfirmacion.CONFIRMADA:
                             print(f"Reserva {reserva_id} actualizada a PAGADO. Correo con el QR en camino.")
+                        elif resultado == ResultadoConfirmacion.IMPORTE_DISTINTO:
+                            print(f"Reserva {reserva_id} sin confirmar: el importe cobrado no coincide.")
                         else:
                             print(f"La reserva {reserva_id} ya figuraba como pagada o no existe. Aviso ignorado.")
 
                     elif estado_pago == "rejected":
-                        print("El pago fue rechazado. Lógica de cancelación pendiente...")
+                        # La reserva sigue pendiente: se puede reintentar con otro medio de pago
+                        # mientras dure el plazo de pago
+                        print(f"Pago {payment_id} rechazado ({datos_pago.get('status_detail')}). La reserva {reserva_id} sigue pendiente.")
 
         # SIEMPRE responder 200 OK
         return {"status": "ok"}
@@ -137,18 +162,32 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
 
 @router.get("/test-user", summary="Obtener un ID de usuario temporal")
 def get_test_user(db: Session = Depends(get_db)):
+    if settings.ENVIRONMENT.lower() == "production":
+        raise HTTPException(status_code=404, detail="Endpoint no disponible en producción.")
     resultado = db.execute(text("SELECT id FROM usuarios LIMIT 1")).fetchone()
     return {"user_id": str(resultado[0]) if resultado else "No hay usuarios"}
 
 
 # Subissue 10.5 :) 
 @router.get("/reconcile/{reserva_id}", summary="Reconciliar operación huérfana manual")
-def reconciliar_pago(reserva_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def reconciliar_pago(
+    reserva_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    usuario: User = Depends(get_current_user),
+):
     # 1. Buscamos la reserva en tu base de datos local
     reserva = db.query(Reserva).filter(Reserva.id == reserva_id).first()
     
     if not reserva:
         raise HTTPException(status_code=404, detail="Reserva no encontrada en la base de datos.")
+
+    # Las reservas sin cuenta no tienen dueño: solo un administrador puede verificarlas
+    if usuario.rol != RoleEnum.ADMIN and reserva.user_id != usuario.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo el dueño de la reserva o un administrador puede verificar el pago.",
+        )
 
     # Si la reserva ya fue pagada o cancelada, frenamos el proceso para no hacer peticiones innecesarias
     if reserva.estado_pago != EstadoPagoEnum.PENDIENTE:
@@ -172,7 +211,15 @@ def reconciliar_pago(reserva_id: str, background_tasks: BackgroundTasks, db: Ses
 
         if pago_aprobado:
             # Mismo camino que el webhook: confirma la reserva y manda el QR una sola vez
-            confirmar_pago(db, reserva.id, background_tasks)
+            resultado = confirmar_pago(
+                db, reserva.id, background_tasks, monto_cobrado=pago_aprobado.get("transaction_amount")
+            )
+            if resultado == ResultadoConfirmacion.IMPORTE_DISTINTO:
+                return {
+                    "status": "importe_distinto",
+                    "message": "El importe cobrado no coincide con el de la reserva. El pago quedó registrado para revisión.",
+                    "pago_id_mp": pago_aprobado.get("id"),
+                }
 
             return {
                 "status": "reconciliado",

@@ -1,3 +1,4 @@
+import enum
 import logging
 import time
 import uuid
@@ -7,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import mercadopago
 from fastapi import BackgroundTasks
+from mercadopago.webhook import InvalidWebhookSignatureError, WebhookSignatureValidator
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -178,17 +180,50 @@ def _programar_correo_con_qr(reserva: Reserva, background_tasks: BackgroundTasks
     )
 
 
-def confirmar_pago(db: Session, reserva_id, background_tasks: BackgroundTasks) -> bool:
+def aviso_autentico(x_signature: str | None, x_request_id: str | None, data_id: str | None) -> bool:
+    """Valida la firma x-signature de un aviso de Mercado Pago con la clave secreta del webhook."""
+    secreto = settings.MERCADOPAGO_WEBHOOK_SECRET
+    if not secreto:
+        logger.error("MERCADOPAGO_WEBHOOK_SECRET no está configurada: se rechaza el aviso de Mercado Pago.")
+        return False
+    try:
+        WebhookSignatureValidator.validate(x_signature, x_request_id, data_id, secreto)
+    except InvalidWebhookSignatureError as e:
+        logger.warning(f"Aviso de Mercado Pago rechazado ({e.reason.value}), request-id: {e.request_id}")
+        return False
+    return True
+
+
+def importe_coincide(reserva: Reserva, monto_cobrado) -> bool:
+    """Compara al centavo lo que cobró Mercado Pago con el monto_total de la reserva."""
+    cobrado = _monto(monto_cobrado)
+    if cobrado is None:
+        return False
+    centavos = Decimal("0.01")
+    return cobrado.quantize(centavos) == Decimal(str(reserva.monto_total)).quantize(centavos)
+
+
+class ResultadoConfirmacion(str, enum.Enum):
+    CONFIRMADA = "confirmada"
+    YA_PAGADA = "ya_pagada"
+    NO_ENCONTRADA = "no_encontrada"
+    IMPORTE_DISTINTO = "importe_distinto"
+
+
+def confirmar_pago(
+    db: Session, reserva_id, background_tasks: BackgroundTasks, monto_cobrado
+) -> ResultadoConfirmacion:
     """Marca la reserva como pagada y programa el correo con el QR.
 
     Lo usan el webhook y la reconciliación. El correo sale solo cuando la reserva pasa
     a pagada: si ya lo estaba (aviso repetido o reconciliación posterior), no se hace nada.
-    Devuelve True si la reserva se confirmó en esta llamada.
+    Si el importe cobrado no coincide con el de la reserva, no se confirma: el pago ya
+    quedó registrado en la tabla pagos para revisarlo.
     """
     try:
         reserva_uuid = uuid.UUID(str(reserva_id))
     except ValueError:
-        return False
+        return ResultadoConfirmacion.NO_ENCONTRADA
 
     # El bloqueo evita que el webhook y la reconciliación confirmen (y manden el correo) a la vez
     reserva = (
@@ -198,9 +233,19 @@ def confirmar_pago(db: Session, reserva_id, background_tasks: BackgroundTasks) -
         .with_for_update()
         .first()
     )
-    if reserva is None or reserva.estado_pago == EstadoPagoEnum.PAGADO:
+    if reserva is None:
         db.rollback()  # libera el bloqueo
-        return False
+        return ResultadoConfirmacion.NO_ENCONTRADA
+    if reserva.estado_pago == EstadoPagoEnum.PAGADO:
+        db.rollback()
+        return ResultadoConfirmacion.YA_PAGADA
+    if not importe_coincide(reserva, monto_cobrado):
+        logger.warning(
+            f"Importe distinto en la reserva {reserva.id}: Mercado Pago cobró {monto_cobrado}, "
+            f"la reserva es de {reserva.monto_total}. No se confirma; el pago queda para revisión."
+        )
+        db.rollback()
+        return ResultadoConfirmacion.IMPORTE_DISTINTO
 
     reserva.marcar_como_pagada()
     db.commit()
@@ -210,7 +255,7 @@ def confirmar_pago(db: Session, reserva_id, background_tasks: BackgroundTasks) -
         _programar_correo_con_qr(reserva, background_tasks)
     except Exception as e:
         logger.error(f"No se pudo generar el QR de la reserva {reserva.id}: {e}")
-    return True
+    return ResultadoConfirmacion.CONFIRMADA
 
 
 # Instancia global para importar en los endpoints

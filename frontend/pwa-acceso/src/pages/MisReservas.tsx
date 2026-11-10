@@ -67,7 +67,12 @@ export default function MisReservas() {
     try {
       setReconciliandoId(reservaId);
 
-      const response = await fetch(`${API_URL}/api/payments/reconcile/${reservaId}`);
+      const response = await fetch(
+        `${API_URL}/api/payments/reconcile/${reservaId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       const data = await response.json();
 
       if (response.ok) {

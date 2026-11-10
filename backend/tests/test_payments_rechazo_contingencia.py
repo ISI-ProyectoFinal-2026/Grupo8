@@ -69,6 +69,7 @@ class MercadoPagoFalso:
                 "status": self.estado_pago,
                 "status_detail": self.status_detail,
                 "external_reference": self.reserva_id,
+                "transaction_amount": 15000.0,
             },
         }
 
@@ -316,7 +317,7 @@ def test_no_se_genera_cobro_sobre_una_reserva_cancelada(instalar_mp, crear_reser
 def test_no_se_genera_cobro_si_mp_ya_registra_un_pago_aprobado(instalar_mp, crear_reserva):
     # Reserva local todavía PENDIENTE (el webhook no llegó) pero MP ya cobró
     reserva_id = crear_reserva()
-    mp = instalar_mp(resultados_busqueda=[{"id": 99, "status": "approved"}])
+    mp = instalar_mp(resultados_busqueda=[{"id": 99, "status": "approved", "transaction_amount": 15000.0}])
 
     response = _crear_preferencia(reserva_id)
 
@@ -367,11 +368,11 @@ def test_webhooks_aprobados_repetidos_no_duplican_qr_ni_correo(instalar_mp, crea
     assert EmailServiceFalso.enviados == ["titular@real.com"]
 
 
-def test_reconciliar_una_reserva_ya_pagada_no_consulta_a_mp(instalar_mp, crear_reserva):
+def test_reconciliar_una_reserva_ya_pagada_no_consulta_a_mp(instalar_mp, crear_reserva, como_admin):
     reserva_id = crear_reserva(
         estado_pago=EstadoPagoEnum.PAGADO, estado_reserva=EstadoReservaEnum.CONFIRMADA
     )
-    mp = instalar_mp(resultados_busqueda=[{"id": 99, "status": "approved"}])
+    mp = instalar_mp(resultados_busqueda=[{"id": 99, "status": "approved", "transaction_amount": 15000.0}])
 
     response = _reconciliar(reserva_id)
 
@@ -393,9 +394,7 @@ def test_reconciliar_una_reserva_ya_pagada_no_consulta_a_mp(instalar_mp, crear_r
     ],
     ids=["excepcion_de_red", "respuesta_500"],
 )
-def test_webhook_falla_pero_mp_cobro_y_la_reconciliacion_actualiza_la_reserva(
-    instalar_mp, crear_reserva, falla_webhook
-):
+def test_webhook_falla_pero_mp_cobro_y_la_reconciliacion_actualiza_la_reserva(instalar_mp, crear_reserva, falla_webhook, como_admin):
     reserva_id = crear_reserva()
     mp = instalar_mp(reserva_id=str(reserva_id), **falla_webhook)
 
@@ -405,7 +404,7 @@ def test_webhook_falla_pero_mp_cobro_y_la_reconciliacion_actualiza_la_reserva(
     assert _estados(reserva_id) == PENDIENTE  # reserva huérfana
 
     # 2. MP confirma que el pago sí se realizó
-    mp.resultados_busqueda = [{"id": 99, "status": "approved"}]
+    mp.resultados_busqueda = [{"id": 99, "status": "approved", "transaction_amount": 15000.0}]
     response = _reconciliar(reserva_id)
 
     assert response.status_code == 200
@@ -416,12 +415,12 @@ def test_webhook_falla_pero_mp_cobro_y_la_reconciliacion_actualiza_la_reserva(
     assert _estados(reserva_id) == PAGADA
 
 
-def test_reconciliar_elige_el_pago_aprobado_entre_varios_intentos(instalar_mp, crear_reserva):
+def test_reconciliar_elige_el_pago_aprobado_entre_varios_intentos(instalar_mp, crear_reserva, como_admin):
     reserva_id = crear_reserva()
     instalar_mp(
         resultados_busqueda=[
             {"id": 1, "status": "rejected"},
-            {"id": 2, "status": "approved"},
+            {"id": 2, "status": "approved", "transaction_amount": 15000.0},
         ]
     )
 
@@ -436,9 +435,7 @@ def test_reconciliar_elige_el_pago_aprobado_entre_varios_intentos(instalar_mp, c
     [[], [{"id": 1, "status": "rejected"}], [{"id": 2, "status": "pending"}]],
     ids=["sin_pagos", "solo_rechazado", "solo_pendiente"],
 )
-def test_reconciliar_sin_pago_aprobado_deja_la_reserva_pendiente(
-    instalar_mp, crear_reserva, resultados
-):
+def test_reconciliar_sin_pago_aprobado_deja_la_reserva_pendiente(instalar_mp, crear_reserva, resultados, como_admin):
     reserva_id = crear_reserva()
     instalar_mp(resultados_busqueda=resultados)
 
@@ -449,9 +446,9 @@ def test_reconciliar_sin_pago_aprobado_deja_la_reserva_pendiente(
     assert _estados(reserva_id) == PENDIENTE
 
 
-def test_reconciliar_es_idempotente(instalar_mp, crear_reserva):
+def test_reconciliar_es_idempotente(instalar_mp, crear_reserva, como_admin):
     reserva_id = crear_reserva()
-    mp = instalar_mp(resultados_busqueda=[{"id": 99, "status": "approved"}])
+    mp = instalar_mp(resultados_busqueda=[{"id": 99, "status": "approved", "transaction_amount": 15000.0}])
 
     primera = _reconciliar(reserva_id)
     segunda = _reconciliar(reserva_id)
@@ -462,9 +459,7 @@ def test_reconciliar_es_idempotente(instalar_mp, crear_reserva):
     assert _estados(reserva_id) == PAGADA
 
 
-def test_reconciliar_con_mp_caido_devuelve_500_y_no_altera_la_reserva(
-    instalar_mp, crear_reserva
-):
+def test_reconciliar_con_mp_caido_devuelve_500_y_no_altera_la_reserva(instalar_mp, crear_reserva, como_admin):
     reserva_id = crear_reserva()
     instalar_mp(error_search=ConnectionError("MP no responde"))
 
@@ -474,7 +469,7 @@ def test_reconciliar_con_mp_caido_devuelve_500_y_no_altera_la_reserva(
     assert _estados(reserva_id) == PENDIENTE
 
 
-def test_reconciliar_reserva_inexistente_devuelve_404(instalar_mp):
+def test_reconciliar_reserva_inexistente_devuelve_404(instalar_mp, como_admin):
     instalar_mp()
 
     assert _reconciliar(uuid.uuid4()).status_code == 404
