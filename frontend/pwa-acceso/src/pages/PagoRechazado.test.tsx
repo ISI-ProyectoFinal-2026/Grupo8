@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import PagoRechazado from './PagoRechazado';
+import { borrarReservaPendiente, guardarReservaPendiente } from '@/lib/reservaPendiente';
 
 // ControlAcceso arrastra Dexie/IndexedDB, jose y html5-qrcode; no es parte
 // de este flujo, así que se aísla.
@@ -84,6 +85,24 @@ describe('Pantalla 6 - Pago rechazado (Issue 12.2)', () => {
 
     expect(screen.getByText('Formulario de reserva')).toBeTruthy();
     expect(screen.queryByText(/pago rechazado/i)).toBeNull();
+  });
+
+  it('con la reserva todavía guardada, "Intentar nuevamente" vuelve a la pantalla de pago (subissue 17.5)', () => {
+    guardarReservaPendiente({ id: 'r-1', vencimiento: '2099-01-01T00:00:00+00:00', titulo: 'Reserva' });
+    render(
+      <MemoryRouter initialEntries={['/reservas', rutaRetornoRechazado(MOTIVOS_RECHAZO[0])]} initialIndex={1}>
+        <Routes>
+          <Route path="/reservas" element={<div>Formulario de reserva</div>} />
+          <Route path="/reservas/pagar" element={<div>Pantalla de pago</div>} />
+          <Route path="/pago/rechazado" element={<PagoRechazado />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /intentar nuevamente/i }));
+
+    expect(screen.getByText('Pantalla de pago')).toBeTruthy();
+    borrarReservaPendiente();
   });
 
   it('"Volver al inicio" enlaza a la home', () => {

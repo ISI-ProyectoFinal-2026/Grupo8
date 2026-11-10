@@ -71,7 +71,7 @@ El núcleo (FastAPI) está organizado de forma modular (`api/`, `core/`, `models
 ### 3.1. Motores Internos
 
 * **Capacidad (`services/capacity_service.py`):** Audita el aforo del camping devolviendo un error HTTP 400 si las peticiones superan el límite máximo establecido.
-  * `lugares_ocupados` calcula cuántos lugares están ocupados en las fechas pedidas. Ocupan cupo las reservas confirmadas, finalizadas y en alerta de clonación, y las `PENDIENTE` que están dentro del plazo `RESERVA_PENDIENTE_TTL_MINUTES` (30 minutos por defecto, configurable en el `.env`). No ocupan cupo las `CANCELADA` ni las `PENDIENTE` más antiguas que ese plazo (abandonadas); estas últimas no se borran ni se cancelan, solo dejan de contar. Una pendiente que cumple justo el plazo todavía cuenta.
+  * `lugares_ocupados` calcula cuántos lugares están ocupados en las fechas pedidas. Ocupan cupo las reservas confirmadas, finalizadas y en alerta de clonación, y las `PENDIENTE` que están dentro del plazo `RESERVA_PENDIENTE_TTL_MINUTES` (10 minutos por defecto, configurable en el `.env`). No ocupan cupo las `CANCELADA` ni las `PENDIENTE` más antiguas que ese plazo. `cancelar_reservas_vencidas` pasa esas pendientes a `CANCELADA` al crear y al consultar reservas. Una pendiente que cumple justo el plazo todavía cuenta.
   * `check_availability` compara lo ocupado más el margen offline contra la capacidad total. `crear_reserva` solo invoca estos dos métodos.
 
 

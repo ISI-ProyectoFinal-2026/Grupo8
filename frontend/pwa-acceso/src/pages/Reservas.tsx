@@ -26,6 +26,7 @@ import {
   validarNombre,
 } from "@/lib/validaciones";
 import { useAuth } from "@/context/AuthContext";
+import { guardarReservaPendiente, type ReservaPendiente } from "@/lib/reservaPendiente";
 import { CalendarDays, CreditCard, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -313,31 +314,16 @@ export default function Reservas() {
       }
 
       const reservaData = await reservaResponse.json();
-      const reservaId = reservaData.id; // ¡Este es el ID que generó PostgreSQL!
 
-      // 2. SEGUNDO: Llamamos a Mercado Pago pasándole el ID de la reserva
-      const paymentResponse = await fetch(`${API_URL}/api/payments/create`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: `${formatearTipo(tipo)} - ${cantidadPersonas} personas`,
-          reserva_id: reservaId // <- EL PUENTE HACIA TU WEBHOOK
-        }),
-      });
-
-      // 3. TERCERO: Leemos la respuesta y decidimos qué hacer
-      if (paymentResponse.ok) {
-        // Si el backend devolvió 200/201, leemos el JSON y redirigimos
-        const paymentData = await paymentResponse.json();
-        if (paymentData.init_point) {
-          window.location.href = paymentData.init_point;
-        }
-      } else {
-        // Falló, mostramos mensaje genérico y limpio
-        alert("Error al conectar con Mercado Pago. Intentá nuevamente.");
-      }
+      // 2. SEGUNDO: pasamos a la pantalla de pago, que muestra el plazo para pagar
+      // y crea el link de Mercado Pago cuando la persona aprieta "Ir a pagar"
+      const pendiente: ReservaPendiente = {
+        id: reservaData.id,
+        vencimiento: reservaData.vencimiento_pago,
+        titulo: `${formatearTipo(tipo)} - ${cantidadPersonas} personas`,
+      };
+      guardarReservaPendiente(pendiente);
+      navigate("/reservas/pagar", { state: { reserva: pendiente } });
 
     } catch (error) {
       console.error("Error en el proceso:", error);

@@ -12,6 +12,7 @@ from services.payment_service import (
     urls_de_retorno,
 )
 from core.config import settings
+from services.capacity_service import plazo_vencido, vencimiento_pago
 from core.database import get_db
 from core.dependencies import get_current_user
 from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
@@ -47,6 +48,13 @@ async def create_payment_preference(request: PaymentRequest, db: Session = Depen
     if not reserva:
         raise HTTPException(status_code=404, detail="Reserva no encontrada en la base de datos.")
 
+    # Pasado el plazo no se abre un checkout nuevo: la reserva ya no tiene el cupo guardado
+    if plazo_vencido(reserva):
+        raise HTTPException(
+            status_code=409,
+            detail="El plazo para pagar la reserva venció. Hacé una nueva reserva.",
+        )
+
     # Detectar y evitar cobro duplicado
     # 1) Chequeo local: solo se cobra una reserva pendiente de pago y no cancelada.
     if reserva.estado_pago != EstadoPagoEnum.PENDIENTE or reserva.estado_reserva == EstadoReservaEnum.CANCELADA:
@@ -70,6 +78,12 @@ async def create_payment_preference(request: PaymentRequest, db: Session = Depen
         #"auto_return": "approved",
         
         "external_reference": str(reserva.id),
+
+        # El link de pago vence junto con el plazo de la reserva
+        "expires": True,
+        "expiration_date_to": vencimiento_pago(reserva.fecha_reserva).isoformat(timespec="milliseconds"),
+        # Sin efectivo (Pago Fácil, Rapipago): se acredita días después, con la reserva ya vencida
+        "payment_methods": {"excluded_payment_types": [{"id": "ticket"}, {"id": "atm"}]},
     }
 
     notification_url = url_de_avisos()
@@ -137,12 +151,18 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                     
                     if estado_pago == "approved" and reserva_id:
                         resultado = confirmar_pago(
-                            db, reserva_id, background_tasks, monto_cobrado=datos_pago.get("transaction_amount")
+                            db, reserva_id, background_tasks,
+                            monto_cobrado=datos_pago.get("transaction_amount"),
+                            mp_payment_id=datos_pago.get("id"),
                         )
                         if resultado == ResultadoConfirmacion.CONFIRMADA:
                             print(f"Reserva {reserva_id} actualizada a PAGADO. Correo con el QR en camino.")
                         elif resultado == ResultadoConfirmacion.IMPORTE_DISTINTO:
                             print(f"Reserva {reserva_id} sin confirmar: el importe cobrado no coincide.")
+                        elif resultado == ResultadoConfirmacion.REEMBOLSADA:
+                            print(f"Reserva {reserva_id} vencida y sin cupo: se reembolsó el pago {payment_id}.")
+                        elif resultado == ResultadoConfirmacion.REEMBOLSO_PENDIENTE:
+                            print(f"Reserva {reserva_id} vencida y sin cupo: falló el reembolso del pago {payment_id}.")
                         else:
                             print(f"La reserva {reserva_id} ya figuraba como pagada o no existe. Aviso ignorado.")
 
@@ -187,8 +207,9 @@ def reconciliar_pago(
             detail="Solo el dueño de la reserva o un administrador puede verificar el pago.",
         )
 
-    # Si la reserva ya fue pagada o cancelada, frenamos el proceso para no hacer peticiones innecesarias
-    if reserva.estado_pago != EstadoPagoEnum.PENDIENTE:
+    # Si la reserva ya fue pagada, frenamos el proceso para no hacer peticiones innecesarias.
+    # Las canceladas por vencimiento sí se consultan: puede haber entrado un pago tarde
+    if reserva.estado_pago == EstadoPagoEnum.PAGADO:
         return {"status": "ok", "message": f"La reserva ya se encuentra en estado: {reserva.estado_pago.value}"}
 
     try:
@@ -210,8 +231,17 @@ def reconciliar_pago(
         if pago_aprobado:
             # Mismo camino que el webhook: confirma la reserva y manda el QR una sola vez
             resultado = confirmar_pago(
-                db, reserva.id, background_tasks, monto_cobrado=pago_aprobado.get("transaction_amount")
+                db, reserva.id, background_tasks,
+                monto_cobrado=pago_aprobado.get("transaction_amount"),
+                mp_payment_id=pago_aprobado.get("id"),
             )
+            if resultado in (ResultadoConfirmacion.REEMBOLSADA, ResultadoConfirmacion.REEMBOLSO_PENDIENTE):
+                return {
+                    "status": "reembolsado" if resultado == ResultadoConfirmacion.REEMBOLSADA else "reembolso_pendiente",
+                    "message": "El pago llegó después del plazo y ya no había lugar: la reserva quedó cancelada "
+                    "y se devuelve el dinero. Te avisamos por correo.",
+                    "pago_id_mp": pago_aprobado.get("id"),
+                }
             if resultado == ResultadoConfirmacion.IMPORTE_DISTINTO:
                 return {
                     "status": "importe_distinto",
@@ -223,6 +253,11 @@ def reconciliar_pago(
                 "status": "reconciliado",
                 "message": "Se encontró el pago en Mercado Pago. Reserva actualizada a PAGADO.",
                 "pago_id_mp": pago_aprobado.get("id")
+            }
+        elif plazo_vencido(reserva):
+            return {
+                "status": "vencida",
+                "message": "El plazo para pagar la reserva venció y no hay pagos aprobados en Mercado Pago.",
             }
         else:
             # MP no registra pagos exitosos para esta reserva
