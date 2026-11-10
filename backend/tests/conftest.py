@@ -59,6 +59,10 @@ def pytest_configure(config):
         "markers",
         "socios_reales: el test usa la verificación real de socios al crear reservas",
     )
+    config.addinivalue_line(
+        "markers",
+        "firma_real: el test valida de verdad la firma x-signature de los avisos de Mercado Pago",
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -71,6 +75,18 @@ def socios_sin_verificar(request, monkeypatch):
     if request.node.get_closest_marker("socios_reales"):
         return
     monkeypatch.setattr(socio_service, "verificar_personas_socias", lambda db, personas: None)
+
+
+@pytest.fixture(autouse=True)
+def avisos_mp_firmados(request, monkeypatch):
+    """
+    Autouse: los avisos que llegan al webhook se dan por firmados, así los tests del
+    flujo de pago no tienen que calcular la firma de Mercado Pago en cada llamada.
+    Los tests que prueban la firma usan @pytest.mark.firma_real.
+    """
+    if request.node.get_closest_marker("firma_real"):
+        return
+    monkeypatch.setattr("api.payments.aviso_autentico", lambda x_signature, x_request_id, data_id: True)
 
 
 @pytest.fixture

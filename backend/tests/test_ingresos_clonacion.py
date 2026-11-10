@@ -345,7 +345,7 @@ def test_una_reserva_en_alerta_no_se_confirma_ni_se_cancela(nuevo):
     assert reserva.estado_reserva == EstadoReservaEnum.ALERTA_CLONACION
 
 
-def test_reconcile_no_pisa_la_alerta(monkeypatch, crear_reserva):
+def test_reconcile_no_pisa_la_alerta(monkeypatch, crear_reserva, como_admin):
     reserva_id = crear_reserva()
     db = SessionLocal()
     try:
@@ -361,7 +361,7 @@ def test_reconcile_no_pisa_la_alerta(monkeypatch, crear_reserva):
             return self
 
         def search(self, filtros):
-            return {"response": {"results": [{"status": "approved", "id": 123}]}}
+            return {"response": {"results": [{"status": "approved", "id": 123, "transaction_amount": 10000.0}]}}
 
     monkeypatch.setattr(payment_service, "mp", MPFalso())
 

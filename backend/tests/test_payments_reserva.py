@@ -37,7 +37,11 @@ class MercadoPagoFalso:
     def get(self, payment_id):
         return {
             "status": 200,
-            "response": {"status": self.estado_pago, "external_reference": self.reserva_id},
+            "response": {
+                "status": self.estado_pago,
+                "external_reference": self.reserva_id,
+                "transaction_amount": 15000.0,
+            },
         }
 
     def search(self, filtros):
@@ -228,10 +232,10 @@ def test_crear_preferencia_con_reserva_inexistente_devuelve_404(monkeypatch):
 
 # ---------- Reconciliación manual ----------
 
-def test_reconciliar_pago_aprobado_confirma_la_reserva(monkeypatch, reserva_pendiente):
+def test_reconciliar_pago_aprobado_confirma_la_reserva(monkeypatch, reserva_pendiente, como_admin):
     monkeypatch.setattr(
         payment_service, "mp",
-        MercadoPagoFalso(resultados_busqueda=[{"id": 99, "status": "approved"}]),
+        MercadoPagoFalso(resultados_busqueda=[{"id": 99, "status": "approved", "transaction_amount": 15000.0}]),
     )
 
     response = client.get(f"/api/payments/reconcile/{reserva_pendiente}")

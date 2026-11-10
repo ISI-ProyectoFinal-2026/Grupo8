@@ -32,6 +32,7 @@ def _respuesta_mp(reserva_id: uuid.UUID, estado: str = "approved") -> dict:
             "id": PAYMENT_ID,
             "status": estado,
             "external_reference": str(reserva_id),
+            "transaction_amount": 10000.0,
         },
     }
 

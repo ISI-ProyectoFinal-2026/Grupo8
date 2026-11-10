@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # --- Integraciones Cloud ---
     MERCADOPAGO_ACCESS_TOKEN: str 
     MERCADOPAGO_PUBLIC_KEY: str
+    # Clave secreta de los webhooks (Tus integraciones > Webhooks). Sin ella se rechazan todos los avisos.
+    MERCADOPAGO_WEBHOOK_SECRET: str = ""
     RESEND_API_KEY: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

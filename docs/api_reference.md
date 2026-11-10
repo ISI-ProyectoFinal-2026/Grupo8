@@ -225,10 +225,13 @@ Módulo encargado de la comunicación con los servidores de Mercado Pago (MP) y 
 * **Vínculo:** Inyecta el UUID local de la reserva en el atributo `external_reference` de MP para garantizar trazabilidad. Configura el diccionario `back_urls` (rutas de éxito, fallo, pendiente) y la `notification_url`.
 * **`POST /api/payments/webhook`**
 * **Descripción:** Ruta de escucha asíncrona para notificaciones de MP.
-* **Seguridad y Lógica:** Para prevenir *spoofing*, ignora el contenido del aviso y ejecuta un `payment().get()` contra la API de MP. Si está "approved", actualiza atómicamente la reserva a estado `PAGADO` en PostgreSQL y dispara la emisión del código QR y correo mediante `BackgroundTasks` devolviendo inmediatamente `200 OK` a MP.
+* **Seguridad y Lógica:** Valida la firma `x-signature` del aviso con `MERCADOPAGO_WEBHOOK_SECRET` (HMAC-SHA256 sobre el `data.id` de la URL, el `x-request-id` y el `ts`); si no es válida responde `401` y no procesa nada. Para prevenir *spoofing*, ignora el contenido del aviso y ejecuta un `payment().get()` contra la API de MP. Si está "approved" y el importe cobrado coincide al centavo con el `monto_total`, actualiza atómicamente la reserva a estado `PAGADO` en PostgreSQL y dispara la emisión del código QR y correo mediante `BackgroundTasks` devolviendo inmediatamente `200 OK` a MP. Si el importe no coincide, la reserva no se confirma y el pago queda en la tabla `pagos` para revisarlo. Un pago rechazado deja la reserva pendiente.
 * **`GET /api/payments/reconcile/{reserva_id}`**
 * **Descripción:** Mecanismo de contingencia para operaciones huérfanas o fallos de webhook.
-* **Lógica Interna:** Utiliza el método `.search()` del SDK de MP filtrando por el `external_reference`. Si detecta un pago exitoso omitido localmente, ejecuta la actualización de estado.
+* **Acceso:** Requiere sesión (`Authorization: Bearer <token>`). Solo la puede pedir el dueño de la reserva o un `ADMIN` (`401` sin sesión, `403` para otro usuario). Las reservas sin cuenta solo las puede verificar un `ADMIN`.
+* **Lógica Interna:** Utiliza el método `.search()` del SDK de MP filtrando por el `external_reference`. Si detecta un pago exitoso omitido localmente, ejecuta la misma confirmación que el webhook (incluida la comparación del importe). Responde `status`: `reconciliado`, `pendiente`, `importe_distinto` u `ok` (la reserva ya no estaba pendiente).
+* **`GET /api/payments/test-user`**
+* **Descripción:** Auxiliar de desarrollo; responde `404` cuando `ENVIRONMENT=production`.
 
 
 ## 7. Dominios de Autenticación y Seguridad

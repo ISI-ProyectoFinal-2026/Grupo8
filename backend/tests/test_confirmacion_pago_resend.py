@@ -57,6 +57,7 @@ class MercadoPagoFalso:
                 "id": payment_id,
                 "status": self.estado_pago,
                 "external_reference": self.reserva_id,
+                "transaction_amount": 15000.0,
             },
         }
 

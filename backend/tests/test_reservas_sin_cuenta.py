@@ -314,8 +314,9 @@ def test_el_listado_general_no_lo_ve_un_visitante_sin_sesion():
 class MercadoPagoFalso:
     """Reemplaza al SDK de Mercado Pago para que el test no salga a la red."""
 
-    def __init__(self, reserva_id=None):
+    def __init__(self, reserva_id=None, monto=None):
         self.reserva_id = reserva_id
+        self.monto = monto
         self.preferencia = None
 
     def payment(self):
@@ -327,7 +328,11 @@ class MercadoPagoFalso:
     def get(self, payment_id):
         return {
             "status": 200,
-            "response": {"status": "approved", "external_reference": self.reserva_id},
+            "response": {
+                "status": "approved",
+                "external_reference": self.reserva_id,
+                "transaction_amount": self.monto,
+            },
         }
 
     def search(self, filtros):
@@ -370,7 +375,7 @@ def test_el_webhook_confirma_una_reserva_sin_cuenta_y_manda_el_qr_al_email(limpi
     reserva = _reservar(limpieza).json()
     SecurityServiceFalso.payloads = []
     EmailServiceFalso.enviados = []
-    monkeypatch.setattr(payment_service, "mp", MercadoPagoFalso(reserva_id=reserva["id"]))
+    monkeypatch.setattr(payment_service, "mp", MercadoPagoFalso(reserva_id=reserva["id"], monto=reserva["monto_total"]))
     monkeypatch.setattr("services.payment_service.SecurityService", SecurityServiceFalso)
     monkeypatch.setattr("services.payment_service.email_service", EmailServiceFalso())
 
