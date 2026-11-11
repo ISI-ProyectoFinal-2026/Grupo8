@@ -137,6 +137,19 @@ export const dbService = {
     });
   },
 
+  /**
+   * Reemplaza la lista local por la que mandó el servidor, en una sola transacción:
+   * o queda la lista nueva completa o sigue la anterior. Así las reservas que ya pasaron
+   * (o que dejaron de estar canceladas) se van solas en la siguiente sincronización.
+   */
+  async reemplazarBlacklist(ids: string[]): Promise<void> {
+    const fechaDescarga = new Date().toISOString();
+    await db.transaction('rw', db.blacklist, async () => {
+      await db.blacklist.clear();
+      await db.blacklist.bulkPut(ids.map((id) => ({ id, fechaCancelacion: fechaDescarga })));
+    });
+  },
+
   async verificarAccesoRevocado(idEscaneado: string): Promise<boolean> {
     const registro = await db.blacklist.get(idEscaneado);
     return registro !== undefined; 

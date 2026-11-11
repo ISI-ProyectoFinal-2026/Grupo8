@@ -82,6 +82,25 @@ describe('validarAccesoQR - integración JWT + Blacklist IndexedDB (Issue 8.2)',
     }
   });
 
+  it('Caso 4 (Issue 20.4): la reserva llegó en la lista descargada del servidor -> REVOKED', async () => {
+    const { dbService } = await import('./dbService');
+    await dbService.reemplazarBlacklist(['otra-reserva', testPayload.reserva_id]);
+
+    const resultado = await validarAccesoQR(validToken);
+
+    expect(resultado.status).toBe('REVOKED');
+  });
+
+  it('Caso 5 (Issue 20.4): si la reserva salió de la lista en la siguiente descarga -> VALID', async () => {
+    const { dbService } = await import('./dbService');
+    await dbService.reemplazarBlacklist([testPayload.reserva_id]);
+    await dbService.reemplazarBlacklist(['otra-reserva']);
+
+    const resultado = await validarAccesoQR(validToken);
+
+    expect(resultado.status).toBe('VALID');
+  });
+
   it('Caso 3: JWT con firma inválida -> INVALID_TOKEN, nunca REVOKED', async () => {
     // Aunque el identificador esté en blacklist, la firma inválida debe
     // cortar el flujo antes de llegar a consultarla.
