@@ -148,10 +148,8 @@ def test_mantiene_la_forma_de_la_respuesta(guardia):
     data = client.get(URL, headers=guardia).json()
 
     assert set(data) == {"blacklist", "configuracion", "clave_publica", "pagina_actual", "tiene_mas_paginas"}
-    assert data["configuracion"] == {
-        "capacidad_maxima": settings.CAMPING_TOTAL_CAPACITY,
-        "buffer_seguridad": settings.CAMPING_OFFLINE_BUFFER,
-    }
+    # Los valores salen de la configuración del camping (19.1); se prueban en el test de abajo
+    assert set(data["configuracion"]) == {"capacidad_maxima", "buffer_seguridad"}
     assert data["pagina_actual"] == 1
     assert isinstance(data["blacklist"], list)
     assert all(isinstance(i, str) for i in data["blacklist"])
@@ -246,3 +244,13 @@ def test_una_pagina_que_no_existe_viene_vacia(guardia):
 @pytest.mark.parametrize("params", [{"page": 0}, {"page": -1}, {"limit": 0}, {"limit": 1001}, {"limit": "x"}])
 def test_rechaza_parametros_de_paginacion_invalidos(params, guardia):
     assert client.get(URL, params=params, headers=guardia).status_code == 422
+
+
+def test_bootstrap_envia_la_configuracion_guardada(guardia, configurar_camping):
+    """La PWA recibe el cupo editado desde el panel y el buffer en personas (10 % de 80 = 8)."""
+    configurar_camping(capacidad_total=80, porcentaje_buffer_offline=10)
+
+    response = client.get(URL, params={"page": 1, "limit": 1}, headers=guardia)
+
+    assert response.status_code == 200
+    assert response.json()["configuracion"] == {"capacidad_maxima": 80, "buffer_seguridad": 8}

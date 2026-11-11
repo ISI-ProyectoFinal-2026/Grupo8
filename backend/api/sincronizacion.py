@@ -6,6 +6,7 @@ from core.database import get_db
 from core.dependencies import require_role
 from models.user import RoleEnum
 from services.blacklist_service import listar_reservas_canceladas
+from services.camping_service import buffer_en_personas, obtener_o_crear_camping
 
 # Creamos el router para este módulo y le ponemos una etiqueta para que se vea en Swagger
 router = APIRouter(
@@ -33,13 +34,14 @@ def get_bootstrap_data(
     los ids de las reservas canceladas que egresan hoy o después.
     """
     blacklist, tiene_mas_paginas = listar_reservas_canceladas(db, page, limit)
+    camping = obtener_o_crear_camping(db)
 
     return {
         "blacklist": blacklist,
         "configuracion": {
-            # Conectamos endpoint directamente a las variables de negocio reales
-            "capacidad_maxima": settings.CAMPING_TOTAL_CAPACITY,
-            "buffer_seguridad": settings.CAMPING_OFFLINE_BUFFER
+            # La configuración guardada desde el panel; el buffer va en personas
+            "capacidad_maxima": camping.capacidad_total,
+            "buffer_seguridad": buffer_en_personas(camping.capacidad_total, camping.porcentaje_buffer_offline),
         },
         # Usamos la clave secreta definida para el backend
         "clave_publica": settings.VITE_PUBLIC_KEY,
