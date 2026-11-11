@@ -13,9 +13,13 @@ El sistema utiliza SQLAlchemy como ORM, mapeando clases Python a tablas en Postg
 * **Auditoría:** Marcas de tiempo `created_at` y `updated_at`.
 * **Modelo de Reserva (`Reserva`)**
 * **Tabla:** `reservas`
-* **Campos Principales:** ID (`UUID`), `user_id` (clave foránea a usuarios; es nulo cuando la reserva se hizo sin iniciar sesión), fecha y hora de la reserva, cantidad de personas.
+* **Campos Principales:** ID (`UUID`), `user_id` (clave foránea a usuarios; es nulo cuando la reserva se hizo sin iniciar sesión), `tipo_reserva_id` (clave foránea a `tipos_reserva`; nula en las reservas anteriores a la Issue 19), fecha y hora de la reserva, cantidad de personas.
 * **Lógica de Negocio:** Estado de pago manejado por `EstadoPagoEnum` (Pendiente, Pagado, Cancelado).
 * **Seguridad:** Identificador único para códigos QR (`jwt_jti`).
+* **Modelo de Tipo de Reserva (`TipoReserva`)**
+* **Tabla:** `tipos_reserva`
+* **Campos Principales:** ID (`UUID`), `nombre` (único sin distinguir mayúsculas), `precio` (`Numeric(10, 2)`, mayor a 0), `forma_cobro` (`FormaCobroEnum`: `POR_PERSONA` o `POR_UNIDAD`), `max_personas` (máximo de personas de una reserva de ese tipo), `cantidad_unidades` (unidades por noche; vacío = sin límite, y siempre vacío en los tipos por persona) y `activo`.
+* **Lógica de Negocio:** No se borran: se desactivan. La clave foránea desde `reservas` es `RESTRICT`, así que un tipo con reservas no se puede eliminar. La migración crea Entrada general y Carpa (por persona, $5.000) y Cabaña (por unidad, $25.000, 6 personas, 4 unidades).
 * **Modelo de Personas de la Reserva (`ReservaPersona`)**
 * **Tabla:** `reserva_personas`
 * **Campos Principales:** ID (`UUID`), `reserva_id` (clave foránea a reservas, con borrado en cascada), `orden` (la posición 0 es el titular), `nombre`, `edad`, `condicion` (`visitante` o `socio`) y `dni`.
@@ -172,7 +176,7 @@ Un registro inválido va a `errores` (`indice`, `jti`, `motivo`) y no frena el r
 * **Manejo de Errores:** Retorna HTTP 500 realizando un *rollback* de todo el lote ante un fallo crítico en la base de datos.
 
 
-## 5. Endpoints del Panel: Ocupación, Configuración, Egresos y Cobros
+## 5. Endpoints del Panel: Ocupación, Configuración, Tipos de Reserva, Egresos y Cobros
 
 Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las horas se guardan en UTC y los días se cuentan con la hora de Buenos Aires (ver `zonas-horarias.md`).
 
@@ -203,6 +207,30 @@ Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las ho
 * **Cupo online:** `capacidad_total` menos el buffer en personas (`porcentaje × capacidad / 100`, redondeado hacia arriba). Es lo que se puede vender por la web; el resto queda para la puerta.
 * **Errores:** 422 si algún valor es inválido o falta (no se guarda nada).
 * **Respuesta Exitosa (200 OK):** La configuración guardada, con el mismo formato del `GET`.
+
+### `GET /api/v1/tipos-reserva`
+
+* **Descripción:** Público, sin sesión. Lista los tipos de reserva activos, ordenados por precio y nombre.
+* **Respuesta Exitosa (200 OK):**
+```json
+[{ "id": "uuid", "nombre": "Cabaña", "precio": 25000.0, "forma_cobro": "POR_UNIDAD", "max_personas": 6, "cantidad_unidades": 4 }]
+```
+
+### `GET /api/v1/admin/tipos-reserva`
+
+* **Descripción:** Solo ADMIN. Lista todos los tipos, incluidos los desactivados, con el campo `activo`.
+
+### `POST /api/v1/admin/tipos-reserva`
+
+* **Descripción:** Solo ADMIN. Crea un tipo (`201 Created`).
+* **Request Body (`TipoReservaCreate`):** `nombre` (2 a 80 caracteres), `precio` (número mayor a 0, hasta 2 decimales), `forma_cobro`, `max_personas` (entero estricto mayor a 0, que no supere el máximo general por reserva), `cantidad_unidades` (opcional; entero ≥ 1, solo en tipos por unidad) y `activo` (por defecto `true`).
+* **Errores:** 409 si el nombre ya existe (sin distinguir mayúsculas), 422 si algún dato es inválido.
+
+### `PUT /api/v1/admin/tipos-reserva/{id}`
+
+* **Descripción:** Solo ADMIN. Modificación parcial: solo cambian los campos enviados. Desactivar es enviar `{"activo": false}`; las reservas que ya usan el tipo no se modifican. `cantidad_unidades: null` deja el tipo sin límite de unidades.
+* **Errores:** 404 si el tipo no existe, 409 por nombre repetido, 422 si los datos son inválidos o si la forma de cobro y las unidades quedan incoherentes (un tipo por persona no lleva unidades).
+* No hay endpoint para borrar.
 
 ### `POST /api/v1/egresos`
 
