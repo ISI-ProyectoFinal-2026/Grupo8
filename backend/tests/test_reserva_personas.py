@@ -64,9 +64,9 @@ PERSONAS_MIXTAS = [
 
 
 @pytest.fixture
-def reservas_creadas(monkeypatch):
+def reservas_creadas(configurar_camping):
     # Estos tests no miran la capacidad, así que la subimos para que no dependa de la BD local
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 100_000)
+    configurar_camping(capacidad_total=100_000)
     ids = []
     yield ids
     # Las personas se borran solas junto con la reserva (ON DELETE CASCADE)

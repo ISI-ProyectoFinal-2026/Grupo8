@@ -6,7 +6,9 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from models.configuracion import ConfiguracionCamping
 from models.reserva import EstadoPagoEnum, EstadoReservaEnum, Reserva
+from services.camping_service import cupo_online, obtener_o_crear_camping
 
 
 def _ahora_utc() -> datetime:
@@ -97,21 +99,28 @@ class CapacityService:
     def hay_cupo(self, db: Session, fecha_ingreso: date, fecha_egreso: date, personas: int) -> bool:
         """Igual que check_availability, pero responde True/False en lugar de cortar con un 400."""
         ocupados = self.lugares_ocupados(db, fecha_ingreso, fecha_egreso)
-        return personas <= settings.CAMPING_TOTAL_CAPACITY - ocupados - settings.CAMPING_OFFLINE_BUFFER
+        # Mismo cupo online que check_availability: sale de la configuración guardada
+        camping = obtener_o_crear_camping(db)
+        return personas <= cupo_online(camping.capacidad_total, camping.porcentaje_buffer_offline) - ocupados
 
-    def check_availability(self, espacios_solicitados: int, reservas_activas: int) -> bool:
+    def check_availability(
+        self,
+        espacios_solicitados: int,
+        reservas_activas: int,
+        configuracion: ConfiguracionCamping,
+    ) -> bool:
         """
-        Calcula si hay cupo disponible considerando la capacidad total, 
-        las reservas ya activas y el buffer para reservas offline.
+        Calcula si hay cupo disponible con la configuración guardada del camping:
+        capacidad − buffer offline (en personas, redondeado hacia arriba) − reservas activas.
         """
-        # Fórmula: Capacidad Total - Reservas Activas - Buffer Offline
-        capacidad_disponible = settings.CAMPING_TOTAL_CAPACITY - reservas_activas - settings.CAMPING_OFFLINE_BUFFER
-        
+        cupo = cupo_online(configuracion.capacidad_total, configuracion.porcentaje_buffer_offline)
+        capacidad_disponible = cupo - reservas_activas
+
         # Validar si los espacios que pide el usuario superan lo disponible
         if espacios_solicitados > capacidad_disponible:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="No hay cupos suficientes disponibles en el camping."
             )
-            
+
         return True

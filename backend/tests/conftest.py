@@ -16,7 +16,7 @@ from models.configuracion import ConfiguracionCamping
 from models.conflictos import ConflictosSincronizacion
 from models.pago import Pago
 from services import socio_service
-from services.camping_service import obtener_o_crear_camping
+from services.camping_service import configuracion_inicial, obtener_o_crear_camping
 from services.pricing_service import PricingService
 from services.qr_service import QRService, qr_service
 
@@ -31,6 +31,47 @@ def camping_de_prueba():
         return obtener_o_crear_camping(db).camping_id
     finally:
         db.close()
+
+def _aplicar_configuracion(**valores) -> None:
+    """Escribe directo en la base, sin pasar por las validaciones del panel (permite cupo 0)."""
+    db = SessionLocal()
+    try:
+        camping = obtener_o_crear_camping(db)
+        for campo, valor in valores.items():
+            setattr(camping, campo, valor)
+        db.commit()
+    finally:
+        db.close()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def configuracion_del_env():
+    """
+    Autouse: durante los tests el camping usa los valores del .env (cupo, buffer y máximo por
+    reserva), aunque en la base local el administrador los haya cambiado desde el panel.
+    Al terminar la corrida se dejan como estaban.
+    """
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        camping = obtener_o_crear_camping(db)
+        previos = {campo: getattr(camping, campo) for campo in configuracion_inicial()}
+    finally:
+        db.close()
+    _aplicar_configuracion(**configuracion_inicial())
+    yield
+    _aplicar_configuracion(**previos)
+
+
+@pytest.fixture
+def configurar_camping():
+    """
+    Cambia la configuración guardada solo durante el test y la devuelve a los valores
+    del .env al terminar. Uso: configurar_camping(capacidad_total=100_000).
+    """
+    yield _aplicar_configuracion
+    _aplicar_configuracion(**configuracion_inicial())
+
 
 # Descuento de socio que usan los tests de precios (en porcentaje)
 DESCUENTO_SOCIO_PRUEBA = 20

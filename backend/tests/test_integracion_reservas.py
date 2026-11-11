@@ -21,12 +21,12 @@ def borrar_reserva(reserva_id: str):
     finally:
         db.close()
 
-async def test_flujo_exitoso_crear_reserva(monkeypatch):
+async def test_flujo_exitoso_crear_reserva(configurar_camping):
     """Criterio de Aceptación 1: Test del flujo exitoso"""
 
     # Este test prueba el flujo exitoso, no la capacidad: subimos el cupo para que
     # no dependa de cuánta gente haya reservada en la BD local
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 100_000)
+    configurar_camping(capacidad_total=100_000)
     
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -51,14 +51,12 @@ async def test_flujo_exitoso_crear_reserva(monkeypatch):
         assert [p["nombre"] for p in data["personas"]] == ["Usuario Test", "Acompañante Test"]
         assert "id" in data
 
-async def test_limite_de_capacidad(monkeypatch):
+async def test_limite_de_capacidad(configurar_camping):
     """Criterio de Aceptación 2: Test de límite de capacidad"""
 
     # Dejamos un cupo menor al pedido, sin depender de la BD local:
-    # disponible = total - activas - buffer <= 5, y se piden 10
-    monkeypatch.setattr(
-        settings, "CAMPING_TOTAL_CAPACITY", settings.CAMPING_OFFLINE_BUFFER + 5
-    )
+    # disponible = total - buffer - activas <= 5, y se piden 10
+    configurar_camping(capacidad_total=5, porcentaje_buffer_offline=0)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

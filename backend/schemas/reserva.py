@@ -109,11 +109,10 @@ class ReservaCreate(BaseModel):
     @field_validator("personas")
     @classmethod
     def validar_personas(cls, valor: List[PersonaReserva]) -> List[PersonaReserva]:
-        maximo = settings.MAX_PERSONAS_POR_RESERVA
+        # El máximo de personas se controla en el endpoint, porque sale de la configuración
+        # guardada en la base (el schema no tiene acceso a la base)
         if len(valor) < 1:
             raise ValueError("Debe haber al menos 1 persona en la reserva.")
-        if len(valor) > maximo:
-            raise ValueError(f"La cantidad máxima de personas por reserva es {maximo}.")
         dnis = [p.dni for p in valor if p.dni is not None]
         if len(dnis) != len(set(dnis)):
             raise ValueError("Hay un DNI repetido dentro de la reserva.")

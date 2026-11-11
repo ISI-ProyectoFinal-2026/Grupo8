@@ -56,11 +56,11 @@ def test_usuario_prueba_no_disponible_en_produccion(monkeypatch):
     assert response.status_code == 404
 
 
-def test_se_puede_crear_una_reserva_con_el_usuario_de_prueba(monkeypatch):
+def test_se_puede_crear_una_reserva_con_el_usuario_de_prueba(configurar_camping):
     """El usuario de prueba reserva con su token y la reserva queda a su nombre."""
     # Este test verifica el flujo usuario -> reserva, no la capacidad del camping.
     # Subimos el cupo para que no dependa de cuántas reservas haya en la base local.
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 100_000)
+    configurar_camping(capacidad_total=100_000)
 
     user_id = client.get("/usuarios/prueba").json()["user_id"]
     token = jwt.encode({"sub": user_id}, settings.AUTH_SECRET_KEY, algorithm="HS256")

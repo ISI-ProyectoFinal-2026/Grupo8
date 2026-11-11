@@ -532,9 +532,9 @@ EGRESO = INGRESO + timedelta(days=1)
 
 
 @pytest.fixture
-def reservas_creadas(monkeypatch) -> Iterator[List[str]]:
+def reservas_creadas(configurar_camping) -> Iterator[List[str]]:
     """Sube el cupo (no dependemos de la base local) y borra las reservas que crea cada test."""
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 100_000)
+    configurar_camping(capacidad_total=100_000)
     creadas: List[str] = []
     yield creadas
     db = SessionLocal()

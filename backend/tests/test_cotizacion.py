@@ -75,9 +75,9 @@ class MercadoPagoFalso:
 
 
 @pytest.fixture
-def reservas_creadas(monkeypatch):
+def reservas_creadas(configurar_camping):
     # Estos tests no miran la capacidad, así que la subimos para que no dependa de la BD local
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 100_000)
+    configurar_camping(capacidad_total=100_000)
     ids = []
     yield ids
     db = SessionLocal()
@@ -203,6 +203,16 @@ CASOS_INVALIDOS = [
 @pytest.mark.parametrize("cuerpo", CASOS_INVALIDOS)
 def test_cotizar_rechaza_datos_invalidos_con_422(cuerpo):
     assert client.post("/reservas/cotizar", json=cuerpo).status_code == 422
+
+
+def test_cotizar_usa_el_maximo_de_personas_guardado(configurar_camping):
+    configurar_camping(max_personas_por_reserva=2)
+    personas = [{"edad": 30, "condicion": "visitante"}] * 3
+
+    response = client.post("/reservas/cotizar", json={"personas": personas})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "La cantidad máxima de personas por reserva es 2."
 
 
 def test_cotizar_acepta_el_maximo_de_personas():
