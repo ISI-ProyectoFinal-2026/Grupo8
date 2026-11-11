@@ -8,6 +8,7 @@ import type { UsuarioSesion } from '@/lib/auth';
 import type { Cotizacion } from '@/lib/cotizacion';
 import type { ValidacionSocio } from '@/lib/validacionSocio';
 import { leerReservaPendiente } from '@/lib/reservaPendiente';
+import type { TipoReserva } from '@/lib/tiposReserva';
 import Reservas from './Reservas';
 
 // El Select de Radix no se puede manejar bien en jsdom: se reemplaza por un <select> nativo
@@ -59,6 +60,16 @@ const COTIZACION_DEL_BACKEND: Cotizacion = {
       precio_final: 7225,
     },
   ],
+};
+
+// Tipo por persona como lo devuelve GET /api/v1/tipos-reserva
+const TIPO_CARPA: TipoReserva = {
+  id: 'tipo-carpa',
+  nombre: 'Carpa',
+  precio: 8500,
+  forma_cobro: 'POR_PERSONA',
+  max_personas: 10,
+  cantidad_unidades: null,
 };
 
 const DNI_SOCIO = '41234567';
@@ -128,7 +139,7 @@ function mostrarReservas(personas = '2') {
       initialEntries={[
         {
           pathname: '/reservas',
-          state: { fecha: '2030-01-10', fechaEgreso: '2030-01-10', personas, tipo: 'carpa' },
+          state: { fecha: '2030-01-10', fechaEgreso: '2030-01-10', personas, tipo: TIPO_CARPA },
         },
       ]}
     >
@@ -253,6 +264,7 @@ describe('Reservas: precio calculado por el backend', () => {
     await waitFor(() => expect(fetchFalso).toHaveBeenCalledTimes(1));
     const [, opciones] = fetchFalso.mock.calls[0];
     expect(JSON.parse(opciones.body)).toEqual({
+      tipo_reserva_id: TIPO_CARPA.id,
       personas: [
         { edad: 70, condicion: 'visitante' },
         { edad: 68, condicion: 'visitante' },
@@ -320,6 +332,8 @@ describe('Reservas: sin teléfono', () => {
     const cuerpo = cuerpoDeLaReserva(fetchFalso);
     expect(cuerpo).not.toHaveProperty('telefono');
     expect(cuerpo.email).toBe('ana@test.com');
+    expect(cuerpo.tipo_reserva_id).toBe(TIPO_CARPA.id);
+    expect(cuerpo).not.toHaveProperty('titular');
     expect(cuerpo.personas).toEqual([
       { nombre: 'Ana Pérez', edad: 34, condicion: 'visitante' },
       { nombre: 'Luis Pérez', edad: 8, condicion: 'visitante' },
@@ -688,7 +702,7 @@ describe('Reservas: plazo de pago (subissue 17.5)', () => {
     expect(leerReservaPendiente()).toEqual({
       id: 'r-1',
       vencimiento: '2030-01-01T12:10:00+00:00',
-      titulo: 'Parcela para Carpa - 2 personas',
+      titulo: 'Carpa - 2 personas',
     });
     // El link de pago se crea recién en la pantalla de pago, con "Ir a pagar"
     expect(llamadasA(fetchFalso, '/api/payments/create')).toHaveLength(0);

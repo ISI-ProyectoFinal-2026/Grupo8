@@ -1,5 +1,6 @@
 import {
   DoorOpen,
+  Home,
   LayoutDashboard,
   Percent,
   Settings,
@@ -14,6 +15,7 @@ import Egresos from './Egresos';
 import Incidentes from './Incidentes';
 import Inicio from './Inicio';
 import Socios from './Socios';
+import TiposReserva from './TiposReserva';
 import { Alertas } from './Alertas';
 
 export interface AdminRoute {
@@ -63,5 +65,11 @@ export const adminRoutes: AdminRoute[] = [
     titulo: 'Configuración',
     icono: Settings,
     element: <Configuracion />,
+  },
+  {
+    path: 'tipos-reserva',
+    titulo: 'Tipos de reserva',
+    icono: Home,
+    element: <TiposReserva />,
   },
 ];

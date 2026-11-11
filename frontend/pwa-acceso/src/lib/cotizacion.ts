@@ -27,7 +27,14 @@ export interface Cotizacion {
   total: number;
   cantidad_socios: number;
   detalle: CotizarDetalle[];
+  // Solo cuando se cotiza con un tipo. Por unidad, detalle va vacío y llegan las noches
+  forma_cobro?: 'POR_PERSONA' | 'POR_UNIDAD' | null;
+  precio_unitario?: number | null;
+  noches?: number | null;
 }
+
+// Mensaje cuando la cotización falla sin un motivo del backend (por ejemplo, sin conexión)
+export const ERROR_COTIZACION_GENERICO = 'No se pudo calcular el precio.';
 
 interface PersonaDelFormulario {
   edad: string;
@@ -53,18 +60,46 @@ export function formatearMonto(valor: number): string {
   return `$${valor.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-export async function cotizarReserva(
-  personas: PersonaCotizar[],
-  signal?: AbortSignal
-): Promise<Cotizacion> {
+// El backend explica por qué no se puede cotizar (máximo de personas, tipo desactivado...).
+// Ese motivo se muestra tal cual; si no hay motivo se usa el mensaje genérico.
+async function pedirCotizacion(cuerpo: object, signal?: AbortSignal): Promise<Cotizacion> {
   const respuesta = await fetch(`${API_URL}/reservas/cotizar`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ personas }),
+    body: JSON.stringify(cuerpo),
     signal,
   });
   if (!respuesta.ok) {
-    throw new Error('No se pudo calcular el precio.');
+    let motivo = ERROR_COTIZACION_GENERICO;
+    try {
+      const error = await respuesta.json();
+      if (typeof error.detail === 'string') motivo = error.detail;
+    } catch {
+      // la respuesta no traía JSON
+    }
+    throw new Error(motivo);
   }
   return (await respuesta.json()) as Cotizacion;
+}
+
+/** Por persona: cada una con su edad y condición. Sin tipo se cotiza con el precio base. */
+export function cotizarReserva(
+  personas: PersonaCotizar[],
+  signal?: AbortSignal,
+  tipoReservaId?: string
+): Promise<Cotizacion> {
+  const cuerpo = tipoReservaId ? { tipo_reserva_id: tipoReservaId, personas } : { personas };
+  return pedirCotizacion(cuerpo, signal);
+}
+
+export interface PedidoPorUnidad {
+  tipo_reserva_id: string;
+  cantidad_personas: number;
+  fecha_ingreso: string;
+  fecha_egreso: string;
+}
+
+/** Por unidad (cabaña): precio de la unidad × noches, sin datos de cada persona. */
+export function cotizarPorUnidad(pedido: PedidoPorUnidad, signal?: AbortSignal): Promise<Cotizacion> {
+  return pedirCotizacion(pedido, signal);
 }

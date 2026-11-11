@@ -1,87 +1,115 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { formatearFecha } from "@/lib/fechas";
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { CalendarDays, Info } from 'lucide-react';
+import { useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { formatearFecha } from '@/lib/fechas';
+import {
+  describirPrecio,
+  esPorUnidad,
+  formatearPrecio,
+  type TipoReserva,
+} from '@/lib/tiposReserva';
 
+interface EstadoBusqueda {
+  fecha?: string;
+  fechaEgreso?: string;
+  personas?: string;
+  tipo?: TipoReserva;
+}
+
+// Noches entre dos fechas AAAA-MM-DD (0 = se pasa el día)
+function contarNoches(ingreso: string, egreso: string): number {
+  const dia = 24 * 60 * 60 * 1000;
+  return Math.round((Date.parse(egreso) - Date.parse(ingreso)) / dia);
+}
+
+// Resumen de lo elegido en el inicio, con el precio del tipo que vino del backend.
+// No hay consulta de disponibilidad: el cupo y las unidades se confirman al crear la reserva.
 export default function Disponibilidad() {
   const location = useLocation();
   const navigate = useNavigate();
-  
-  // Rescatamos los datos que mandó el Home
-  const { fecha, fechaEgreso, personas, tipo } = location.state || {};
+  const { fecha, fechaEgreso, personas, tipo } = (location.state ||
+    {}) as EstadoBusqueda;
 
-  const [cargando, setCargando] = useState(true);
-  const [hayDisponibilidad, setHayDisponibilidad] = useState(false);
-  const [precio, setPrecio] = useState(0);
-
+  // Si entran directo a la ruta sin buscar (o con datos viejos), vuelven al inicio
+  const datosCompletos = Boolean(fecha && tipo?.id);
   useEffect(() => {
-    // Si entran directo a la ruta sin buscar, los pateamos al inicio
-    if (!fecha) {
-      navigate("/");
-      return;
-    }
+    if (!datosCompletos) navigate('/');
+  }, [datosCompletos, navigate]);
 
-  const consultarBackend = async () => {
-      // TEMPORAL PARA PROBAR LA PANTALLA DE RESERVAS. COMENTAR CUANDO EL BACKEND ESTÉ LISTO Y DESCOMENTAR FUNCIÓN DE ABAJO.
-      setTimeout(() => {
-        setHayDisponibilidad(true); 
-        setPrecio(tipo === 'cabana' ? 25000 : 5000);
-        setCargando(false);
-      }, 800);
-    };
+  if (!fecha || !tipo?.id) return null;
 
-    consultarBackend();
-  }, [fecha, tipo, personas, navigate]);
-
-  if (cargando) {
-    return <div className="text-center py-20 text-lg">Consultando sistema de reservas...</div>;
-  }
+  const egreso = fechaEgreso || fecha;
+  const noches = contarNoches(fecha, egreso);
+  const porUnidad = esPorUnidad(tipo);
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-lg">
       <Card className="shadow-lg border-zinc-200 text-center">
-        {hayDisponibilidad ? (
-          // PANTALLA: ÉXITO
-          <>
-            <CardHeader>
-              <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-              <CardTitle className="text-2xl text-green-700">¡Hay disponibilidad!</CardTitle>
-              <CardDescription>Para el día {formatearFecha(fecha)}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="bg-zinc-50 p-4 rounded-lg">
-                <p className="text-sm text-zinc-500 mb-1">Precio estimado por persona</p>
-                <p className="text-3xl font-bold text-zinc-900">${precio.toLocaleString('es-AR')}</p>
-              </div>
-              <Button 
-                className="w-full bg-green-600 hover:bg-green-700 h-12 text-md"
-                onClick={() => navigate("/reservas", { state: { fecha, fechaEgreso, personas, tipo, precio } })}
-              >
-                Proceder a Reservar
-              </Button>
-            </CardContent>
-          </>
-        ) : (
-          // PANTALLA: FALLO
-          <>
-            <CardHeader>
-              <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-              <CardTitle className="text-2xl text-red-700">Sin disponibilidad</CardTitle>
-              <CardDescription>Lo sentimos, no hay cupos para la fecha seleccionada ({formatearFecha(fecha)}).</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button 
-                variant="outline" 
-                className="w-full h-12 text-md"
-                onClick={() => navigate("/")}
-              >
-                Elegir otra fecha
-              </Button>
-            </CardContent>
-          </>
-        )}
+        <CardHeader>
+          <CalendarDays className="w-14 h-14 text-green-600 mx-auto mb-4" />
+          <CardTitle className="text-2xl text-zinc-900">
+            {tipo.nombre}
+          </CardTitle>
+          <CardDescription>
+            {egreso !== fecha
+              ? `Del ${formatearFecha(fecha)} al ${formatearFecha(egreso)} · ${noches} ${noches === 1 ? 'noche' : 'noches'}`
+              : `Para el día ${formatearFecha(fecha)}`}
+            {personas
+              ? ` · ${personas} ${personas === '1' ? 'persona' : 'personas'}`
+              : ''}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="bg-zinc-50 p-4 rounded-lg">
+            <p className="text-sm text-zinc-500 mb-1">Precio</p>
+            <p className="text-3xl font-bold text-zinc-900">
+              {describirPrecio(tipo)}
+            </p>
+            {porUnidad ? (
+              <p className="mt-2 text-sm text-zinc-600">
+                Total estimado: {formatearPrecio(tipo.precio)} × {noches}{' '}
+                {noches === 1 ? 'noche' : 'noches'} ={' '}
+                <strong>{formatearPrecio(tipo.precio * noches)}</strong>
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-zinc-600">
+                Los descuentos para socios y por edad se aplican al completar la
+                reserva.
+              </p>
+            )}
+          </div>
+          <p className="flex items-start gap-2 text-left text-sm text-zinc-600">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            La disponibilidad se confirma al reservar.
+          </p>
+          <div className="space-y-2">
+            <Button
+              className="w-full bg-green-600 hover:bg-green-700 h-12 text-md"
+              onClick={() =>
+                navigate('/reservas', {
+                  state: { fecha, fechaEgreso: egreso, personas, tipo },
+                })
+              }
+            >
+              Continuar con la reserva
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full h-12 text-md"
+              onClick={() => navigate('/')}
+            >
+              Cambiar la búsqueda
+            </Button>
+          </div>
+        </CardContent>
       </Card>
     </div>
   );
