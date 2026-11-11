@@ -10,15 +10,17 @@ from zoneinfo import ZoneInfo
 import mercadopago
 from fastapi import BackgroundTasks
 from mercadopago.webhook import InvalidWebhookSignatureError, WebhookSignatureValidator
+from sqlalchemy import case
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.tiempo import a_utc, ahora_utc
 from models.pago import Pago
-from models.reserva import CondicionPersonaEnum, EstadoPagoEnum, Reserva
+from models.reserva import CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum, Reserva
 from security.schemas import JWTPayloadSchema
 from security.services import SecurityService
+from services.capacity_service import CapacityService, plazo_vencido
 from services.email_service import email_service
 
 logger = logging.getLogger(__name__)
@@ -156,9 +158,14 @@ def registrar_pago(db: Session, datos_mp: dict) -> Pago | None:
     # llegan a la vez, no se crean dos filas para el mismo pago.
     # La fecha de creación no se pisa al actualizar.
     sentencia = insert(Pago).values(id=uuid.uuid4(), mp_payment_id=str(mp_payment_id), **valores)
+    actualizar = {campo: sentencia.excluded[campo] for campo in valores if campo != "fecha_creacion"}
+    # Un pago ya devuelto no vuelve a "approved" por un aviso viejo que llega después del reembolso
+    actualizar["estado"] = case(
+        (Pago.estado == "refunded", Pago.estado), else_=sentencia.excluded.estado
+    )
     sentencia = sentencia.on_conflict_do_update(
         index_elements=[Pago.mp_payment_id],
-        set_={campo: sentencia.excluded[campo] for campo in valores if campo != "fecha_creacion"},
+        set_=actualizar,
     ).returning(Pago.id)
     pago_id = db.execute(sentencia).scalar_one()
     return db.get(Pago, pago_id, populate_existing=True)
@@ -232,10 +239,57 @@ class ResultadoConfirmacion(str, enum.Enum):
     YA_PAGADA = "ya_pagada"
     NO_ENCONTRADA = "no_encontrada"
     IMPORTE_DISTINTO = "importe_distinto"
+    # Pago aprobado después del plazo y sin cupo: se devuelve el dinero
+    REEMBOLSADA = "reembolsada"
+    REEMBOLSO_PENDIENTE = "reembolso_pendiente"
+
+
+def _reembolsar(mp_payment_id) -> bool:
+    """Devuelve el total del pago con la API de reembolsos de Mercado Pago."""
+    if mp_payment_id is None:
+        return False
+    try:
+        respuesta = payment_service.mp.refund().create(mp_payment_id)
+    except Exception as e:
+        logger.error(f"Falló el reembolso del pago {mp_payment_id}: {e}")
+        return False
+    if respuesta.get("status") not in (200, 201):
+        logger.error(f"Mercado Pago rechazó el reembolso del pago {mp_payment_id}: {respuesta.get('response')}")
+        return False
+    return True
+
+
+def _programar_aviso_de_reembolso(reserva: Reserva, reembolsado: bool, background_tasks: BackgroundTasks) -> None:
+    if reembolsado:
+        motivo = (
+            "El pago llegó después de que venciera el plazo para pagar y ya no quedaban lugares "
+            "para esas fechas. Te devolvimos el dinero por Mercado Pago."
+        )
+    else:
+        motivo = (
+            "El pago llegó después de que venciera el plazo para pagar y ya no quedaban lugares "
+            "para esas fechas. Estamos procesando la devolución del dinero por Mercado Pago."
+        )
+    background_tasks.add_task(
+        email_service.enviar_cancelacion_sync,
+        destinatario=reserva.email,
+        datos_reserva={
+            "nombre_cliente": reserva.titular,
+            "reserva_id": str(reserva.id),
+            "motivo_cancelacion": motivo,
+        },
+    )
+
+
+def _pago_ya_reembolsado(db: Session, mp_payment_id) -> bool:
+    if mp_payment_id is None:
+        return False
+    estado = db.query(Pago.estado).filter(Pago.mp_payment_id == str(mp_payment_id)).scalar()
+    return estado == "refunded"
 
 
 def confirmar_pago(
-    db: Session, reserva_id, background_tasks: BackgroundTasks, monto_cobrado
+    db: Session, reserva_id, background_tasks: BackgroundTasks, monto_cobrado, mp_payment_id=None
 ) -> ResultadoConfirmacion:
     """Marca la reserva como pagada y programa el correo con el QR.
 
@@ -243,13 +297,17 @@ def confirmar_pago(
     a pagada: si ya lo estaba (aviso repetido o reconciliación posterior), no se hace nada.
     Si el importe cobrado no coincide con el de la reserva, no se confirma: el pago ya
     quedó registrado en la tabla pagos para revisarlo.
+
+    Si el pago llega con el plazo vencido (por ejemplo, una tarjeta que quedó en revisión),
+    la reserva se confirma solo si todavía hay cupo; si no, se reembolsa el pago y se avisa
+    al titular.
     """
     try:
         reserva_uuid = uuid.UUID(str(reserva_id))
     except ValueError:
         return ResultadoConfirmacion.NO_ENCONTRADA
 
-    # El bloqueo evita que el webhook y la reconciliación confirmen (y manden el correo) a la vez
+    # El bloqueo evita que el webhook y la reconciliación confirmen (o reembolsen) a la vez
     reserva = (
         db.query(Reserva)
         .filter(Reserva.id == reserva_uuid)
@@ -271,6 +329,14 @@ def confirmar_pago(
         db.rollback()
         return ResultadoConfirmacion.IMPORTE_DISTINTO
 
+    if plazo_vencido(reserva):
+        if _pago_ya_reembolsado(db, mp_payment_id):
+            db.rollback()
+            return ResultadoConfirmacion.REEMBOLSADA
+        # La reserva vencida ya no ocupa cupo: se fija si entra de nuevo
+        if not CapacityService().hay_cupo(db, reserva.fecha_ingreso, reserva.fecha_egreso, reserva.cantidad_personas):
+            return _cancelar_y_reembolsar(db, reserva, mp_payment_id, background_tasks)
+
     reserva.marcar_como_pagada()
     db.commit()
 
@@ -280,6 +346,31 @@ def confirmar_pago(
     except Exception as e:
         logger.error(f"No se pudo generar el QR de la reserva {reserva.id}: {e}")
     return ResultadoConfirmacion.CONFIRMADA
+
+
+def _cancelar_y_reembolsar(
+    db: Session, reserva: Reserva, mp_payment_id, background_tasks: BackgroundTasks
+) -> ResultadoConfirmacion:
+    reserva.cambiar_estado_reserva(EstadoReservaEnum.CANCELADA)
+    reserva.estado_pago = EstadoPagoEnum.CANCELADO
+
+    # El reembolso se pide con la reserva bloqueada, y el pago se marca como devuelto en la
+    # misma transacción: un aviso repetido que espera el bloqueo ya no lo vuelve a devolver
+    reembolsado = _reembolsar(mp_payment_id)
+    if reembolsado:
+        db.query(Pago).filter(Pago.mp_payment_id == str(mp_payment_id)).update(
+            {Pago.estado: "refunded"}, synchronize_session=False
+        )
+        logger.warning(f"Reserva {reserva.id} vencida y sin cupo: se reembolsó el pago {mp_payment_id}.")
+    else:
+        logger.error(
+            f"Reserva {reserva.id} vencida y sin cupo: no se pudo reembolsar el pago {mp_payment_id}. "
+            "Hay que devolverlo a mano desde Mercado Pago."
+        )
+    db.commit()
+
+    _programar_aviso_de_reembolso(reserva, reembolsado, background_tasks)
+    return ResultadoConfirmacion.REEMBOLSADA if reembolsado else ResultadoConfirmacion.REEMBOLSO_PENDIENTE
 
 
 # Instancia global para importar en los endpoints

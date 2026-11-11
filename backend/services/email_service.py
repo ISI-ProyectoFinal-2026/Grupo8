@@ -55,4 +55,21 @@ class EmailService:
             # Capturamos el error pero NO usamos "raise" para no crashear el hilo secundario
             logger.error(f"Error crítico en hilo secundario al enviar correo: {str(e)}")
 
+    @staticmethod
+    def enviar_cancelacion_sync(destinatario: str, datos_reserva: dict):
+        """Avisa que la reserva quedó cancelada. datos_reserva lleva nombre_cliente, reserva_id y motivo_cancelacion."""
+        try:
+            template = template_env.get_template("cancelacion_reserva.html")
+            params: resend.Emails.SendParams = {
+                "from": "Qamp Accesos <onboarding@resend.dev>",
+                "to": [destinatario],
+                "subject": "Aviso sobre tu reserva en Qamp",
+                "html": template.render(**datos_reserva),
+            }
+            email = resend.Emails.send(params)
+            logger.info(f"Correo de cancelación despachado con éxito. ID: {email['id']}")
+        except Exception as e:
+            logger.error(f"Error crítico en hilo secundario al enviar correo de cancelación: {str(e)}")
+
+
 email_service = EmailService()

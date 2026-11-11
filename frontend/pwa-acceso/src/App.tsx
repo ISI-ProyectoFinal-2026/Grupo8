@@ -18,6 +18,7 @@ import Reservas from "./pages/Reservas";
 import PagoExito from "./pages/PagoExito";
 import PagoRechazado from "./pages/PagoRechazado";
 import PagoPendiente from "./pages/PagoPendiente";
+import PagarReserva from "./pages/PagarReserva";
 import { syncService } from "./services/syncService";
 import { useEffect } from "react";
 
@@ -52,6 +53,7 @@ function App() {
           <Route path="/disponibilidad" element={<Disponibilidad />} />
           <Route path="/login" element={<Login />} />
           <Route path="/reservas" element={<Reservas />} />
+          <Route path="/reservas/pagar" element={<PagarReserva />} />
           <Route path="/beneficios" element={<Beneficios />} />
           <Route path="/acerca" element={<Acerca />} />
           <Route path="/contacto" element={<Contacto />} />

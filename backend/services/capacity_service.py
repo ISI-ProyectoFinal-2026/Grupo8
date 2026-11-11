@@ -6,7 +6,27 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from core.config import settings
-from models.reserva import EstadoReservaEnum, Reserva
+from models.reserva import EstadoPagoEnum, EstadoReservaEnum, Reserva
+
+
+def _ahora_utc() -> datetime:
+    # Como se guarda fecha_reserva: UTC sin zona horaria
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def vencimiento_pago(fecha_reserva: datetime) -> datetime:
+    """Hasta cuándo se puede pagar una reserva pendiente, en UTC con zona horaria."""
+    return fecha_reserva.replace(tzinfo=timezone.utc) + timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES)
+
+
+def plazo_vencido(reserva: Reserva, ahora: Optional[datetime] = None) -> bool:
+    """True si la reserva ya no está dentro del plazo de pago: cancelada, o pendiente con el plazo cumplido."""
+    if reserva.estado_reserva == EstadoReservaEnum.CANCELADA:
+        return True
+    if reserva.estado_reserva != EstadoReservaEnum.PENDIENTE:
+        return False
+    limite = (ahora or _ahora_utc()) - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES)
+    return reserva.fecha_reserva < limite
 
 
 class CapacityService:
@@ -29,7 +49,7 @@ class CapacityService:
         recibe para poder probar los casos límite.
         """
         if ahora is None:
-            ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+            ahora = _ahora_utc()
         limite_pendientes = ahora - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES)
 
         ocupa_cupo = or_(
@@ -46,6 +66,38 @@ class CapacityService:
             Reserva.fecha_ingreso <= fecha_egreso,
             Reserva.fecha_egreso >= fecha_ingreso,
         ).scalar() or 0
+
+    def cancelar_reservas_vencidas(self, db: Session, ahora: Optional[datetime] = None) -> int:
+        """
+        Pasa a CANCELADA las reservas pendientes de pago que superaron el plazo.
+
+        No depende de una tarea programada: se llama al crear y al consultar reservas.
+        Las que están en alerta de clonación no se tocan (su estado no es PENDIENTE).
+        Devuelve cuántas se cancelaron.
+        """
+        limite = (ahora or _ahora_utc()) - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES)
+        canceladas = (
+            db.query(Reserva)
+            .filter(
+                Reserva.estado_reserva == EstadoReservaEnum.PENDIENTE,
+                Reserva.estado_pago == EstadoPagoEnum.PENDIENTE,
+                Reserva.fecha_reserva < limite,
+            )
+            .update(
+                {
+                    Reserva.estado_reserva: EstadoReservaEnum.CANCELADA,
+                    Reserva.estado_pago: EstadoPagoEnum.CANCELADO,
+                },
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+        return canceladas
+
+    def hay_cupo(self, db: Session, fecha_ingreso: date, fecha_egreso: date, personas: int) -> bool:
+        """Igual que check_availability, pero responde True/False en lugar de cortar con un 400."""
+        ocupados = self.lugares_ocupados(db, fecha_ingreso, fecha_egreso)
+        return personas <= settings.CAMPING_TOTAL_CAPACITY - ocupados - settings.CAMPING_OFFLINE_BUFFER
 
     def check_availability(self, espacios_solicitados: int, reservas_activas: int) -> bool:
         """
