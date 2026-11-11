@@ -10,6 +10,8 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
 from core.database import Base
+# Registra la tabla tipos_reserva antes de que reservas la referencie
+from models.tipo_reserva import TipoReserva  # noqa: F401
 
 # Estado del pago: ¿se cobró o no?
 class EstadoPagoEnum(enum.Enum):
@@ -37,6 +39,14 @@ class Reserva(Base):
     # Nulo cuando el visitante reservó sin iniciar sesión
     user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
     camping_id = Column(String, ForeignKey("configuracion_camping.camping_id"), nullable=False)
+    # Tipo elegido (carpa, cabaña...). Las reservas anteriores a la Issue 19 no lo tienen.
+    # RESTRICT: un tipo con reservas no se puede borrar, solo desactivar
+    tipo_reserva_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tipos_reserva.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
 
     # fecha_reserva es el momento en que se hizo la reserva; la estadía son ingreso y egreso
     fecha_reserva = Column(DateTime, default=datetime.utcnow, index=True, nullable=False)

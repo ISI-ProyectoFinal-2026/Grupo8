@@ -22,6 +22,8 @@ from api.egresos import router as egresos_router
 from api.ocupacion import router as ocupacion_router
 from api.admin_cobros import router as admin_cobros_router
 from api.admin_configuracion import router as admin_configuracion_router
+from api.tipos_reserva import admin_router as admin_tipos_reserva_router
+from api.tipos_reserva import router as tipos_reserva_router
 
 # Configuración básica del logger
 logging.basicConfig(level=logging.INFO)
@@ -58,6 +60,8 @@ app.include_router(egresos_router)
 app.include_router(ocupacion_router)
 app.include_router(admin_cobros_router)
 app.include_router(admin_configuracion_router)
+app.include_router(tipos_reserva_router)
+app.include_router(admin_tipos_reserva_router)
 
 # Middleware para loggeo de errores (Requisito del DoD)
 @app.middleware("http")

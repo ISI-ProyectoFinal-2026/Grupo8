@@ -22,6 +22,7 @@ from models.configuracion import ConfiguracionCamping
 from models.conflictos import ConflictosSincronizacion
 from models.egreso_fisico import EgresoFisico
 from models.pago import Pago
+from models.tipo_reserva import TipoReserva
 
 # Cargar las variables del archivo .env
 load_dotenv()
