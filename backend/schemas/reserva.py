@@ -25,6 +25,19 @@ def hoy_argentina() -> date:
     return datetime.now(ZONA_HORARIA).date()
 
 
+def validar_nombre_persona(valor: str) -> str:
+    """Mismas reglas para el nombre de cada persona y para el titular de una reserva por unidad."""
+    if not valor:
+        raise ValueError("El nombre es obligatorio.")
+    if len(valor) < 2 or len(valor) > 100:
+        raise ValueError("El nombre debe tener entre 2 y 100 caracteres.")
+    if not NOMBRE_REGEX.match(valor):
+        raise ValueError(
+            "El nombre solo puede contener letras, espacios, puntos, apóstrofes y guiones."
+        )
+    return valor
+
+
 class PersonaReserva(BaseModel):
     """Una persona de la reserva. Las reglas son las mismas que valida el formulario."""
 
@@ -39,15 +52,7 @@ class PersonaReserva(BaseModel):
     @field_validator("nombre")
     @classmethod
     def validar_nombre(cls, valor: str) -> str:
-        if not valor:
-            raise ValueError("El nombre es obligatorio.")
-        if len(valor) < 2 or len(valor) > 100:
-            raise ValueError("El nombre debe tener entre 2 y 100 caracteres.")
-        if not NOMBRE_REGEX.match(valor):
-            raise ValueError(
-                "El nombre solo puede contener letras, espacios, puntos, apóstrofes y guiones."
-            )
-        return valor
+        return validar_nombre_persona(valor)
 
     @field_validator("edad")
     @classmethod
@@ -85,8 +90,14 @@ class ReservaCreate(BaseModel):
     # No lleva user_id: la reserva queda a nombre de quien tiene la sesión iniciada (si hay una)
     fecha_ingreso: date
     fecha_egreso: date
-    # La primera persona es el titular; la cantidad de personas sale del largo de la lista
-    personas: List[PersonaReserva]
+    # Opcional mientras la web no lo envíe: sin tipo, la reserva funciona como antes de la Issue 19
+    tipo_reserva_id: Optional[UUID] = None
+    # Reserva por persona (o sin tipo): la primera persona es el titular y la cantidad de
+    # personas sale del largo de la lista
+    personas: Optional[List[PersonaReserva]] = None
+    # Reserva por unidad (cabaña): solo el titular y cuántas personas van
+    titular: Optional[str] = None
+    cantidad_personas: Optional[int] = Field(default=None, strict=True, ge=1)
     # EmailStr usa email-validator (sin chequeo DNS por defecto)
     email: EmailStr
 
@@ -108,15 +119,35 @@ class ReservaCreate(BaseModel):
 
     @field_validator("personas")
     @classmethod
-    def validar_personas(cls, valor: List[PersonaReserva]) -> List[PersonaReserva]:
+    def validar_personas(cls, valor: Optional[List[PersonaReserva]]) -> Optional[List[PersonaReserva]]:
         # El máximo de personas se controla en el endpoint, porque sale de la configuración
         # guardada en la base (el schema no tiene acceso a la base)
+        if valor is None:
+            return valor
         if len(valor) < 1:
             raise ValueError("Debe haber al menos 1 persona en la reserva.")
         dnis = [p.dni for p in valor if p.dni is not None]
         if len(dnis) != len(set(dnis)):
             raise ValueError("Hay un DNI repetido dentro de la reserva.")
         return valor
+
+    @field_validator("titular")
+    @classmethod
+    def validar_titular(cls, valor: Optional[str]) -> Optional[str]:
+        return None if valor is None else validar_nombre_persona(valor)
+
+    @model_validator(mode="after")
+    def validar_datos_segun_forma(self):
+        # Qué datos corresponden lo decide la forma de cobro del tipo, que se conoce en el endpoint.
+        # Acá solo se controla que no se mezclen las dos formas y que sin tipo vengan las personas
+        por_unidad = self.titular is not None or self.cantidad_personas is not None
+        if self.personas is not None and por_unidad:
+            raise ValueError(
+                "Enviá las personas, o el titular y la cantidad de personas, pero no las dos cosas."
+            )
+        if self.tipo_reserva_id is None and self.personas is None:
+            raise ValueError("Debe haber al menos 1 persona en la reserva.")
+        return self
 
     @model_validator(mode="after")
     def validar_fechas(self):
@@ -158,6 +189,10 @@ class ReservaResponse(BaseModel):
     estado_reserva: EstadoReservaEnum
     estado_pago: EstadoPagoEnum
     jwt_jti: Optional[str] = None
+    # Nulos en las reservas anteriores a la Issue 19
+    tipo_reserva_id: Optional[UUID] = None
+    precio_tipo: Optional[float] = None
+    # Vacío en las reservas por unidad, que solo guardan el titular
     personas: List[PersonaOut] = []
 
     model_config = ConfigDict(from_attributes=True)
