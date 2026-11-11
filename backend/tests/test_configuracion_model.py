@@ -11,11 +11,13 @@ def test_configuracion_camping_instanciacion():
         camping_id="CAMP-TEST-01",
         capacidad_total=50,
         porcentaje_buffer_offline=10,
+        max_personas_por_reserva=10,
         precio_base_actual=5000.0,
     )
 
     assert config.camping_id == "CAMP-TEST-01"
     assert config.capacidad_total == 50
     assert config.porcentaje_buffer_offline == 10
+    assert config.max_personas_por_reserva == 10
     assert config.precio_base_actual == 5000.0
     assert ConfiguracionCamping.__tablename__ == "configuracion_camping"

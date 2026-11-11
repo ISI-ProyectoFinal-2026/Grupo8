@@ -21,8 +21,11 @@ class Settings(BaseSettings):
     # --- Reglas de Negocio del Camping ---
     # Id del camping al que se asocian las reservas (tiene que existir en configuracion_camping)
     CAMPING_ID: str = "CAMP-MENDOZA-01"
+    # Cupo, buffer y máximo por reserva se editan desde el panel y se guardan en configuracion_camping.
+    # Estos valores solo se usan para crear esa fila la primera vez (migración, seeds y tests).
     CAMPING_TOTAL_CAPACITY: int = 50
-    CAMPING_OFFLINE_BUFFER: int = 5
+    # Porcentaje del cupo que no se vende online y queda para los ingresos en la puerta
+    CAMPING_PORCENTAJE_BUFFER_OFFLINE: int = 10
     MAX_PERSONAS_POR_RESERVA: int = 10
     MAX_NOCHES_POR_RESERVA: int = 10
     # Plazo para pagar una reserva PENDIENTE: al vencer libera el cupo, se cancela y el link de pago deja de funcionar

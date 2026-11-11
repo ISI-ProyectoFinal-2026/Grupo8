@@ -168,10 +168,10 @@ def reservas():
 
 
 @pytest.fixture
-def cupo_justo(monkeypatch):
-    """Deja el camping con lugar para exactamente `lugares` personas (más el buffer offline)."""
+def cupo_justo(configurar_camping):
+    """Deja el camping con lugar para exactamente `lugares` personas (sin buffer offline)."""
     def _fijar(lugares):
-        monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", lugares + settings.CAMPING_OFFLINE_BUFFER)
+        configurar_camping(capacidad_total=lugares, porcentaje_buffer_offline=0)
     return _fijar
 
 

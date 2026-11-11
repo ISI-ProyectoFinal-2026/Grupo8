@@ -1,12 +1,11 @@
 from dataclasses import dataclass
-from typing import Tuple
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from core.config import settings
 from models.egreso_fisico import EgresoFisico
 from models.ingreso_fisico import IngresoFisico
+from services.camping_service import buffer_en_personas, obtener_o_crear_camping
 
 
 @dataclass(frozen=True)
@@ -30,16 +29,11 @@ def personas_dentro(db: Session) -> int:
     return max(int(ingresadas) - int(egresadas), 0)
 
 
-def _capacidad_y_buffer() -> Tuple[int, int]:
-    # Mientras la 19.1 no esté integrada se leen de settings. Cuando lo esté, salen de
-    # configuracion_camping y el buffer pasa de porcentaje a personas acá mismo.
-    return settings.CAMPING_TOTAL_CAPACITY, settings.CAMPING_OFFLINE_BUFFER
-
-
 def obtener_ocupacion(db: Session) -> Ocupacion:
-    capacidad, buffer = _capacidad_y_buffer()
+    # Capacidad y buffer salen de la configuración guardada; el buffer se informa en personas
+    camping = obtener_o_crear_camping(db)
     return Ocupacion(
         ocupacion_actual=personas_dentro(db),
-        capacidad_maxima=capacidad,
-        buffer_offline=buffer,
+        capacidad_maxima=camping.capacidad_total,
+        buffer_offline=buffer_en_personas(camping.capacidad_total, camping.porcentaje_buffer_offline),
     )

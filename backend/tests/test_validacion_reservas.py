@@ -53,8 +53,6 @@ PERSONAS_INVALIDAS = [
     pytest.param([], id="lista_vacia"),
     pytest.param(None, id="sin_lista"),
     pytest.param("Ana Pérez", id="no_es_lista"),
-    pytest.param([_persona()] * 1 + [_persona(nombre="Persona Extra")] * settings.MAX_PERSONAS_POR_RESERVA,
-                 id="mas_del_maximo"),
     pytest.param([_persona(nombre="")], id="nombre_vacio"),
     pytest.param([_persona(nombre="   ")], id="nombre_en_blanco"),
     pytest.param([_persona(nombre="A")], id="nombre_corto"),
@@ -94,6 +92,31 @@ def test_schema_rechaza_personas_invalidas(personas):
 def test_api_rechaza_personas_invalidas_con_422(personas):
     response = client.post("/reservas/", json=_payload(personas=personas))
     assert response.status_code == 422
+
+
+def _personas_distintas(cantidad: int) -> list:
+    return [_persona(nombre=f"Persona {chr(65 + i)}") for i in range(cantidad)]
+
+
+def test_api_rechaza_mas_personas_que_el_maximo_del_env_con_422():
+    response = client.post(
+        "/reservas/", json=_payload(personas=_personas_distintas(settings.MAX_PERSONAS_POR_RESERVA + 1))
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        f"La cantidad máxima de personas por reserva es {settings.MAX_PERSONAS_POR_RESERVA}."
+    )
+
+
+def test_el_maximo_de_personas_sale_de_la_configuracion_guardada(configurar_camping):
+    # El schema ya no controla el máximo: lo hace el endpoint con el valor de la base
+    configurar_camping(max_personas_por_reserva=3)
+
+    response = client.post("/reservas/", json=_payload(personas=_personas_distintas(4)))
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "La cantidad máxima de personas por reserva es 3."
 
 
 @pytest.mark.parametrize("campo, valor", CASOS_INVALIDOS)

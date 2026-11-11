@@ -131,7 +131,7 @@ La PWA emplea IndexedDB envuelta en promesas con la librería Dexie.js (archivo 
 * Antes del turno, el frontend consume `GET /api/v1/sincronizacion/bootstrap`, descargando paginada la lista de reservas canceladas en las últimas 72 horas (parámetros `page` y `limit=1000`).
 
 
-* Descarga también la configuración: aforo máximo (`CAMPING_TOTAL_CAPACITY`, 50 por defecto) y margen offline (`CAMPING_OFFLINE_BUFFER`, 5 por defecto).
+* Descarga también la configuración guardada desde el panel: aforo máximo (50 por defecto) y margen offline en personas (10 % de la capacidad, redondeado hacia arriba: 5 por defecto).
 
 
 
@@ -279,7 +279,7 @@ Permite al administrador saber cuántas personas hay dentro del camping y cuánt
 * **Nunca negativa:** Si se registran egresos antes de que lleguen los ingresos offline, la ocupación queda en 0 hasta que los guardias sincronicen.
 
 
-* **Capacidad y buffer:** Hoy se leen de `CAMPING_TOTAL_CAPACITY` y `CAMPING_OFFLINE_BUFFER`. Cuando la configuración del camping (Issue 19) los guarde en la base, solo cambia la función `_capacidad_y_buffer()`.
+* **Capacidad y buffer:** Salen de `configuracion_camping`, que el administrador edita desde el panel (Issue 19.1). El buffer se guarda como porcentaje y se informa en personas, redondeado hacia arriba.
 
 
 

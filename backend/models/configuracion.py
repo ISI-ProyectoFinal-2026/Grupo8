@@ -12,6 +12,7 @@ class ConfiguracionCamping(Base):
     camping_id = Column(String, nullable=False) 
     capacidad_total = Column(Integer, nullable=False)
     porcentaje_buffer_offline = Column(Integer, nullable=False)
+    max_personas_por_reserva = Column(Integer, nullable=False)
     precio_base_actual = Column(Float, nullable=False)
 
     # Acá está la restricción (Constraint/Unique) que pide el DoD

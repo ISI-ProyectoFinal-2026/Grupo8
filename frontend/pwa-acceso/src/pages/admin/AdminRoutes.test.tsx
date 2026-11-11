@@ -73,6 +73,7 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
       ['/admin/descuentos', 'Descuentos'],
       ['/admin/incidentes', 'Incidentes'],
       ['/admin/egresos', 'Egresos'],
+      ['/admin/configuracion', 'Configuración del camping'],
     ])('renderiza %s con su página inicial', (ruta, titulo) => {
       renderizarEn(ruta);
 
@@ -96,6 +97,7 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
         '/admin/incidentes',
         '/admin/egresos',
         '/admin/alertas',
+        '/admin/configuracion',
       ]);
     });
 

@@ -1,5 +1,9 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+
 from core.config import settings
+from core.database import get_db
+from services.camping_service import buffer_en_personas, obtener_o_crear_camping
 
 # Creamos el router para este módulo y le ponemos una etiqueta para que se vea en Swagger
 router = APIRouter(
@@ -8,9 +12,10 @@ router = APIRouter(
 )
 
 @router.get("/bootstrap")
-async def get_bootstrap_data(
+def get_bootstrap_data(
     page: int = Query(1, description="Número de página para paginación"),
-    limit: int = Query(1000, description="Límite de registros (máximo 1000 para no saturar red)")
+    limit: int = Query(1000, description="Límite de registros (máximo 1000 para no saturar red)"),
+    db: Session = Depends(get_db),
 ):
     """
     Endpoint de sincronización inicial (Bootstrap).
@@ -28,13 +33,15 @@ async def get_bootstrap_data(
     paginated_blacklist = mock_blacklist_db[start_idx:end_idx]
     
     tiene_mas_paginas = len(mock_blacklist_db) > end_idx
+
+    camping = obtener_o_crear_camping(db)
     
     return {
         "blacklist": paginated_blacklist,
         "configuracion": {
-            # Conectamos endpoint directamente a las variables de negocio reales
-            "capacidad_maxima": settings.CAMPING_TOTAL_CAPACITY,
-            "buffer_seguridad": settings.CAMPING_OFFLINE_BUFFER
+            # La configuración guardada desde el panel; el buffer va en personas
+            "capacidad_maxima": camping.capacidad_total,
+            "buffer_seguridad": buffer_en_personas(camping.capacidad_total, camping.porcentaje_buffer_offline),
         },
         # Usamos la clave secreta definida para el backend
         "clave_publica": settings.VITE_PUBLIC_KEY,

@@ -17,6 +17,7 @@ from models.egreso_fisico import EgresoFisico
 from models.ingreso_fisico import IngresoFisico, TipoIngresoEnum
 from models.reserva import EstadoPagoEnum, EstadoReservaEnum, Reserva
 from models.user import RoleEnum, User
+from services.camping_service import buffer_en_personas, obtener_o_crear_camping
 from services.ocupacion_service import obtener_ocupacion
 
 Base.metadata.create_all(bind=engine)
@@ -174,8 +175,11 @@ def test_sin_movimientos_la_ocupacion_es_cero(db_aislada, tokens):
 
     assert data == {
         "ocupacion_actual": 0,
+        # Valores del .env (los deja así la fixture configuracion_del_env): 10 % de 50 = 5
         "capacidad_maxima": settings.CAMPING_TOTAL_CAPACITY,
-        "buffer_offline": settings.CAMPING_OFFLINE_BUFFER,
+        "buffer_offline": buffer_en_personas(
+            settings.CAMPING_TOTAL_CAPACITY, settings.CAMPING_PORCENTAJE_BUFFER_OFFLINE
+        ),
     }
 
 
@@ -233,14 +237,18 @@ def test_un_qr_clonado_no_suma_a_la_ocupacion(db_aislada, tokens, camping_de_pru
     assert _consultar(tokens["ADMIN"])["ocupacion_actual"] == 2
 
 
-def test_la_capacidad_y_el_buffer_salen_de_settings(db_aislada, tokens, monkeypatch):
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 120)
-    monkeypatch.setattr(settings, "CAMPING_OFFLINE_BUFFER", 12)
+def test_la_capacidad_y_el_buffer_salen_de_la_configuracion_guardada(db_aislada, tokens):
+    # Se cambia dentro de la transacción del test, así que al final vuelve a como estaba
+    camping = obtener_o_crear_camping(db_aislada)
+    camping.capacidad_total = 125
+    camping.porcentaje_buffer_offline = 10
+    db_aislada.flush()
 
     data = _consultar(tokens["ADMIN"])
 
-    assert data["capacidad_maxima"] == 120
-    assert data["buffer_offline"] == 12
+    assert data["capacidad_maxima"] == 125
+    # 10 % de 125 = 12,5: el buffer se redondea hacia arriba
+    assert data["buffer_offline"] == 13
 
 
 def test_el_servicio_devuelve_lo_mismo_que_el_endpoint(db_aislada, tokens, ids):
