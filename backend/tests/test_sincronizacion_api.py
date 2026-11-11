@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+
 from main import app
 
 client = TestClient(app)
@@ -42,3 +43,12 @@ def test_bootstrap_ultima_pagina():
     data = response.json()
     assert data["blacklist"] == ["9999"]
     assert data["tiene_mas_paginas"] is False
+
+def test_bootstrap_envia_la_configuracion_guardada(configurar_camping):
+    """La PWA recibe el cupo editado desde el panel y el buffer en personas (10 % de 80 = 8)."""
+    configurar_camping(capacidad_total=80, porcentaje_buffer_offline=10)
+
+    response = client.get("/api/v1/sincronizacion/bootstrap?page=1&limit=1")
+
+    assert response.status_code == 200
+    assert response.json()["configuracion"] == {"capacidad_maxima": 80, "buffer_seguridad": 8}

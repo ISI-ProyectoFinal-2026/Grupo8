@@ -2,11 +2,13 @@ import {
   DoorOpen,
   LayoutDashboard,
   Percent,
+  Settings,
   ShieldAlert,
   Users,
   type LucideIcon,
 } from 'lucide-react';
 import type { ReactElement } from 'react';
+import Configuracion from './Configuracion';
 import Descuentos from './Descuentos';
 import Egresos from './Egresos';
 import Incidentes from './Incidentes';
@@ -55,5 +57,11 @@ export const adminRoutes: AdminRoute[] = [
     titulo: 'Alertas',
     icono: ShieldAlert,
     element: <Alertas />,
+  },
+  {
+    path: 'configuracion',
+    titulo: 'Configuración',
+    icono: Settings,
+    element: <Configuracion />,
   },
 ];

@@ -44,7 +44,7 @@ El sistema utiliza SQLAlchemy como ORM, mapeando clases Python a tablas en Postg
 FastAPI utiliza Pydantic para garantizar la serialización y validación estricta de todos los *payloads* de entrada y salida, con mensajes de error normalizados en español.
 
 * **`ReservaCreate` (Payload de Entrada)**
-* **Personas (`personas`):** Lista de `PersonaReserva` con entre 1 y `MAX_PERSONAS_POR_RESERVA` (10) elementos. La cantidad de personas de la reserva es el largo de la lista y el titular es la primera persona; ya no se envían `cantidad_personas` ni `titular`.
+* **Personas (`personas`):** Lista de `PersonaReserva` con al menos 1 elemento y como máximo `max_personas_por_reserva` de la configuración del camping (10 por defecto). El máximo lo controla el endpoint, porque sale de la base: si se supera, responde 422 con `detail` en texto. La cantidad de personas de la reserva es el largo de la lista y el titular es la primera persona; ya no se envían `cantidad_personas` ni `titular`.
 * **`PersonaReserva`:** `nombre` (2 a 100 caracteres, solo letras, espacios, puntos, apóstrofes y guiones), `edad` (entero estricto entre 0 y 120), `condicion` (`visitante` o `socio`) y `dni` (7 u 8 dígitos; obligatorio para socios y sin repetirse dentro de la reserva).
 * **Fechas:** Formato AAAA-MM-DD. El sistema valida que el ingreso no sea anterior a "hoy" (hora de Argentina), el egreso no sea anterior al ingreso y la estadía no supere `MAX_NOCHES_POR_RESERVA` (10).
 * **Email:** Validado mediante `EmailStr` empleando la dependencia `email-validator`.
@@ -54,7 +54,7 @@ FastAPI utiliza Pydantic para garantizar la serialización y validación estrict
 * Incluye `telefono` solo para las reservas anteriores que lo tienen guardado (las nuevas lo devuelven en `null`; la columna se conserva para poder seguir leyéndolas).
 * Incluye `personas` (lista de `PersonaOut`: nombre, edad, condición, DNI, precio base, porcentaje de descuento y precio final). Las reservas anteriores a la tabla de personas devuelven una lista vacía.
 * **`CotizarRequest` / `CotizarResponse`**
-* **Request:** `personas`, con entre 1 y `MAX_PERSONAS_POR_RESERVA` (10) elementos de `PersonaCotizar`: `edad` (entero estricto entre 0 y 120) y `condicion` (`visitante` o `socio`). No se envía ningún importe: el sistema ignora cualquier precio que mande el cliente.
+* **Request:** `personas`, con al menos 1 elemento y como máximo `max_personas_por_reserva` de la configuración del camping, de `PersonaCotizar`: `edad` (entero estricto entre 0 y 120) y `condicion` (`visitante` o `socio`). No se envía ningún importe: el sistema ignora cualquier precio que mande el cliente.
 * **Response:** `moneda` (`ARS`), `subtotal`, `descuento_total`, `total`, `cantidad_socios` y `detalle` (por persona: `indice`, `condicion_efectiva`, `descuento_codigo`, `descuento_pct`, `precio_base` y `precio_final`). Los importes salen con dos decimales.
 * **`DescuentoCreate` / `DescuentoUpdate` / `DescuentoOut`**
 * **Alta:** `codigo` (2 a 30 caracteres: minúsculas, números y guion bajo, empezando con una letra), `nombre` (2 a 100), `aplica_a`, `porcentaje` (número entre 0 y 100 con hasta 2 decimales), `edad_min` y `edad_max` (enteros entre 0 y 120, solo para `edad`) y `activo` (verdadero por defecto).
@@ -120,6 +120,8 @@ Rutas operativas que soportan el comportamiento *offline-first* de la Progressiv
 
 (Nota: `blacklist` extrae los identificadores cancelados en las últimas 72 horas).
 
+`capacidad_maxima` y `buffer_seguridad` salen de la configuración del camping guardada desde el panel. El buffer se envía en personas: el porcentaje de la capacidad redondeado hacia arriba.
+
 
 ### `POST /api/v1/ingresos/bulk-sync`
 
@@ -169,7 +171,7 @@ Un registro inválido va a `errores` (`indice`, `jti`, `motivo`) y no frena el r
 * **Manejo de Errores:** Retorna HTTP 500 realizando un *rollback* de todo el lote ante un fallo crítico en la base de datos.
 
 
-## 5. Endpoints del Panel: Ocupación, Egresos y Cobros
+## 5. Endpoints del Panel: Ocupación, Configuración, Egresos y Cobros
 
 Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las horas se guardan en UTC y los días se cuentan con la hora de Buenos Aires (ver `zonas-horarias.md`).
 
@@ -178,11 +180,28 @@ Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las ho
 * **Descripción:** Personas dentro del camping, capacidad máxima y buffer offline. Lo consume el monitor del inicio del panel.
 * **Cálculo:** Personas de todos los ingresos aceptados menos personas egresadas. Cuenta todos los movimientos y no solo los del día, porque hay estadías de varias noches. Nunca es negativa.
 * **Qué no suma:** Los QR clonados, que quedan en `conflictos_sincronizacion` y nunca llegan a `ingresos_fisicos`.
-* **Capacidad y buffer:** Se leen de `CAMPING_TOTAL_CAPACITY` y `CAMPING_OFFLINE_BUFFER` (en personas) hasta que la configuración del camping (Issue 19) los pase a la base.
+* **Capacidad y buffer:** Salen de la configuración del camping (`GET/PUT /api/v1/admin/configuracion`). `buffer_offline` se informa en personas: el porcentaje de la capacidad redondeado hacia arriba.
 * **Atraso:** Los ingresos que el guardia registra sin conexión se cuentan recién cuando la PWA los sincroniza.
 ```json
 { "ocupacion_actual": 32, "capacidad_maxima": 50, "buffer_offline": 5 }
 ```
+
+### `GET /api/v1/admin/configuracion`
+
+* **Descripción:** Cupo máximo del camping, porcentaje de buffer offline y máximo de personas por reserva, tal como están guardados en `configuracion_camping`. Si la fila no existe, se crea con los valores del `.env`.
+* **Respuesta Exitosa (200 OK):**
+```json
+{ "capacidad_total": 50, "porcentaje_buffer_offline": 10, "max_personas_por_reserva": 10, "porcentaje_buffer_recomendado": 10 }
+```
+* `porcentaje_buffer_recomendado` es la sugerencia que muestra el formulario (10 %, que equivale a 5 lugares sobre 50); no se guarda.
+
+### `PUT /api/v1/admin/configuracion`
+
+* **Descripción:** Guarda los tres valores juntos. Las reservas ya hechas no se modifican: si el cupo baja por debajo de lo reservado, se deja de vender hasta que se libere lugar.
+* **Request Body (`ConfiguracionUpdate`):** `capacidad_total` (entero estricto entre 1 y 1.000.000), `porcentaje_buffer_offline` (entero estricto entre 0 y 100) y `max_personas_por_reserva` (entero estricto mayor a 0, que no supere el cupo online).
+* **Cupo online:** `capacidad_total` menos el buffer en personas (`porcentaje × capacidad / 100`, redondeado hacia arriba). Es lo que se puede vender por la web; el resto queda para la puerta.
+* **Errores:** 422 si algún valor es inválido o falta (no se guarda nada).
+* **Respuesta Exitosa (200 OK):** La configuración guardada, con el mismo formato del `GET`.
 
 ### `POST /api/v1/egresos`
 

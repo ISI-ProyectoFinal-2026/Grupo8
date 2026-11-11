@@ -4,31 +4,63 @@ from typing import Callable, Iterator, List
 
 import pytest
 from fastapi import HTTPException
+from services.camping_service import buffer_en_personas, cupo_online
 from services.capacity_service import CapacityService
 from core.config import settings
 from core.database import SessionLocal
+from models.configuracion import ConfiguracionCamping
 from models.reserva import EstadoReservaEnum, Reserva
 
-def test_check_availability_success(monkeypatch):
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 50)
+
+def _configuracion(capacidad: int = 50, porcentaje_buffer: int = 10) -> ConfiguracionCamping:
+    # No se guarda: el servicio solo lee los valores
+    return ConfiguracionCamping(capacidad_total=capacidad, porcentaje_buffer_offline=porcentaje_buffer)
+
+
+def test_check_availability_success():
     servicio = CapacityService()
-    # Simulamos que piden 2 espacios y hay 10 reservas activas
-    # Capacidad (50) - Activas (10) - Buffer (5) = 35 disponibles
-    resultado = servicio.check_availability(espacios_solicitados=2, reservas_activas=10)
-    
+    # Capacidad (50) - Buffer (10 % = 5) - Activas (10) = 35 disponibles; piden 2
+    resultado = servicio.check_availability(
+        espacios_solicitados=2, reservas_activas=10, configuracion=_configuracion()
+    )
+
     assert resultado is True
 
-def test_check_availability_no_hay_cupo_lanza_400(monkeypatch):
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 50)
+
+def test_check_availability_no_hay_cupo_lanza_400():
     servicio = CapacityService()
-    # Simulamos que piden 40 espacios y ya hay 10 reservas activas
-    # Capacidad (50) - Activas (10) - Buffer (5) = 35 disponibles. ¡Pide 40, debe fallar!
-    
+    # Capacidad (50) - Buffer (5) - Activas (10) = 35 disponibles. ¡Pide 40, debe fallar!
+
     with pytest.raises(HTTPException) as excinfo:
-        servicio.check_availability(espacios_solicitados=40, reservas_activas=10)
-        
+        servicio.check_availability(
+            espacios_solicitados=40, reservas_activas=10, configuracion=_configuracion()
+        )
+
     assert excinfo.value.status_code == 400
     assert excinfo.value.detail == "No hay cupos suficientes disponibles en el camping."
+
+
+def test_check_availability_vende_justo_hasta_el_cupo_online():
+    # 45 - 5 (10 % redondeado hacia arriba de 4,5) - 0 = 40
+    servicio = CapacityService()
+    configuracion = _configuracion(capacidad=45)
+
+    assert servicio.check_availability(40, 0, configuracion) is True
+    with pytest.raises(HTTPException):
+        servicio.check_availability(41, 0, configuracion)
+
+
+@pytest.mark.parametrize("capacidad, porcentaje, buffer", [
+    (50, 10, 5),     # el valor recomendado equivale a los 5 lugares de antes
+    (45, 10, 5),     # 4,5 se redondea hacia arriba
+    (125, 10, 13),   # 12,5 también
+    (50, 0, 0),
+    (50, 100, 50),
+    (7, 1, 1),       # cualquier fracción reserva un lugar entero
+])
+def test_buffer_en_personas_redondea_hacia_arriba(capacidad, porcentaje, buffer):
+    assert buffer_en_personas(capacidad, porcentaje) == buffer
+    assert cupo_online(capacidad, porcentaje) == capacidad - buffer
 
 
 # --- Lugares ocupados: canceladas y pendientes abandonadas no cuentan (Issue 13.6) ---

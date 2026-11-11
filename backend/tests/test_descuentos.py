@@ -425,10 +425,10 @@ def test_modificar_con_un_id_que_no_es_uuid_devuelve_422(admin):
 # ---------- Reservas ya creadas ----------
 
 def test_cambiar_un_descuento_no_altera_los_importes_de_reservas_ya_creadas(
-    monkeypatch, tokens, admin, descuentos_creados, camping_de_prueba
+    monkeypatch, tokens, admin, descuentos_creados, camping_de_prueba, configurar_camping
 ):
     # El test mira los importes guardados, no la capacidad: se sube el cupo para no depender de la BD local
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 100_000)
+    configurar_camping(capacidad_total=100_000)
     # Acá los descuentos se leen de la base de verdad, para que lo que cambia el administrador se note
     monkeypatch.setattr(PricingService, "_descuentos_activos", staticmethod(LECTOR_REAL))
     fecha = "2096-05-10"

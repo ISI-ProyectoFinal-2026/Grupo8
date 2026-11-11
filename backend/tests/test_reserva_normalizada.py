@@ -96,9 +96,9 @@ def _insertar_reserva(user_id, ids, **campos) -> str:
 
 
 @pytest.fixture
-def reservas_creadas(monkeypatch):
+def reservas_creadas(configurar_camping):
     # Estos tests no miran la capacidad, así que la subimos para que no dependa de la BD local
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 100_000)
+    configurar_camping(capacidad_total=100_000)
     ids = []
     yield ids
     # Limpieza: borramos solo lo que creó el test
@@ -248,21 +248,20 @@ def _ahora_utc() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _dejar_dos_lugares_libres(monkeypatch) -> None:
+def _dejar_dos_lugares_libres(configurar_camping) -> None:
     """Ajusta la capacidad para que queden exactamente 2 lugares libres en las fechas del payload."""
     db = SessionLocal()
     try:
         ocupados = capacity_service.lugares_ocupados(db, INGRESO, EGRESO)
     finally:
         db.close()
-    monkeypatch.setattr(
-        settings, "CAMPING_TOTAL_CAPACITY", ocupados + settings.CAMPING_OFFLINE_BUFFER + 2
-    )
+    # Sin buffer, el cupo online es la capacidad entera
+    configurar_camping(capacidad_total=ocupados + 2, porcentaje_buffer_offline=0)
 
 
-def test_cupo_depende_del_estado_de_reserva_y_no_del_pago(monkeypatch, reservas_creadas):
+def test_cupo_depende_del_estado_de_reserva_y_no_del_pago(configurar_camping, reservas_creadas):
     user_id = _crear_usuario()
-    _dejar_dos_lugares_libres(monkeypatch)
+    _dejar_dos_lugares_libres(configurar_camping)
     vencida = _ahora_utc() - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES + 5)
 
     # Ni una reserva cancelada ni una pendiente abandonada (fuera del plazo) ocupan lugar,
@@ -284,9 +283,9 @@ def test_cupo_depende_del_estado_de_reserva_y_no_del_pago(monkeypatch, reservas_
     assert segunda.status_code == 400
 
 
-def test_una_pendiente_dentro_del_plazo_sigue_ocupando_cupo(monkeypatch, reservas_creadas):
+def test_una_pendiente_dentro_del_plazo_sigue_ocupando_cupo(configurar_camping, reservas_creadas):
     user_id = _crear_usuario()
-    _dejar_dos_lugares_libres(monkeypatch)
+    _dejar_dos_lugares_libres(configurar_camping)
     # Le faltan 5 minutos para vencer
     reciente = _ahora_utc() - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES - 5)
     _insertar_reserva(user_id, reservas_creadas, fecha_ingreso=INGRESO, fecha_egreso=EGRESO,
@@ -298,9 +297,9 @@ def test_una_pendiente_dentro_del_plazo_sigue_ocupando_cupo(monkeypatch, reserva
     assert response.status_code == 400
 
 
-def test_una_pendiente_vencida_libera_el_cupo(monkeypatch, reservas_creadas):
+def test_una_pendiente_vencida_libera_el_cupo(configurar_camping, reservas_creadas):
     user_id = _crear_usuario()
-    _dejar_dos_lugares_libres(monkeypatch)
+    _dejar_dos_lugares_libres(configurar_camping)
     vencida = _ahora_utc() - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES + 5)
     _insertar_reserva(user_id, reservas_creadas, fecha_ingreso=INGRESO, fecha_egreso=EGRESO,
                       cantidad_personas=2, estado_reserva=EstadoReservaEnum.PENDIENTE,

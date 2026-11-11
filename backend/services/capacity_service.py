@@ -6,7 +6,9 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from models.configuracion import ConfiguracionCamping
 from models.reserva import EstadoReservaEnum, Reserva
+from services.camping_service import cupo_online
 
 
 class CapacityService:
@@ -47,19 +49,24 @@ class CapacityService:
             Reserva.fecha_egreso >= fecha_ingreso,
         ).scalar() or 0
 
-    def check_availability(self, espacios_solicitados: int, reservas_activas: int) -> bool:
+    def check_availability(
+        self,
+        espacios_solicitados: int,
+        reservas_activas: int,
+        configuracion: ConfiguracionCamping,
+    ) -> bool:
         """
-        Calcula si hay cupo disponible considerando la capacidad total, 
-        las reservas ya activas y el buffer para reservas offline.
+        Calcula si hay cupo disponible con la configuración guardada del camping:
+        capacidad − buffer offline (en personas, redondeado hacia arriba) − reservas activas.
         """
-        # Fórmula: Capacidad Total - Reservas Activas - Buffer Offline
-        capacidad_disponible = settings.CAMPING_TOTAL_CAPACITY - reservas_activas - settings.CAMPING_OFFLINE_BUFFER
-        
+        cupo = cupo_online(configuracion.capacidad_total, configuracion.porcentaje_buffer_offline)
+        capacidad_disponible = cupo - reservas_activas
+
         # Validar si los espacios que pide el usuario superan lo disponible
         if espacios_solicitados > capacidad_disponible:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="No hay cupos suficientes disponibles en el camping."
             )
-            
+
         return True

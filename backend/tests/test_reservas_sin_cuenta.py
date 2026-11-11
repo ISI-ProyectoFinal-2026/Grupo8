@@ -42,9 +42,9 @@ def sin_override_de_autenticacion():
 
 
 @pytest.fixture
-def limpieza(monkeypatch):
+def limpieza(configurar_camping):
     """Sube el cupo (no dependemos de la BD local) y borra lo que crea cada test."""
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 100_000)
+    configurar_camping(capacidad_total=100_000)
     creados = {"reservas": [], "usuarios": []}
     yield creados
     db = SessionLocal()
@@ -180,9 +180,9 @@ def test_reservar_sin_sesion_sigue_validando_los_datos(limpieza):
     assert sin_personas.status_code == 422
 
 
-def test_reservar_sin_sesion_sigue_controlando_la_capacidad(limpieza, monkeypatch):
+def test_reservar_sin_sesion_sigue_controlando_la_capacidad(limpieza, configurar_camping):
     # Cupo en cero: aunque no haya sesión, la reserva no entra
-    monkeypatch.setattr(settings, "CAMPING_TOTAL_CAPACITY", 0)
+    configurar_camping(capacidad_total=0)
 
     response = client.post("/reservas/", json=_payload())
 

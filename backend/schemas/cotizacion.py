@@ -2,7 +2,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from core.config import settings
 from models.reserva import CondicionPersonaEnum
 from schemas.reserva import EDAD_MAXIMA
 
@@ -21,11 +20,9 @@ class CotizarRequest(BaseModel):
     @field_validator("personas")
     @classmethod
     def validar_personas(cls, valor: List[PersonaCotizar]) -> List[PersonaCotizar]:
-        maximo = settings.MAX_PERSONAS_POR_RESERVA
+        # El máximo de personas se controla en el endpoint con la configuración guardada
         if len(valor) < 1:
             raise ValueError("Debe haber al menos 1 persona en la reserva.")
-        if len(valor) > maximo:
-            raise ValueError(f"La cantidad máxima de personas por reserva es {maximo}.")
         return valor
 
 

@@ -18,6 +18,11 @@ from models.configuracion import ConfiguracionCamping
 from services.capacity_service import CapacityService
 from services.pricing_service import Cotizacion, PersonaPrecio, PricingService
 from services import socio_service
+from services.camping_service import (
+    CantidadPersonasError,
+    obtener_o_crear_camping,
+    verificar_cantidad_personas,
+)
 
 router = APIRouter(prefix="/reservas", tags=["Reservas"])
 capacity_service = CapacityService()
@@ -46,6 +51,10 @@ def _respuesta_cotizacion(cotizacion: Cotizacion, personas: List[PersonaPrecio])
 @router.post("/cotizar", response_model=CotizarResponse)
 def cotizar_reserva(cotizacion_in: CotizarRequest, db: Session = Depends(get_db)):
     """Precio de una reserva sin guardarla. Es público: no pide sesión."""
+    try:
+        verificar_cantidad_personas(obtener_o_crear_camping(db), len(cotizacion_in.personas))
+    except CantidadPersonasError as error:
+        raise HTTPException(status_code=422, detail=str(error))
     personas = [PersonaPrecio(p.edad, p.condicion) for p in cotizacion_in.personas]
     return _respuesta_cotizacion(PricingService.cotizar(db, personas), personas)
 
@@ -71,28 +80,35 @@ def crear_reserva(
             detail="El camping no está configurado."
         )
 
-    # 3. Lugares ocupados en las fechas pedidas (las canceladas y las pendientes vencidas no cuentan;
+    # 3. El máximo de personas por reserva sale de la configuración guardada
+    cantidad_personas = len(reserva_in.personas)
+    try:
+        verificar_cantidad_personas(camping, cantidad_personas)
+    except CantidadPersonasError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+
+    # 4. Lugares ocupados en las fechas pedidas (las canceladas y las pendientes vencidas no cuentan;
     # la regla está en CapacityService)
     lugares_ocupados = capacity_service.lugares_ocupados(
         db, reserva_in.fecha_ingreso, reserva_in.fecha_egreso
     )
 
-    # 4. Validar disponibilidad (Endpoint POST)
-    # Tu servicio lanzará automáticamente el Error 400 si se superó el límite
-    cantidad_personas = len(reserva_in.personas)
+    # 5. Validar disponibilidad con el cupo y el buffer guardados
+    # El servicio lanza el error 400 si se superó el límite
     capacity_service.check_availability(
         espacios_solicitados=cantidad_personas,
-        reservas_activas=lugares_ocupados
+        reservas_activas=lugares_ocupados,
+        configuracion=camping,
     )
 
-    # 5. Las personas marcadas como socio tienen que validar como socio en la base
+    # 6. Las personas marcadas como socio tienen que validar como socio en la base
     # (membresía vigente y sin baja). Sin esto, el descuento quedaría a cargo del formulario
     try:
         socio_service.verificar_personas_socias(db, reserva_in.personas)
     except socio_service.SocioNoValidoError as error:
         raise HTTPException(status_code=422, detail=str(error))
 
-    # 6. Precio de cada persona y total, con la misma cuenta que usa la cotización
+    # 7. Precio de cada persona y total, con la misma cuenta que usa la cotización
     # El monto lo calcula el backend, no lo manda el cliente
     cotizacion = PricingService.cotizar(
         db, [PersonaPrecio(p.edad, p.condicion) for p in reserva_in.personas]
@@ -112,7 +128,7 @@ def crear_reserva(
     ]
     monto_total = float(cotizacion.total)
 
-    # 7. Preparar el objeto para la base de datos (el titular es la primera persona)
+    # 8. Preparar el objeto para la base de datos (el titular es la primera persona)
     nueva_reserva = Reserva(
         user_id=user_id,
         camping_id=camping.camping_id,
@@ -127,7 +143,7 @@ def crear_reserva(
         personas=personas
     )
 
-    # 8. Transacción Atómica: la reserva y todas sus personas se guardan juntas
+    # 9. Transacción Atómica: la reserva y todas sus personas se guardan juntas
     try:
         db.add(nueva_reserva)
         db.commit()               # Se ejecuta la transacción
