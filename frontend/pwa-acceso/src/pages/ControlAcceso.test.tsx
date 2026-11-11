@@ -2,15 +2,24 @@
 
 import 'fake-indexeddb/auto';
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import { dbService } from '../services/dbService';
+import type { IJwtPayload } from '../types/security';
+import { verifyQRToken } from '../utils/security';
 import ControlAcceso from './ControlAcceso';
 
 // La sincronización de fondo y la cámara no son lo que se prueba acá
 vi.mock('../services/syncService', () => ({ syncService: { iniciarBackgroundSync: vi.fn() } }));
-vi.mock('../components/ScannerQR', () => ({ ScannerQR: () => null }));
+// La cámara se reemplaza por un botón que "escanea" un QR de prueba
+vi.mock('../components/ScannerQR', () => ({
+  ScannerQR: ({ onScanSuccess }: { onScanSuccess: (token: string) => void }) => (
+    <button onClick={() => onScanSuccess('qr-de-prueba')}>Leer código de prueba</button>
+  ),
+}));
+// La firma del QR se prueba en accessValidationService; acá interesa qué pasa después
+vi.mock('../utils/security', () => ({ verifyQRToken: vi.fn() }));
 
 const bootstrapCon = (capacidad: number) => ({
   ok: true,
@@ -107,5 +116,106 @@ describe('ControlAcceso — capacidad real y arranque en frío (Issue 16.5)', ()
     expect(screen.queryByText(/Panel de Pruebas QA/)).toBeNull();
     expect(screen.queryByText(/Simular QR/)).toBeNull();
     expect(screen.queryByPlaceholderText(/N° de reserva a bloquear/)).toBeNull();
+  });
+});
+const RESERVA_CANCELADA = '7d0c6a7e-2f4b-4c1e-9a55-0b1f2c3d4e5f';
+const RESERVA_VIGENTE = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
+
+const payloadDe = (reservaId: string): IJwtPayload => ({
+  jti: `jti-${reservaId}`,
+  reserva_id: reservaId,
+  camping_id: 'CAMP-01',
+  iat: 0,
+  exp: 0,
+  cantidad_personas: 2,
+  typ: 'visitante',
+  dat: '2026-11-09',
+});
+
+const bootstrapConBlacklist = (blacklist: string[]) => ({
+  ok: true,
+  status: 200,
+  json: async () => ({
+    blacklist,
+    configuracion: { capacidad_maxima: 50 },
+    pagina_actual: 1,
+    tiene_mas_paginas: false,
+  }),
+});
+
+async function escanear(reservaId: string) {
+  vi.mocked(verifyQRToken).mockResolvedValue(payloadDe(reservaId));
+  fireEvent.click(await screen.findByRole('button', { name: /Escanear QR/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Leer código de prueba' }));
+}
+
+describe('ControlAcceso — rechazo offline de reservas canceladas (Issue 20.4)', () => {
+  beforeEach(async () => {
+    await db.configuracion.clear();
+    await db.ingresos_pendientes.clear();
+    await db.blacklist.clear();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    await db.configuracion.clear();
+    await db.ingresos_pendientes.clear();
+    await db.blacklist.clear();
+  });
+
+  it('descarga la lista con conexión y después, sin red, rechaza el QR de una reserva cancelada', async () => {
+    const fetchFalso = vi
+      .fn()
+      .mockResolvedValueOnce(bootstrapConBlacklist([RESERVA_CANCELADA]))
+      .mockRejectedValue(new TypeError('Failed to fetch'));
+    vi.stubGlobal('fetch', fetchFalso);
+
+    render(<ControlAcceso />);
+    await waitFor(async () => expect(await dbService.verificarAccesoRevocado(RESERVA_CANCELADA)).toBe(true));
+
+    // Se corta la conexión: la validación usa solo lo guardado en el dispositivo
+    await escanear(RESERVA_CANCELADA);
+
+    expect(await screen.findByText(/Reserva Cancelada/)).toBeTruthy();
+    expect(screen.queryByText(/INGRESO CONFIRMADO/)).toBeNull();
+    expect(await db.ingresos_pendientes.count()).toBe(0);
+    expect(fetchFalso).toHaveBeenCalledTimes(1);
+  });
+
+  it('en un arranque sin red usa la lista guardada en la sesión anterior', async () => {
+    await dbService.reemplazarBlacklist([RESERVA_CANCELADA]);
+    vi.stubGlobal('fetch', sinRed());
+
+    render(<ControlAcceso />);
+    await escanear(RESERVA_CANCELADA);
+
+    expect(await screen.findByText(/Reserva Cancelada/)).toBeTruthy();
+    expect(await db.ingresos_pendientes.count()).toBe(0);
+  });
+
+  it('el QR de una reserva que no está en la lista se acepta y queda para sincronizar', async () => {
+    await dbService.reemplazarBlacklist([RESERVA_CANCELADA]);
+    vi.stubGlobal('fetch', sinRed());
+
+    render(<ControlAcceso />);
+    await escanear(RESERVA_VIGENTE);
+
+    expect(await screen.findByText(/INGRESO CONFIRMADO/)).toBeTruthy();
+    expect(screen.queryByText(/Reserva Cancelada/)).toBeNull();
+    expect(await db.ingresos_pendientes.count()).toBe(1);
+  });
+
+  it('una reserva que salió de la lista del servidor vuelve a entrar', async () => {
+    await dbService.reemplazarBlacklist([RESERVA_CANCELADA]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(bootstrapConBlacklist([])));
+
+    render(<ControlAcceso />);
+    await waitFor(async () => expect(await dbService.verificarAccesoRevocado(RESERVA_CANCELADA)).toBe(false));
+    await escanear(RESERVA_CANCELADA);
+
+    expect(await screen.findByText(/INGRESO CONFIRMADO/)).toBeTruthy();
   });
 });
