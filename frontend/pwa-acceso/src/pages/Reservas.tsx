@@ -5,10 +5,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
+  cotizarPorUnidad,
   cotizarReserva,
+  ERROR_COTIZACION_GENERICO,
   formatearMonto,
   personasParaCotizar,
   type Cotizacion,
+  type PedidoPorUnidad,
   type PersonaCotizar,
 } from "@/lib/cotizacion";
 import { obtenerUsuarioActual, type UsuarioSesion } from "@/lib/auth";
@@ -18,7 +21,6 @@ import { useValidacionSocios, type Verificacion } from "@/lib/useValidacionSocio
 import {
   limpiarNombre,
   soloDigitos,
-  validarCantidadPersonas,
   validarConfirmacionEmail,
   validarDni,
   validarEdad,
@@ -27,6 +29,7 @@ import {
 } from "@/lib/validaciones";
 import { useAuth } from "@/context/AuthContext";
 import { guardarReservaPendiente, type ReservaPendiente } from "@/lib/reservaPendiente";
+import { esPorUnidad, validarCantidadParaTipo, type TipoReserva } from "@/lib/tiposReserva";
 import { CalendarDays, CreditCard, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -41,15 +44,10 @@ interface Visitante {
 // URL base del backend (se puede sobreescribir con VITE_API_URL en el .env del frontend)
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
 
-// --- DICCIONARIO DECLARADO AFUERA DEL COMPONENTE ---
-const formatearTipo = (tipoCrudo: string) => {
-  const nombres: Record<string, string> = {
-    "cabana": "Cabaña",
-    "entrada_general": "Entrada General",
-    "carpa": "Parcela para Carpa"
-  };
-  return nombres[tipoCrudo] || (tipoCrudo ? tipoCrudo.replace('_', ' ') : 'Reserva General');
-};
+// Lo que se cotiza: por persona (con la edad y condición de cada una) o por unidad
+type PedidoCotizacion =
+  | { forma: "persona"; tipoId: string; personas: PersonaCotizar[] }
+  | { forma: "unidad"; pedido: PedidoPorUnidad };
 
 // Obtiene un mensaje legible de una respuesta de error del backend
 // (422 de validación, 400 de cupos, etc.)
@@ -111,20 +109,32 @@ export default function Reservas() {
   // Con sesión iniciada la reserva queda a nombre del usuario; sin sesión se reserva igual
   const { token, rol } = useAuth();
 
-  // Rescatamos los datos que vienen del buscador y la disponibilidad con valores por defecto
-  const { fecha, fechaEgreso, personas, tipo } = location.state || {};
+  // Rescatamos los datos que vienen del buscador y la disponibilidad. El tipo llega completo
+  // desde el backend (nombre, precio, forma de cobro y máximo de personas)
+  const { fecha, fechaEgreso, personas, tipo } = (location.state || {}) as {
+    fecha?: string;
+    fechaEgreso?: string;
+    personas?: string;
+    tipo?: TipoReserva;
+  };
 
-  // Si no hay fecha, redirigimos al inicio para evitar pantallas en blanco
+  // Sin fecha o sin tipo (entraron directo o con datos viejos), vuelven al inicio
+  const datosCompletos = Boolean(fecha && tipo?.id);
   useEffect(() => {
-    if (!fecha) {
+    if (!datosCompletos) {
       navigate("/");
     }
-  }, [fecha, navigate]);
+  }, [datosCompletos, navigate]);
 
-  const cantidadPersonas = parseInt(personas) || 1;
+  // Por unidad (cabaña) solo se piden el titular y la cantidad de personas
+  const porUnidad = tipo?.id ? esPorUnidad(tipo) : false;
+  const [titular, setTitular] = useState("");
+  const [cantidadUnidad, setCantidadUnidad] = useState(String(personas ?? ""));
+
+  const cantidadPersonas = porUnidad ? Number(cantidadUnidad) || 0 : parseInt(personas ?? "") || 1;
 
   const [visitantes, setVisitantes] = useState<Visitante[]>(
-    Array.from({ length: cantidadPersonas }, () => ({
+    Array.from({ length: porUnidad ? 0 : cantidadPersonas }, () => ({
       nombre: "", edad: "", condicion: "visitante", dni: ""
     }))
   );
@@ -162,6 +172,7 @@ export default function Reservas() {
           : v
       )
     );
+    setTitular((previo) => previo || usuario.nombre);
     setEmailContacto((previo) => previo || usuario.email);
     // El email de la cuenta no se tipea, así que no hace falta volver a confirmarlo
     setConfirmacionEmail((previo) => previo || usuario.email);
@@ -190,21 +201,54 @@ export default function Reservas() {
       condicion: esSocioConfirmado(v, i) ? "socio" : "visitante",
     }))
   );
-  const claveCotizacion = JSON.stringify(personasACotizar);
+  // Por unidad se cotiza con la cantidad de personas y las fechas, en cuanto la cantidad es válida
+  const cantidadUnidadValida =
+    porUnidad && tipo ? validarCantidadParaTipo(cantidadUnidad, tipo) === null : false;
+  let pedidoCotizacion: PedidoCotizacion | null = null;
+  if (tipo?.id && fecha) {
+    if (porUnidad) {
+      if (cantidadUnidadValida) {
+        pedidoCotizacion = {
+          forma: "unidad",
+          pedido: {
+            tipo_reserva_id: tipo.id,
+            cantidad_personas: Number(cantidadUnidad),
+            fecha_ingreso: fecha,
+            fecha_egreso: fechaEgreso || fecha,
+          },
+        };
+      }
+    } else if (personasACotizar) {
+      pedidoCotizacion = { forma: "persona", tipoId: tipo.id, personas: personasACotizar };
+    }
+  }
+  const claveCotizacion = JSON.stringify(pedidoCotizacion);
   const [cotizacion, setCotizacion] = useState<Cotizacion | null>(null);
-  const [errorCotizacion, setErrorCotizacion] = useState(false);
+  // Motivo por el que no se pudo cotizar ("" = sin error)
+  const [errorCotizacion, setErrorCotizacion] = useState("");
 
   useEffect(() => {
-    const aCotizar: PersonaCotizar[] | null = JSON.parse(claveCotizacion);
+    const aCotizar: PedidoCotizacion | null = JSON.parse(claveCotizacion);
     setCotizacion(null);
-    setErrorCotizacion(false);
+    setErrorCotizacion("");
     if (!aCotizar) return;
 
     const controlador = new AbortController();
-    cotizarReserva(aCotizar, controlador.signal)
+    const pedido =
+      aCotizar.forma === "unidad"
+        ? cotizarPorUnidad(aCotizar.pedido, controlador.signal)
+        : cotizarReserva(aCotizar.personas, controlador.signal, aCotizar.tipoId);
+    pedido
       .then(setCotizacion)
-      .catch(() => {
-        if (!controlador.signal.aborted) setErrorCotizacion(true);
+      .catch((error: unknown) => {
+        if (controlador.signal.aborted) return;
+        // Un motivo del backend (máximo de personas, tipo desactivado...) se muestra tal cual
+        const motivo = error instanceof Error ? error.message : "";
+        setErrorCotizacion(
+          motivo && motivo !== ERROR_COTIZACION_GENERICO
+            ? motivo
+            : "No pudimos calcular el precio. Revisá tu conexión e intentá nuevamente."
+        );
       });
     return () => controlador.abort();
   }, [claveCotizacion]);
@@ -230,8 +274,17 @@ export default function Reservas() {
     const eConfirmacion = validarConfirmacionEmail(emailContacto, confirmacionEmail);
     if (eConfirmacion) nuevos.confirmacionEmail = eConfirmacion;
 
-    const eCantidad = validarCantidadPersonas(String(cantidadPersonas));
-    if (eCantidad) nuevos.cantidad = eCantidad;
+    if (!tipo) return false;
+
+    if (porUnidad) {
+      const eTitular = validarNombre(titular);
+      if (eTitular) nuevos.titular = eTitular;
+      const eCantidad = validarCantidadParaTipo(cantidadUnidad, tipo);
+      if (eCantidad) nuevos.cantidad = eCantidad;
+    } else {
+      const eCantidad = validarCantidadParaTipo(String(cantidadPersonas), tipo);
+      if (eCantidad) nuevos.cantidad = eCantidad;
+    }
 
     visitantes.forEach((v, i) => {
       // Los datos del titular con sesión vienen de su cuenta: el backend los valida
@@ -271,7 +324,7 @@ export default function Reservas() {
     e.preventDefault();
     if (enviando) return;
 
-    if (!validarFormulario()) return;
+    if (!validarFormulario() || !tipo) return;
 
     setEnviando(true);
     try {
@@ -286,7 +339,18 @@ export default function Reservas() {
 
       // 1. PRIMERO: Guardamos la reserva en la base de datos.
       // Si hay sesión mandamos el token y el backend asocia la reserva al usuario;
-      // el user_id nunca viaja desde acá.
+      // el user_id nunca viaja desde acá. El precio lo calcula el backend
+      const datosSegunForma = porUnidad
+        ? { titular: titular.trim(), cantidad_personas: Number(cantidadUnidad) }
+        : {
+            // El titular es la primera persona
+            personas: visitantes.map((v) => ({
+              nombre: v.nombre.trim(),
+              edad: Number(v.edad),
+              condicion: v.condicion,
+              dni: v.condicion === "socio" ? v.dni.trim() : undefined,
+            })),
+          };
       const reservaResponse = await fetch(`${API_URL}/reservas/`, {
         method: "POST",
         headers: {
@@ -294,15 +358,10 @@ export default function Reservas() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
+          tipo_reserva_id: tipo.id,
           fecha_ingreso: fecha,
           fecha_egreso: fechaEgreso || fecha, // si no vino egreso, es una reserva por el día
-          // El titular es la primera persona; el precio lo calcula el backend con estos datos
-          personas: visitantes.map((v) => ({
-            nombre: v.nombre.trim(),
-            edad: Number(v.edad),
-            condicion: v.condicion,
-            dni: v.condicion === "socio" ? v.dni.trim() : undefined,
-          })),
+          ...datosSegunForma,
           email: emailContacto.trim()
         })
       });
@@ -320,7 +379,7 @@ export default function Reservas() {
       const pendiente: ReservaPendiente = {
         id: reservaData.id,
         vencimiento: reservaData.vencimiento_pago,
-        titulo: `${formatearTipo(tipo)} - ${cantidadPersonas} personas`,
+        titulo: `${tipo.nombre} - ${cantidadPersonas} personas`,
       };
       guardarReservaPendiente(pendiente);
       navigate("/reservas/pagar", { state: { reserva: pendiente } });
@@ -333,7 +392,7 @@ export default function Reservas() {
     }
   };
 
-  if (!fecha) return null;
+  if (!fecha || !tipo?.id) return null;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -378,6 +437,48 @@ export default function Reservas() {
               </div>
             </CardContent>
           </Card>
+
+          {porUnidad && (
+            <Card className="border-zinc-200">
+              <CardHeader className="bg-zinc-50 border-b border-zinc-100 pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="w-5 h-5 text-zinc-500" />
+                  Titular de la reserva
+                </CardTitle>
+                <CardDescription>
+                  {tipo.nombre} se cobra por noche: solo necesitamos el titular y cuántas personas van.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="titular">Nombre completo del titular</Label>
+                  <Input
+                    id="titular"
+                    required
+                    maxLength={100}
+                    value={titular}
+                    aria-invalid={!!errores.titular}
+                    onChange={(e) => setTitular(limpiarNombre(e.target.value))}
+                  />
+                  <MensajeError texto={errores.titular} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cantidad-personas">Cantidad de personas (máx. {tipo.max_personas})</Label>
+                  <Input
+                    id="cantidad-personas"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={3}
+                    required
+                    value={cantidadUnidad}
+                    aria-invalid={!!errores.cantidad}
+                    onChange={(e) => setCantidadUnidad(soloDigitos(e.target.value))}
+                  />
+                  <MensajeError texto={errores.cantidad} />
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {visitantes.map((visitante, index) => {
             const precargado = esTitularPrecargado(index);
@@ -498,17 +599,23 @@ export default function Reservas() {
               <div className="flex justify-between text-zinc-600">
                 <span>Tipo de reserva</span>
                 <span className="font-medium text-zinc-900">
-                  {formatearTipo(tipo)}
+                  {tipo.nombre}
                 </span>
               </div>
 
               <Separator />
 
               <div className="flex justify-between text-zinc-600">
-                <span>Subtotal ({cantidadPersonas} pers.)</span>
+                <span>
+                  {porUnidad
+                    ? cotizacion?.noches
+                      ? `${formatearMonto(cotizacion.precio_unitario ?? tipo.precio)} × ${cotizacion.noches} ${cotizacion.noches === 1 ? "noche" : "noches"}`
+                      : "Subtotal"
+                    : `Subtotal (${cantidadPersonas} pers.)`}
+                </span>
                 <span>{cotizacion ? formatearMonto(cotizacion.subtotal) : "—"}</span>
               </div>
-              <MensajeError texto={errores.cantidad} />
+              {!porUnidad && <MensajeError texto={errores.cantidad} />}
 
               {cotizacion && cotizacion.descuento_total > 0 && (
                 <div className="flex justify-between text-green-600 font-medium">
@@ -528,10 +635,12 @@ export default function Reservas() {
               {!cotizacion && (
                 <p role="status" className="text-sm text-zinc-500">
                   {errorCotizacion
-                    ? "No pudimos calcular el precio. Revisá tu conexión e intentá nuevamente."
-                    : personasACotizar
+                    ? errorCotizacion
+                    : pedidoCotizacion
                       ? "Calculando el precio…"
-                      : "Completá la edad de cada persona para ver el precio."}
+                      : porUnidad
+                        ? "Completá la cantidad de personas para ver el precio."
+                        : "Completá la edad de cada persona para ver el precio."}
                 </p>
               )}
             </CardContent>

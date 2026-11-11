@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  cotizarPorUnidad,
   cotizarReserva,
   formatearMonto,
   personasParaCotizar,
@@ -109,11 +110,55 @@ describe('cotizarReserva', () => {
     expect(JSON.parse(opciones.body)).toEqual({ personas });
   });
 
+  it('con un tipo manda también tipo_reserva_id', async () => {
+    const fetchFalso = vi.fn().mockResolvedValue({ ok: true, json: async () => COTIZACION });
+    vi.stubGlobal('fetch', fetchFalso);
+    const personas = [{ edad: 34, condicion: 'visitante' as const }];
+
+    await cotizarReserva(personas, undefined, 't-carpa');
+
+    expect(JSON.parse(fetchFalso.mock.calls[0][1].body)).toEqual({ tipo_reserva_id: 't-carpa', personas });
+  });
+
+  it('muestra el motivo que explica el backend', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ detail: 'Una reserva de Carpa admite como máximo 4 personas.' }),
+      })
+    );
+
+    await expect(cotizarReserva([{ edad: 30, condicion: 'visitante' }])).rejects.toThrow(
+      'Una reserva de Carpa admite como máximo 4 personas.'
+    );
+  });
+
   it('falla con un mensaje claro si el backend responde con error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
 
     await expect(cotizarReserva([{ edad: 30, condicion: 'visitante' }])).rejects.toThrow(
       'No se pudo calcular el precio.'
     );
+  });
+});
+
+describe('cotizarPorUnidad', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('manda el tipo, la cantidad y las fechas, sin personas', async () => {
+    const respuesta = { ...COTIZACION, detalle: [], noches: 2, precio_unitario: 25000, forma_cobro: 'POR_UNIDAD' };
+    const fetchFalso = vi.fn().mockResolvedValue({ ok: true, json: async () => respuesta });
+    vi.stubGlobal('fetch', fetchFalso);
+    const pedido = {
+      tipo_reserva_id: 't-cabana',
+      cantidad_personas: 4,
+      fecha_ingreso: '2030-01-10',
+      fecha_egreso: '2030-01-12',
+    };
+
+    expect(await cotizarPorUnidad(pedido)).toEqual(respuesta);
+    expect(String(fetchFalso.mock.calls[0][0])).toMatch(/\/reservas\/cotizar$/);
+    expect(JSON.parse(fetchFalso.mock.calls[0][1].body)).toEqual(pedido);
   });
 });
