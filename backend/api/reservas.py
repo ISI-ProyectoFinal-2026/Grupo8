@@ -70,6 +70,9 @@ def crear_reserva(
     # (ya validado por el backend); sin sesión, user_id queda en None
     user_id = usuario.id if usuario else None
 
+    # Las pendientes con el plazo de pago cumplido se cancelan antes de contar el cupo
+    capacity_service.cancelar_reservas_vencidas(db)
+
     # 2. El camping tiene que estar configurado, porque la reserva lo referencia
     camping = db.query(ConfiguracionCamping).filter(
         ConfiguracionCamping.camping_id == settings.CAMPING_ID
@@ -164,6 +167,7 @@ def obtener_mis_reservas(
     usuario: User = Depends(get_current_user),
 ):
     """Las reservas del usuario con la sesión iniciada. El usuario sale del token, no de la URL ni del body."""
+    capacity_service.cancelar_reservas_vencidas(db)
     return (
         db.query(Reserva)
         .options(selectinload(Reserva.personas))
@@ -182,6 +186,8 @@ def obtener_reservas(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.ADMIN)) #candado administrativo
 ):
+    capacity_service.cancelar_reservas_vencidas(db)
+
     # Iniciamos la consulta base
     query = db.query(Reserva).options(selectinload(Reserva.personas))
 

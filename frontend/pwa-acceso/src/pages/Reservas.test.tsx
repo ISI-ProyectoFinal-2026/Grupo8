@@ -7,6 +7,7 @@ import { AuthProvider, TOKEN_KEY } from '@/context/AuthContext';
 import type { UsuarioSesion } from '@/lib/auth';
 import type { Cotizacion } from '@/lib/cotizacion';
 import type { ValidacionSocio } from '@/lib/validacionSocio';
+import { leerReservaPendiente } from '@/lib/reservaPendiente';
 import Reservas from './Reservas';
 
 // El Select de Radix no se puede manejar bien en jsdom: se reemplaza por un <select> nativo
@@ -112,7 +113,8 @@ function simularBackend({ cotizacion = COTIZACION_DEL_BACKEND, usuario, socios =
       if (respuesta === 'error') return { ok: false, status: 500, json: async () => ({}) };
       return { ok: true, json: async () => respuesta };
     }
-    if (ruta.endsWith('/reservas/')) return { ok: true, json: async () => ({ id: 'r-1' }) };
+    if (ruta.endsWith('/reservas/'))
+      return { ok: true, json: async () => ({ id: 'r-1', vencimiento_pago: '2030-01-01T12:10:00+00:00' }) };
     if (ruta.endsWith('/api/payments/create')) return { ok: true, json: async () => ({}) };
     throw new Error(`Llamada inesperada a ${ruta}`);
   });
@@ -669,5 +671,26 @@ describe('Reservas: confirmación del email', () => {
     expect(cuerpo.email).toBe('ana@test.com');
     expect(cuerpo).not.toHaveProperty('confirmacion_email');
     expect(cuerpo).not.toHaveProperty('confirmacionEmail');
+  });
+});
+
+describe('Reservas: plazo de pago (subissue 17.5)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
+
+  it('después de guardar la reserva no va directo a Mercado Pago: guarda el plazo para la pantalla de pago', async () => {
+    const fetchFalso = await reservar();
+
+    await waitFor(() => expect(leerReservaPendiente()).not.toBeNull());
+    expect(leerReservaPendiente()).toEqual({
+      id: 'r-1',
+      vencimiento: '2030-01-01T12:10:00+00:00',
+      titulo: 'Parcela para Carpa - 2 personas',
+    });
+    // El link de pago se crea recién en la pantalla de pago, con "Ir a pagar"
+    expect(llamadasA(fetchFalso, '/api/payments/create')).toHaveLength(0);
   });
 });

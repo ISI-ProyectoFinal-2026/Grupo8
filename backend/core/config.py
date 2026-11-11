@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     CAMPING_PORCENTAJE_BUFFER_OFFLINE: int = 10
     MAX_PERSONAS_POR_RESERVA: int = 10
     MAX_NOCHES_POR_RESERVA: int = 10
-    # Minutos que una reserva PENDIENTE sigue ocupando cupo; pasado ese plazo se la considera abandonada
-    RESERVA_PENDIENTE_TTL_MINUTES: int = 30
+    # Plazo para pagar una reserva PENDIENTE: al vencer libera el cupo, se cancela y el link de pago deja de funcionar
+    RESERVA_PENDIENTE_TTL_MINUTES: int = 10
 
     # --- Tarifas ---
     PRECIO_BASE_POR_PERSONA: float = 5000.0

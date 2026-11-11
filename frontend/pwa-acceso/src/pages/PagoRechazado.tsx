@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { XCircle } from "lucide-react";
+import { leerReservaPendiente } from "@/lib/reservaPendiente";
 import { Link, useNavigate } from "react-router-dom";
 
 export default function PagoRechazado() {
@@ -21,7 +22,8 @@ export default function PagoRechazado() {
             Hubo un problema con la transacción o la pasarela de pagos. Tu reserva no ha sido confirmada.
           </p>
           <Button 
-            onClick={() => navigate(-1)} 
+            // Con la reserva todavía guardada se vuelve a la pantalla de pago, que muestra el tiempo que queda
+            onClick={() => (leerReservaPendiente() ? navigate("/reservas/pagar") : navigate(-1))}
             className="w-full bg-red-600 hover:bg-red-700 h-12 text-md"
           >
             Intentar nuevamente

@@ -1,11 +1,18 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock } from "lucide-react";
+import { borrarReservaPendiente } from "@/lib/reservaPendiente";
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 
 // esta página de PagoPendiente sigue el mismo estilo que PagoExito y PagoRechazado, ya que no esta definido.
 
 export default function PagoPendiente() {
+  // El pago ya está hecho o en proceso: no se ofrece pagar otra vez la misma reserva
+  useEffect(() => {
+    borrarReservaPendiente();
+  }, []);
+
   return (
     <div className="container mx-auto px-4 py-16 max-w-md flex flex-col items-center justify-center min-h-[80vh]">
       <Card className="w-full shadow-lg border-yellow-200 text-center">

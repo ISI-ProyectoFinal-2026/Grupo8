@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, fie
 
 from core.config import settings
 from models.reserva import CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum
+from services.capacity_service import vencimiento_pago
 
 ZONA_HORARIA = ZoneInfo("America/Argentina/Buenos_Aires")
 
@@ -160,6 +161,14 @@ class ReservaResponse(BaseModel):
     personas: List[PersonaOut] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def vencimiento_pago(self) -> Optional[datetime]:
+        """Hasta cuándo se puede pagar (UTC). Solo las reservas pendientes tienen plazo."""
+        if self.estado_reserva != EstadoReservaEnum.PENDIENTE:
+            return None
+        return vencimiento_pago(self.fecha_reserva)
 
 
 class ReservaDetalle(ReservaResponse):
