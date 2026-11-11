@@ -48,7 +48,7 @@ El sistema utiliza SQLAlchemy como ORM, mapeando clases Python a tablas en Postg
 FastAPI utiliza Pydantic para garantizar la serialización y validación estricta de todos los *payloads* de entrada y salida, con mensajes de error normalizados en español.
 
 * **`ReservaCreate` (Payload de Entrada)**
-* **Personas (`personas`):** Lista de `PersonaReserva` con al menos 1 elemento y como máximo `max_personas_por_reserva` de la configuración del camping (10 por defecto). El máximo lo controla el endpoint, porque sale de la base: si se supera, responde 422 con `detail` en texto. La cantidad de personas de la reserva es el largo de la lista y el titular es la primera persona; ya no se envían `cantidad_personas` ni `titular`.
+* **Personas (`personas`):** Lista de `PersonaReserva` con al menos 1 elemento y como máximo `max_personas_por_reserva` de la configuración del camping (10 por defecto). El máximo lo controla el endpoint, porque sale de la base: si se supera, responde 422 con `detail` en texto. La cantidad de personas de la reserva es el largo de la lista y el titular es la primera persona. Excepción: en las reservas por unidad (Issue 19.3) no se envía `personas`, sino `titular` y `cantidad_personas`.
 * **`PersonaReserva`:** `nombre` (2 a 100 caracteres, solo letras, espacios, puntos, apóstrofes y guiones), `edad` (entero estricto entre 0 y 120), `condicion` (`visitante` o `socio`) y `dni` (7 u 8 dígitos; obligatorio para socios y sin repetirse dentro de la reserva).
 * **Fechas:** Formato AAAA-MM-DD. El sistema valida que el ingreso no sea anterior a "hoy" (hora de Argentina), el egreso no sea anterior al ingreso y la estadía no supere `MAX_NOCHES_POR_RESERVA` (10).
 * **Email:** Validado mediante `EmailStr` empleando la dependencia `email-validator`.
@@ -75,14 +75,23 @@ Estos endpoints estructuran la operación principal del sistema de reservas y su
 * **`POST /reservas/cotizar`**
 * **Descripción:** Calcula cuánto cuesta una reserva sin guardarla, para que el frontend muestre el total sin hacer cuentas propias. Es público (no pide sesión).
 * **Cálculo:** Cada persona paga el precio base (`PRECIO_BASE_POR_PERSONA`) menos el mayor de los descuentos activos que le corresponden: el de socio si su condición es `socio` y los de edad cuyo rango incluye su edad. Los descuentos no se acumulan. El precio de cada persona se redondea a dos decimales (mitad hacia arriba) y el total es la suma de esos precios.
-* **Alcance actual:** El precio es por persona y no depende de los días ni del tipo de reserva.
+* **Tipo de reserva (Issue 19.3):** `tipo_reserva_id` es opcional mientras la web no lo envíe; sin tipo se cotiza como siempre, con `PRECIO_BASE_POR_PERSONA`.
+  * **Tipo por persona:** se envían `personas` y el precio base de cada una es el precio del tipo, con los mismos descuentos. No se multiplica por las noches.
+  * **Tipo por unidad:** se envían `cantidad_personas`, `fecha_ingreso` y `fecha_egreso` (sin `personas`). Total = precio de la unidad × noches (egreso − ingreso, al menos una), sin descuentos; `detalle` va vacío.
+  * La respuesta suma `forma_cobro`, `precio_unitario` y `noches` (este último solo por unidad). No controla la disponibilidad de unidades.
+  * Devuelve 422 si el tipo no existe o está desactivado, o si se supera el máximo de personas del tipo o el máximo general.
 * **Manejo de Errores:** Devuelve 422 si no hay personas, hay más del máximo o alguna edad o condición es inválida.
 * **`POST /reservas`**
 * **Descripción:** Crea una nueva reserva inyectando datos a través de `ReservaCreate`. Funciona con o sin sesión: no recibe `user_id`. Si el pedido trae un token válido, la reserva queda asociada al usuario de ese token; sin token se crea igual y `user_id` queda nulo. Un `user_id` enviado en el cuerpo se ignora.
 * **Sesión opcional:** Usa `get_current_user_optional` (`core/auth_opcional.py`). Con un token inválido o vencido responde 401 (no se trata como visitante) para que el frontend sepa que debe volver a iniciar sesión.
 * **Cupo:** Las reservas canceladas y las pendientes con el plazo de pago vencido (más antiguas que `RESERVA_PENDIENTE_TTL_MINUTES`, 10 minutos por defecto) no ocupan cupo; las pendientes dentro del plazo sí, para evitar la sobreventa mientras se espera el pago.
 * **Plazo de pago:** La respuesta incluye `vencimiento_pago` (UTC, con zona horaria): hasta cuándo se puede pagar. Es `null` en las reservas que no están pendientes. Las pendientes vencidas pasan a `CANCELADA` al crear y al consultar reservas (`POST /reservas`, `GET /reservas/mias`, `GET /reservas`), sin tarea programada.
-* **Manejo de Errores:** Devuelve código HTTP 400 si la petición supera el límite máximo calculado por `capacity_service.py`, o 422 si la validación Pydantic falla (ej. datos mal formados).
+* **Tipo de reserva (Issue 19.3):** `tipo_reserva_id` es opcional por ahora; sin tipo, la reserva funciona como antes y `tipo_reserva_id` y `precio_tipo` quedan nulos. Con tipo, la reserva guarda `tipo_reserva_id` y `precio_tipo` (el precio del tipo en ese momento).
+  * **Por persona:** igual que siempre (todas las personas, DNI de socios, descuentos), con el precio del tipo como precio base.
+  * **Por unidad:** se envían `titular` y `cantidad_personas` en lugar de `personas`; no se guardan filas de personas. `monto_total` = precio de la unidad × noches, sin descuentos. Se exige al menos una noche.
+  * **Unidades:** se cuentan noche por noche (una reserva del 10 al 12 ocupa las noches del 10 y del 11). Cuentan las confirmadas, finalizadas, en alerta y las pendientes dentro del plazo de pago. Si en alguna noche están todas ocupadas, devuelve 409. Sin `cantidad_unidades` no hay límite. La fila del tipo se bloquea hasta el commit, para que dos pedidos simultáneos no se lleven la última unidad.
+  * **Capacidad:** las personas de una reserva por unidad cuentan para la capacidad total del camping como cualquier otra.
+* **Manejo de Errores:** Devuelve código HTTP 400 si la petición supera el límite máximo calculado por `capacity_service.py`, 409 si no quedan unidades del tipo, o 422 si la validación falla (datos mal formados, tipo inexistente o desactivado, datos que no corresponden a la forma de cobro, o más personas que el máximo del tipo o el máximo general).
 * **Lógica Interna:** Acciona `PricingService.cotizar`, la misma función que usa `POST /reservas/cotizar`, con los descuentos activos de la tabla `descuentos`; por eso el `monto_total` es igual al total cotizado con las mismas personas. La reserva y todas sus personas se guardan en la misma transacción: si falla alguna, no se crea nada.
 * **`GET /reservas/mias`**
 * **Descripción:** Devuelve solo las reservas del usuario autenticado (`ReservaDetalle[]`), ordenadas por fecha de ingreso descendente. Incluye las personas de cada reserva y `cantidad_socios` (cuántas personas tienen condición `socio`).

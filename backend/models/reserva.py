@@ -47,6 +47,9 @@ class Reserva(Base):
         nullable=True,
         index=True,
     )
+    # Precio que tenía el tipo al reservar (por persona o por unidad y noche). Si el administrador
+    # cambia el precio después, la reserva conserva este
+    precio_tipo = Column(Numeric(10, 2), nullable=True)
 
     # fecha_reserva es el momento en que se hizo la reserva; la estadía son ingreso y egreso
     fecha_reserva = Column(DateTime, default=datetime.utcnow, index=True, nullable=False)

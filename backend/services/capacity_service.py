@@ -31,6 +31,22 @@ def plazo_vencido(reserva: Reserva, ahora: Optional[datetime] = None) -> bool:
     return reserva.fecha_reserva < limite
 
 
+def _ocupa_lugar(ahora: Optional[datetime] = None):
+    """
+    Qué reservas ocupan lugar: las confirmadas, las finalizadas, las que están en alerta de
+    clonación y las pendientes dentro del plazo de pago. Las canceladas y las pendientes
+    abandonadas no cuentan. Vale tanto para personas como para unidades (cabañas).
+    """
+    limite_pendientes = (ahora or _ahora_utc()) - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES)
+    return or_(
+        Reserva.estado_reserva.notin_([EstadoReservaEnum.CANCELADA, EstadoReservaEnum.PENDIENTE]),
+        and_(
+            Reserva.estado_reserva == EstadoReservaEnum.PENDIENTE,
+            Reserva.fecha_reserva >= limite_pendientes,
+        ),
+    )
+
+
 class CapacityService:
     def lugares_ocupados(
         self,
@@ -50,24 +66,42 @@ class CapacityService:
         `ahora` es la hora actual en UTC sin zona horaria (como se guarda fecha_reserva); solo se
         recibe para poder probar los casos límite.
         """
-        if ahora is None:
-            ahora = _ahora_utc()
-        limite_pendientes = ahora - timedelta(minutes=settings.RESERVA_PENDIENTE_TTL_MINUTES)
-
-        ocupa_cupo = or_(
-            Reserva.estado_reserva.notin_([EstadoReservaEnum.CANCELADA, EstadoReservaEnum.PENDIENTE]),
-            and_(
-                Reserva.estado_reserva == EstadoReservaEnum.PENDIENTE,
-                Reserva.fecha_reserva >= limite_pendientes,
-            ),
-        )
-
         # Dos estadías se solapan si el ingreso de una es <= al egreso de la otra y viceversa
         return db.query(func.sum(Reserva.cantidad_personas)).filter(
-            ocupa_cupo,
+            _ocupa_lugar(ahora),
             Reserva.fecha_ingreso <= fecha_egreso,
             Reserva.fecha_egreso >= fecha_ingreso,
         ).scalar() or 0
+
+    def unidades_ocupadas(
+        self,
+        db: Session,
+        tipo_reserva_id,
+        fecha_ingreso: date,
+        fecha_egreso: date,
+        ahora: Optional[datetime] = None,
+    ) -> int:
+        """
+        Cuántas unidades del tipo están ocupadas en la noche más cargada del rango pedido.
+
+        Se cuenta noche por noche: una reserva del 10 al 12 ocupa las noches del 10 y del 11 y
+        deja la unidad libre el 12. Cada reserva por unidad ocupa una unidad.
+        """
+        # Reservas del tipo que comparten al menos una noche con el rango pedido
+        estadias = db.query(Reserva.fecha_ingreso, Reserva.fecha_egreso).filter(
+            Reserva.tipo_reserva_id == tipo_reserva_id,
+            _ocupa_lugar(ahora),
+            Reserva.fecha_ingreso < fecha_egreso,
+            Reserva.fecha_egreso > fecha_ingreso,
+        ).all()
+
+        noches = (fecha_egreso - fecha_ingreso).days
+        maximo = 0
+        for numero in range(noches):
+            noche = fecha_ingreso + timedelta(days=numero)
+            ocupadas = sum(1 for ingreso, egreso in estadias if ingreso <= noche < egreso)
+            maximo = max(maximo, ocupadas)
+        return maximo
 
     def cancelar_reservas_vencidas(self, db: Session, ahora: Optional[datetime] = None) -> int:
         """

@@ -167,8 +167,8 @@ def test_si_falla_el_guardado_de_una_persona_no_se_crea_nada(monkeypatch, reserv
     # La segunda persona viola la regla de la base (descuento mayor a 100 %): toda la reserva debe revertirse
     original = PricingService.cotizar
 
-    def cotizacion_rota(db, personas):
-        cotizacion = original(db, personas)
+    def cotizacion_rota(db, personas, precio_por_persona=None):
+        cotizacion = original(db, personas, precio_por_persona)
         precios = list(cotizacion.personas)
         precios[1] = PrecioPersona(Decimal("5000.00"), Decimal("150.00"), Decimal("5000.00"))
         return cotizacion._replace(personas=precios)
