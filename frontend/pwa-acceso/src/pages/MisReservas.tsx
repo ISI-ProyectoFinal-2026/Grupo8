@@ -9,11 +9,13 @@ import { formatearMonto } from "@/lib/cotizacion";
 import { formatearFecha } from "@/lib/fechas";
 import {
   agruparReservas,
+  descargarQr,
+  guardarArchivo,
   obtenerMisReservas,
   type CategoriaReserva,
   type ReservaDetalle,
 } from "@/lib/misReservas";
-import { CalendarX2, QrCode, XCircle, RefreshCw } from "lucide-react";
+import { CalendarX2, QrCode, RefreshCw } from "lucide-react";
 
 // URL base del backend (se puede sobreescribir con VITE_API_URL en el .env del frontend)
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
@@ -34,6 +36,9 @@ export default function MisReservas() {
 
   // Estado para saber qué botón está cargando y evitar doble clic
   const [reconciliandoId, setReconciliandoId] = useState<string | null>(null);
+
+  const [descargandoId, setDescargandoId] = useState<string | null>(null);
+  const [errorQr, setErrorQr] = useState<string | null>(null);
 
   const cargarReservas = useCallback(
     async (signal?: AbortSignal) => {
@@ -91,6 +96,20 @@ export default function MisReservas() {
       alert("Error de red al intentar comunicarse con el servidor.");
     } finally {
       setReconciliandoId(null);
+    }
+  };
+
+  const bajarQr = async (reservaId: string) => {
+    if (!token) return;
+    setDescargandoId(reservaId);
+    setErrorQr(null);
+    try {
+      const qr = await descargarQr(token, reservaId);
+      guardarArchivo(qr, `QR_Acceso_${reservaId}.png`);
+    } catch (e) {
+      setErrorQr(e instanceof Error ? e.message : "No pudimos descargar el QR. Intentá nuevamente.");
+    } finally {
+      setDescargandoId(null);
     }
   };
 
@@ -152,15 +171,16 @@ export default function MisReservas() {
           <div className="flex gap-2 w-full md:w-auto">
 
             {/* Lógica para reservas PAGADAS / PRÓXIMAS */}
+            {/* "Cancelar" vuelve en el Sprint 6, con la cancelación de reservas */}
             {categoria === 'proxima' && (
-              <>
-                <Button variant="outline" className="flex-1 md:flex-none flex gap-2 border-red-200 text-red-600 hover:bg-red-50">
-                  <XCircle className="w-4 h-4" /> Cancelar
-                </Button>
-                <Button className="flex-1 md:flex-none flex gap-2 bg-zinc-900">
-                  <QrCode className="w-4 h-4" /> Descargar QR
-                </Button>
-              </>
+              <Button
+                onClick={() => bajarQr(reserva.id)}
+                disabled={descargandoId === reserva.id}
+                className="flex-1 md:flex-none flex gap-2 bg-zinc-900"
+              >
+                <QrCode className="w-4 h-4" />
+                {descargandoId === reserva.id ? "Descargando..." : "Descargar QR"}
+              </Button>
             )}
 
             {/* Lógica para reservas PENDIENTES */}
@@ -197,6 +217,10 @@ export default function MisReservas() {
           <p>{error}</p>
           <Button variant="outline" onClick={() => cargarReservas()}>Reintentar</Button>
         </div>
+      )}
+
+      {errorQr && (
+        <p role="alert" className="text-center mb-6 text-red-600">{errorQr}</p>
       )}
 
       {!error && !(cargando && reservas.length === 0) && (

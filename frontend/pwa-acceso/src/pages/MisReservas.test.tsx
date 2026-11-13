@@ -49,6 +49,18 @@ function respuesta(status: number, cuerpo: unknown) {
   return { ok: status < 400, status, json: async () => cuerpo } as unknown as Response;
 }
 
+function respuestaPng(status: number) {
+  return {
+    ok: status < 400,
+    status,
+    json: async () => ({}),
+    blob: async () => new Blob(['png'], { type: 'image/png' }),
+  } as unknown as Response;
+}
+
+// jsdom no implementa URL.createObjectURL ni URL.revokeObjectURL
+const urlOriginal = { crear: URL.createObjectURL, liberar: URL.revokeObjectURL };
+
 function mostrar() {
   return render(
     <MemoryRouter>
@@ -66,6 +78,9 @@ describe('Mis reservas', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    URL.createObjectURL = urlOriginal.crear;
+    URL.revokeObjectURL = urlOriginal.liberar;
     localStorage.clear();
   });
 
@@ -163,5 +178,63 @@ describe('Mis reservas', () => {
 
     await waitFor(() => expect(screen.getByText(/iniciá sesión para ver tus reservas/i)).toBeTruthy());
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+  });
+  it('en las próximas, "Descargar QR" descarga el QR de la reserva con el token', async () => {
+    const token = crearToken();
+    localStorage.setItem(TOKEN_KEY, token);
+    const fetchFalso = vi.fn(async (url: string) =>
+      url.endsWith('/qr') ? respuestaPng(200) : respuesta(200, [PROXIMA])
+    );
+    vi.stubGlobal('fetch', fetchFalso);
+    const crearUrl = vi.fn(() => 'blob:qr-falso');
+    const liberarUrl = vi.fn();
+    URL.createObjectURL = crearUrl;
+    URL.revokeObjectURL = liberarUrl;
+    const descargas: { href: string; download: string }[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      descargas.push({ href: this.href, download: this.download });
+    });
+
+    mostrar();
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: /próximas/i }), { button: 0 });
+    fireEvent.click(await screen.findByRole('button', { name: /descargar qr/i }));
+
+    await waitFor(() => expect(descargas).toHaveLength(1));
+    const [url, opciones] = fetchFalso.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url.endsWith(`/reservas/${PROXIMA.id}/qr`)).toBe(true);
+    expect((opciones.headers as Record<string, string>).Authorization).toBe(`Bearer ${token}`);
+    expect(crearUrl).toHaveBeenCalledTimes(1);
+    expect(descargas[0]).toEqual({ href: 'blob:qr-falso', download: `QR_Acceso_${PROXIMA.id}.png` });
+    await waitFor(() => expect(liberarUrl).toHaveBeenCalledWith('blob:qr-falso'));
+  });
+
+  it('el botón "Cancelar" no se muestra por ahora', async () => {
+    localStorage.setItem(TOKEN_KEY, crearToken());
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta(200, [PROXIMA])));
+
+    mostrar();
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: /próximas/i }), { button: 0 });
+
+    await screen.findByRole('button', { name: /descargar qr/i });
+    expect(screen.queryByRole('button', { name: /cancelar/i })).toBeNull();
+  });
+
+  it('si la descarga del QR falla, avisa y no descarga nada', async () => {
+    localStorage.setItem(TOKEN_KEY, crearToken());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => (url.endsWith('/qr') ? respuestaPng(403) : respuesta(200, [PROXIMA])))
+    );
+    const crearUrl = vi.fn(() => 'blob:qr-falso');
+    URL.createObjectURL = crearUrl;
+
+    mostrar();
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: /próximas/i }), { button: 0 });
+    fireEvent.click(await screen.findByRole('button', { name: /descargar qr/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/el qr solo está disponible para reservas pagadas/i)).toBeTruthy()
+    );
+    expect(crearUrl).not.toHaveBeenCalled();
   });
 });

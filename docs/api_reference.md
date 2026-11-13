@@ -96,6 +96,9 @@ Estos endpoints estructuran la operación principal del sistema de reservas y su
 * **`GET /reservas/mias`**
 * **Descripción:** Devuelve solo las reservas del usuario autenticado (`ReservaDetalle[]`), ordenadas por fecha de ingreso descendente. Incluye las personas de cada reserva y `cantidad_socios` (cuántas personas tienen condición `socio`).
 * **Seguridad:** Exige sesión (401 sin token o con token inválido). El usuario sale del token; no existe ningún parámetro para pedir las reservas de otro. Las reservas hechas sin cuenta no aparecen en ningún listado personal.
+* **`GET /reservas/{id}/qr`**
+* **Descripción:** Devuelve el QR de acceso de la reserva como imagen PNG descargable (`Content-Disposition: attachment`). Es el mismo QR del correo de confirmación: el `jti` se guarda en `reservas.jwt_jti` al confirmar el pago y la descarga usa ese mismo valor, así cada reserva tiene un único QR válido. Las reservas pagadas antes de guardar el `jti` reciben uno la primera vez que se descarga el QR.
+* **Seguridad:** Exige sesión (401 sin token). Si la reserva no existe o es de otro usuario, devuelve 404; si no está pagada o fue cancelada, 403.
 * **`GET /reservas/`**
 * **Seguridad:** Ruta crítica blindada mediante RBAC y `OAuth2PasswordBearer`.
 * **Dependencias:** Exige autenticación válida mediante `get_current_user` y permisos exclusivos autorizados por `require_role` (Administrador).

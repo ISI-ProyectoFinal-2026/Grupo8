@@ -180,11 +180,25 @@ def tipo_qr(reserva: Reserva) -> str:
     return "visitante"
 
 
-def _programar_correo_con_qr(reserva: Reserva, background_tasks: BackgroundTasks) -> None:
+def asignar_jti(reserva: Reserva) -> str:
+    """Devuelve el jti del QR de la reserva y, si todavía no tiene, le asigna uno. No hace commit.
+
+    El jti se genera una sola vez y queda en reservas.jwt_jti: el correo y la descarga desde
+    Mis reservas usan el mismo, así la reserva tiene un único QR válido y el control de
+    QR clonados sigue funcionando."""
+    if reserva.jwt_jti is None:
+        reserva.jwt_jti = str(uuid.uuid4())
+    return reserva.jwt_jti
+
+
+def generar_token_qr(reserva: Reserva) -> str:
+    """JWT firmado del QR de la reserva, con el jti que tiene guardado."""
+    if reserva.jwt_jti is None:
+        raise ValueError(f"La reserva {reserva.id} no tiene jti asignado.")
     # El QR vence al terminar el día de egreso (hora de Argentina)
     vencimiento = datetime.combine(reserva.fecha_egreso + timedelta(days=1), dtime.min, tzinfo=ZONA_ARGENTINA)
     payload = JWTPayloadSchema(
-        jti=str(uuid.uuid4()),
+        jti=reserva.jwt_jti,
         reserva_id=str(reserva.id),
         camping_id=reserva.camping_id,
         iat=int(time.time()),
@@ -193,7 +207,11 @@ def _programar_correo_con_qr(reserva: Reserva, background_tasks: BackgroundTasks
         exp=int(vencimiento.timestamp()),
         dat=reserva.fecha_ingreso.isoformat(),
     )
-    jwt_generado = SecurityService().generate_offline_qr_token(payload)
+    return SecurityService().generate_offline_qr_token(payload)
+
+
+def _programar_correo_con_qr(reserva: Reserva, background_tasks: BackgroundTasks) -> None:
+    jwt_generado = generar_token_qr(reserva)
 
     datos_html = {
         "reserva_id": str(reserva.id),
@@ -338,6 +356,8 @@ def confirmar_pago(
             return _cancelar_y_reembolsar(db, reserva, mp_payment_id, background_tasks)
 
     reserva.marcar_como_pagada()
+    # El jti se guarda junto con el pago: es el mismo que después usa la descarga del QR
+    asignar_jti(reserva)
     db.commit()
 
     # La reserva ya quedó pagada: si falla el QR o el correo, no se deshace el pago
