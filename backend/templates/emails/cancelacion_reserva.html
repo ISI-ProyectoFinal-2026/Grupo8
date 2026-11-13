@@ -22,6 +22,9 @@
       <div class="alert-box">
         Motivo de la cancelación: {{ motivo_cancelacion }}
       </div>
+      {% if detalle_devolucion %}
+      <p>{{ detalle_devolucion }}</p>
+      {% endif %}
       
       <p>Si consideras que esto es un error o deseas realizar una nueva consulta, puedes contactarte con la administración del camping respondiendo directamente a este correo.</p>
     </div>

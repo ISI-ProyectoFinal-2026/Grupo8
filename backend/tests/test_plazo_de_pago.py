@@ -441,7 +441,10 @@ def test_pago_tardio_sin_cupo_se_reembolsa_y_se_avisa(mp, correo, reservas, fech
     assert len(correo.cancelaciones) == 1
     assert "Te devolvimos el dinero" in correo.cancelaciones[0]["motivo_cancelacion"]
     # El pago queda registrado, marcado como devuelto
-    assert _pago(payment_id).estado == "refunded"
+    pago = _pago(payment_id)
+    assert pago.estado == "refunded"
+    assert (pago.monto_devuelto, pago.devolucion_estado) == (MONTO, "devuelto")
+    assert pago.fecha_devolucion is not None
 
 
 def test_aviso_repetido_de_un_pago_reembolsado_no_lo_devuelve_dos_veces(mp, correo, reservas, fechas, cupo_justo):
@@ -469,8 +472,11 @@ def test_si_falla_el_reembolso_se_avisa_que_esta_en_proceso(mp, correo, reservas
     assert _reserva(reserva_id).estado_reserva == EstadoReservaEnum.CANCELADA
     assert len(correo.cancelaciones) == 1
     assert "Estamos procesando la devolución" in correo.cancelaciones[0]["motivo_cancelacion"]
-    # Sigue figurando como aprobado: hay que devolverlo a mano
-    assert _pago(payment_id).estado == "approved"
+    # Sigue figurando como aprobado y queda marcado para devolverlo a mano
+    pago = _pago(payment_id)
+    assert pago.estado == "approved"
+    assert (pago.monto_devuelto, pago.devolucion_estado) == (MONTO, "pendiente_revision")
+    assert pago.fecha_devolucion is None
 
 
 def test_reconciliacion_de_un_pago_tardio_sin_cupo_lo_reembolsa(mp, correo, reservas, fechas, cupo_justo, como_admin):

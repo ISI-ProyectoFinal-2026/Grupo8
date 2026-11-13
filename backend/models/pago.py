@@ -7,6 +7,11 @@ from core.database import Base
 from core.tiempo import ahora_utc
 
 
+# Valores de pagos.devolucion_estado
+DEVOLUCION_REALIZADA = "devuelto"
+DEVOLUCION_PENDIENTE_REVISION = "pendiente_revision"
+
+
 class Pago(Base):
     """Cada pago que informa Mercado Pago, aprobado o no.
 
@@ -36,3 +41,10 @@ class Pago(Base):
 
     # Respuesta de Mercado Pago sin datos del pagador ni de la tarjeta
     respuesta_mp = Column(JSONB, nullable=False)
+
+    # Devolución del pago (cancelación del socio o pago tardío sin cupo). Nulas si nunca se devolvió.
+    # monto_devuelto es lo que corresponde devolver: si devolucion_estado es "pendiente_revision",
+    # Mercado Pago no lo devolvió y hay que hacerlo a mano.
+    monto_devuelto = Column(Numeric(12, 2), nullable=True)
+    fecha_devolucion = Column(DateTime(timezone=True), nullable=True)
+    devolucion_estado = Column(String(32), nullable=True)

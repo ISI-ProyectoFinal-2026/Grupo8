@@ -6,18 +6,33 @@ import logging
 from typing import List, Optional
 from datetime import date
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query, Response
 from sqlalchemy.orm import Session, selectinload
 
 from core.config import settings
 from core.database import get_db 
 from schemas.cotizacion import CotizarDetalle, CotizarRequest, CotizarResponse
-from schemas.reserva import ReservaCreate, ReservaDetalle, ReservaResponse
+from schemas.reserva import (
+    CancelacionCondiciones,
+    CancelacionResultado,
+    ReservaCreate,
+    ReservaDetalle,
+    ReservaResponse,
+)
 from models.reserva import (
     Reserva, ReservaPersona, EstadoPagoEnum, EstadoReservaEnum,
 )
 from models.configuracion import ConfiguracionCamping
 from models.tipo_reserva import FormaCobroEnum, TipoReserva
+from services.cancelacion_service import (
+    CancelacionNoPermitidaError,
+    CondicionesCancelacion,
+    ReservaNoEncontradaError,
+    cancelar_reserva,
+    evaluar_cancelacion,
+    formatear_pesos,
+    reserva_del_usuario,
+)
 from services.capacity_service import CapacityService
 from services.payment_service import asignar_jti, generar_token_qr
 from services.qr_service import qr_service
@@ -364,6 +379,74 @@ def descargar_qr(
             "Content-Disposition": f'attachment; filename="QR_Acceso_{reserva.id}.png"',
             "Cache-Control": "no-store",
         },
+    )
+
+
+def _condiciones_out(condiciones: CondicionesCancelacion) -> CancelacionCondiciones:
+    return CancelacionCondiciones(
+        puede_cancelar=condiciones.puede_cancelar,
+        dias_minimos=condiciones.dias_cancelacion,
+        fecha_limite=condiciones.fecha_limite,
+        porcentaje_devolucion=condiciones.porcentaje_devolucion,
+        monto_devolucion=float(condiciones.monto_a_devolver),
+        mensaje=condiciones.motivo,
+    )
+
+
+# Una reserva de otro usuario responde igual que una que no existe, para no revelar cuáles hay
+_NO_ENCONTRADA = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reserva no encontrada.")
+
+
+@router.get("/{reserva_id}/cancelacion", response_model=CancelacionCondiciones)
+def consultar_cancelacion(
+    reserva_id: UUID,
+    db: Session = Depends(get_db),
+    usuario: User = Depends(get_current_user),
+):
+    """Si el socio puede cancelar su reserva, hasta cuándo, el porcentaje y el monto que se le devuelve."""
+    try:
+        reserva = reserva_del_usuario(db, reserva_id, usuario.id)
+    except ReservaNoEncontradaError:
+        raise _NO_ENCONTRADA
+    return _condiciones_out(evaluar_cancelacion(db, reserva))
+
+
+@router.post("/{reserva_id}/cancelar", response_model=CancelacionResultado)
+def cancelar(
+    reserva_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    usuario: User = Depends(get_current_user),
+):
+    """
+    Cancela la reserva pagada del socio, dentro del plazo, y le devuelve por Mercado Pago el
+    porcentaje configurado. Responde la reserva ya cancelada y el monto devuelto.
+    Fuera del plazo, o si la reserva no se puede cancelar, responde 422.
+    """
+    try:
+        resultado = cancelar_reserva(db, reserva_id, usuario.id, background_tasks)
+    except ReservaNoEncontradaError:
+        raise _NO_ENCONTRADA
+    except CancelacionNoPermitidaError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.mensaje)
+
+    condiciones = resultado.condiciones
+    monto = formatear_pesos(condiciones.monto_a_devolver)
+    if condiciones.monto_a_devolver == 0:
+        mensaje = "La reserva quedó cancelada. Según las condiciones del camping, no corresponde devolución."
+    elif resultado.devolucion_realizada:
+        mensaje = f"La reserva quedó cancelada. Te devolvimos {monto} por Mercado Pago."
+    else:
+        mensaje = (
+            f"La reserva quedó cancelada. Estamos procesando la devolución de {monto}; "
+            "te avisamos por correo."
+        )
+    reserva = ReservaResponse.model_validate(resultado.reserva).model_dump()
+    return CancelacionResultado(
+        **reserva,
+        monto_devuelto=float(condiciones.monto_a_devolver),
+        devolucion_realizada=resultado.devolucion_realizada,
+        mensaje=mensaje,
     )
 
 

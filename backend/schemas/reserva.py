@@ -213,3 +213,28 @@ class ReservaDetalle(ReservaResponse):
     @property
     def cantidad_socios(self) -> int:
         return sum(1 for persona in self.personas if persona.condicion == CondicionPersonaEnum.socio)
+
+
+
+class CancelacionCondiciones(BaseModel):
+    """Lo que ve el socio antes de confirmar la cancelación (GET /reservas/{id}/cancelacion).
+    Los campos son los acordados en contratos_sprint6.md."""
+
+    puede_cancelar: bool
+    # Días antes del ingreso hasta los que se puede cancelar
+    dias_minimos: int
+    # Último día en que se puede cancelar (fecha de Argentina)
+    fecha_limite: date
+    porcentaje_devolucion: int
+    monto_devolucion: float
+    # Por qué no se puede cancelar; nulo si se puede
+    mensaje: Optional[str] = None
+
+
+class CancelacionResultado(ReservaResponse):
+    """Respuesta de POST /reservas/{id}/cancelar: la reserva ya cancelada y lo que se devolvió."""
+
+    monto_devuelto: float
+    # False si Mercado Pago no pudo devolver el dinero: queda para revisión de la administración
+    devolucion_realizada: bool
+    mensaje: str
