@@ -48,7 +48,10 @@ def buscar_por_identificador(db: Session, identificador: str) -> Optional[User]:
 
 
 def autenticar(db: Session, identificador: str, password: str) -> Optional[User]:
-    """Devuelve el usuario si las credenciales son correctas; si no, None (sin decir por qué)."""
+    """
+    Devuelve el usuario si puede iniciar sesión; si no, None (sin decir por qué).
+    Pueden entrar el administrador, el guardia y los socios activos, tengan o no la membresía al día.
+    """
     usuario = buscar_por_identificador(db, identificador)
     if usuario is None:
         verificar_password(password, _HASH_FICTICIO)
@@ -58,6 +61,11 @@ def autenticar(db: Session, identificador: str, password: str) -> Optional[User]
     # Recién después de comprobar la contraseña: así un dado de baja recibe la misma
     # respuesta que una contraseña incorrecta y no se puede averiguar quién fue dado de baja
     if not usuario.activo:
+        return None
+    # La web de reservas es solo para socios. Un visitante con contraseña recibe la misma
+    # respuesta que una contraseña incorrecta. La membresía vencida no impide entrar:
+    # el socio tiene que poder ver su estado en Perfil
+    if usuario.rol == RoleEnum.CLIENTE and not usuario.is_socio:
         return None
     return usuario
 
