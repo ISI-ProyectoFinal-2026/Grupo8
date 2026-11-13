@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from models.configuracion import ConfiguracionCamping
 
-# Buffer que se sugiere en el panel: 10 % equivale a los 5 lugares sobre 50 que se usaban antes
-PORCENTAJE_BUFFER_RECOMENDADO = 10
+# Buffer que se sugiere en el panel: la web vende hasta el 80 % del cupo y el 20 % queda para la puerta
+PORCENTAJE_BUFFER_RECOMENDADO = 20
 
 
 def configuracion_inicial() -> Dict[str, int]:
