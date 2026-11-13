@@ -27,17 +27,19 @@ from models.tipo_reserva import TipoReserva
 # Cargar las variables del archivo .env
 load_dotenv()
 
-# Obtener credenciales
-DB_USER = os.getenv("POSTGRES_USER")
-DB_PASS = os.getenv("POSTGRES_PASSWORD")
-DB_NAME = os.getenv("POSTGRES_DB")
-DB_PORT = os.getenv("POSTGRES_PORT", "5432")
-
-# Construir la URL de conexión síncrona (sacamos el +asyncpg para una conexión sincronica por Alembic)
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@127.0.0.1:{DB_PORT}/{DB_NAME}"
+# En las plataformas publicadas la base no está en 127.0.0.1: se usa DATABASE_URL, la misma que la app.
+# Si no está definida, se arma con las credenciales del contenedor local
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    DB_USER = os.getenv("POSTGRES_USER")
+    DB_PASS = os.getenv("POSTGRES_PASSWORD")
+    DB_NAME = os.getenv("POSTGRES_DB")
+    DB_PORT = os.getenv("POSTGRES_PORT", "5432")
+    DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@127.0.0.1:{DB_PORT}/{DB_NAME}"
 
 # Sobrescribir la configuración vacía de alembic.ini
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+# configparser interpreta "%" (aparece en contraseñas codificadas en la URL)
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
