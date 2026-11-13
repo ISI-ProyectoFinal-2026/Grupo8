@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 import mercadopago
 from fastapi import BackgroundTasks
+from mercadopago.http.http_client import HttpClient
 from mercadopago.webhook import InvalidWebhookSignatureError, WebhookSignatureValidator
 from sqlalchemy import case
 from sqlalchemy.dialects.postgresql import insert
@@ -66,10 +67,33 @@ CAMPOS_DETALLE_TRANSACCION = {
 HOSTS_LOCALES = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 
 
+URL_API_MERCADO_PAGO = "https://api.mercadopago.com"
+
+
+class HttpClientRedirigido(HttpClient):
+    """Cliente HTTP del SDK que manda las llamadas a otra dirección.
+    Lo usan las pruebas E2E para hablar con un Mercado Pago falso en vez del real."""
+
+    def __init__(self, base_url: str):
+        super().__init__()
+        self.base_url = base_url.rstrip("/")
+
+    def request(self, method, url, *args, **kwargs):
+        return super().request(method, url.replace(URL_API_MERCADO_PAGO, self.base_url, 1), *args, **kwargs)
+
+
+def _cliente_http_mercado_pago() -> HttpClient | None:
+    """None (cliente normal del SDK) salvo en las pruebas E2E. En producción nunca se redirige."""
+    if not settings.MERCADOPAGO_API_URL or settings.ENVIRONMENT.lower() == "production":
+        return None
+    logger.warning(f"Mercado Pago redirigido a {settings.MERCADOPAGO_API_URL} (modo pruebas E2E).")
+    return HttpClientRedirigido(settings.MERCADOPAGO_API_URL)
+
+
 class PaymentService:
     def __init__(self):
         # Inicializamos el SDK con el Access Token de las variables de entorno
-        self.mp = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
+        self.mp = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN, http_client=_cliente_http_mercado_pago())
 
 
 def urls_de_retorno() -> dict:

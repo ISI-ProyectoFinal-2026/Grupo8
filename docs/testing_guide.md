@@ -95,6 +95,65 @@ La PWA emplea `vitest` para ejecutar pruebas unitarias y de integración que val
 * El proceso requiere levantar la aplicación localmente en el puerto 4173 (`npm run preview`) y abrir un túnel HTTP hacia dicho puerto mediante el comando `ngrok http 4173`. La URL pública resultante (`[https://...ngrok-free.app](https://...ngrok-free.app)`) se utiliza en el dispositivo móvil real para probar el módulo de escaneo.
 
 
+### 3.3. Recorrido feliz automatizado con Playwright (Issue 24.1)
+
+La prueba `frontend/pwa-acceso/e2e/happy-path.spec.ts` recorre el sistema completo con tres navegadores separados (cliente, guardia y administrador): reserva, pago con Mercado Pago, QR por correo, escaneo en la puerta, ocupación del panel y egreso.
+
+#### Preparación (una sola vez por máquina)
+
+1. PostgreSQL encendido y `backend/.env` completo (con las claves de `security/generate_keys.py`), igual que para desarrollo.
+2. `VITE_PUBLIC_KEY` en `frontend/pwa-acceso/.env`, igual que para desarrollo.
+3. Dependencias del backend: `pipenv install --dev` (carpeta `backend`).
+4. Desde `frontend/pwa-acceso`:
+
+```bash
+npm install
+npm run e2e:instalar   # descarga Chromium para Playwright
+```
+
+#### Ejecución (un solo comando)
+
+Desde `frontend/pwa-acceso`:
+
+```bash
+npm run test:e2e
+```
+
+Ese comando:
+
+1. Prepara la base de pruebas `<POSTGRES_DB>_e2e` (la crea si no existe, la vacía y aplica todas las migraciones) y crea un administrador y un guardia con contraseñas generadas al azar en cada corrida. El script (`backend/e2e_preparar_db.py`) se niega a trabajar sobre una base que no termine en `_e2e`, así que nunca toca la base de desarrollo.
+2. Levanta el backend en el puerto **8001**.
+3. Compila la PWA (`npm run build`) y la sirve con `vite preview` en el puerto **4173**. Se prueba el build porque el service worker solo existe ahí (lo necesitan las pruebas sin conexión).
+4. Levanta un Mercado Pago y un Resend falsos en el puerto **8090**: no se hacen pagos reales ni se envían correos.
+5. Corre las pruebas y apaga todo al terminar.
+
+Los puertos son distintos a los de desarrollo (8000 y 5173), así que se puede correr con el entorno de desarrollo encendido.
+
+Otros comandos útiles:
+
+| Comando | Para qué sirve |
+|---|---|
+| `npm run test:e2e:ui` | Modo visual: paso a paso, con la pantalla de cada acción |
+| `npm run test:e2e:informe` | Abre el informe HTML de la última corrida |
+| `npx playwright show-trace test-results/<carpeta>/trace.zip` | Reproduce una prueba fallida (se guarda la traza, captura y video solo cuando falla) |
+| `npm run typecheck:e2e` | Revisa los tipos de los archivos de `e2e/` |
+
+#### Decisiones de diseño
+
+* **Selectores accesibles.** Las pruebas buscan los elementos como los ve una persona o un lector de pantalla: `getByRole`, `getByLabel` y `getByText`, nunca clases CSS ni XPath. Esto obligó a asociar etiquetas que faltaban (nombre y edad de cada visitante, email de contacto y el campo del token en el escáner). La ocupación se lee del `aria-valuenow` de la barra de progreso del monitor.
+* **Mercado Pago simulado.** El backend no confía en el aviso: con el id del pago consulta a Mercado Pago. Por eso no alcanza con mandar un aviso falso: el SDK apunta a un Mercado Pago falso con `MERCADOPAGO_API_URL` (solo se respeta fuera de producción). El cliente pasa por una pantalla de pago simulada, vuelve a `/pago/exito` con el `payment_id` en la URL y la prueba manda el aviso firmado con HMAC (la misma firma `x-signature` que valida el backend) al endpoint `/api/payments/webhook`.
+* **QR.** Resend también apunta al servidor falso (`RESEND_API_URL`). La prueba toma el PNG adjunto del correo, lo decodifica con `jsqr` (lo mismo que haría la cámara) y lo ingresa en el campo manual del escáner, que pasa por la misma validación que el QR leído con la cámara.
+* **Sincronización.** La PWA envía los ingresos al detectar que vuelve la conexión o cada 5 minutos. La prueba adelanta el reloj del navegador del guardia 5 minutos (`page.clock`) en vez de esperar.
+* **Sin secretos en el repositorio.** Las contraseñas del administrador y del guardia y la clave del webhook se generan al azar en cada corrida (`e2e/entorno.ts`).
+* **De a una prueba por vez** (`workers: 1`): todas comparten la base y el contador de ocupación. Las aserciones comparan contra la ocupación inicial y no contra 0.
+
+#### Errores habituales
+
+* `No existe .../backend/.env`: copiar `backend/.env.example` a `backend/.env` y completarlo.
+* `Process from config.webServer was not able to start`: revisar el texto anterior al error. Suele ser PostgreSQL apagado, `pipenv` sin instalar o un puerto (8001, 4173 u 8090) ocupado.
+* `Executable doesn't exist`: falta el navegador; correr `npm run e2e:instalar`.
+* La prueba falla al validar el QR: `VITE_PUBLIC_KEY` del frontend no corresponde a `JWT_PRIVATE_KEY` del backend.
+
 ## 4. Entorno de Integración Continua (CI/CD)
 
 El sistema valida ambas bases de código antes de cualquier integración en la rama principal (`main` o `dev`) utilizando GitHub Actions (`.github/workflows/test.yml`).

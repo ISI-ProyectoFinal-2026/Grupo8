@@ -413,6 +413,7 @@ export default function Reservas() {
               <Input
                 type="email"
                 required
+                aria-label="Email de contacto"
                 placeholder="ejemplo@correo.com"
                 value={emailContacto}
                 aria-invalid={!!errores.email}
@@ -515,8 +516,9 @@ export default function Reservas() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <Label>Nombre completo</Label>
+                      <Label htmlFor={`nombre-${index}`}>Nombre completo</Label>
                       <Input
+                        id={`nombre-${index}`}
                         required
                         maxLength={100}
                         value={visitante.nombre}
@@ -527,8 +529,9 @@ export default function Reservas() {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label>Edad</Label>
+                    <Label htmlFor={`edad-${index}`}>Edad</Label>
                     <Input
+                      id={`edad-${index}`}
                       type="text"
                       inputMode="numeric"
                       maxLength={3}
