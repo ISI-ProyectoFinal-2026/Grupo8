@@ -85,6 +85,7 @@ export const ScannerQR = ({ onScanSuccess }: ScannerQRProps) => {
         <form onSubmit={handleTokenManual} style={{ display: 'flex', gap: '8px' }}>
           <input
             type="text"
+            aria-label="Token del QR"
             placeholder="Pega el JWT aquí..."
             value={tokenManual}
             onChange={(e) => setTokenManual(e.target.value)}
