@@ -142,3 +142,90 @@ export function guardarArchivo(archivo: Blob, nombre: string): void {
   // Se libera un poco después, para que el navegador llegue a empezar la descarga
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
+
+// ---------- Cancelación (Issue 22) ----------
+
+/** Condiciones para cancelar una reserva, tal como las devuelve GET /reservas/{id}/cancelacion. */
+export interface CondicionesCancelacion {
+  puede_cancelar: boolean;
+  /** Días antes del ingreso hasta los que se puede cancelar (0 = hasta el mismo día). */
+  dias_minimos: number;
+  /** Último día para cancelar (AAAA-MM-DD). */
+  fecha_limite: string;
+  porcentaje_devolucion: number;
+  monto_devolucion: number;
+  /** Por qué no se puede cancelar; null si se puede. */
+  mensaje: string | null;
+}
+
+/** Respuesta de POST /reservas/{id}/cancelar: la reserva ya cancelada y lo que se devolvió. */
+export interface ResultadoCancelacion {
+  id: string;
+  estado_reserva: EstadoReserva;
+  estado_pago: string;
+  monto_devuelto: number;
+  /** false si Mercado Pago no pudo devolver el dinero y quedó para revisión. */
+  devolucion_realizada: boolean;
+  mensaje: string;
+}
+
+/** El motivo que manda el backend en `detail`, o el mensaje genérico si no hay uno. */
+async function motivoDelBackend(respuesta: Response, porDefecto: string): Promise<string> {
+  try {
+    const cuerpo = await respuesta.json();
+    if (typeof cuerpo?.detail === 'string') return cuerpo.detail;
+  } catch {
+    // La respuesta no era JSON: se usa el mensaje genérico
+  }
+  return porDefecto;
+}
+
+async function revisarRespuesta(respuesta: Response, porDefecto: string): Promise<void> {
+  if (respuesta.status === 401) {
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    throw new ErrorMisReservas('Tu sesión venció. Iniciá sesión de nuevo.', 401);
+  }
+  if (respuesta.status === 404) {
+    throw new ErrorMisReservas('No encontramos la reserva.', 404);
+  }
+  if (!respuesta.ok) {
+    // 422: fuera de plazo, ya cancelada... El backend explica el motivo
+    const mensaje = respuesta.status === 422 ? await motivoDelBackend(respuesta, porDefecto) : porDefecto;
+    throw new ErrorMisReservas(mensaje, respuesta.status);
+  }
+}
+
+/** Pide si se puede cancelar la reserva, hasta cuándo y cuánto se devuelve. */
+export async function obtenerCondicionesCancelacion(
+  token: string,
+  reservaId: string,
+  signal?: AbortSignal
+): Promise<CondicionesCancelacion> {
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(`${API_URL}/reservas/${reservaId}/cancelacion`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    throw new ErrorMisReservas('No se pudo conectar con el servidor. Intentá nuevamente.', 0);
+  }
+  await revisarRespuesta(respuesta, 'No pudimos consultar las condiciones de cancelación. Intentá nuevamente.');
+  return (await respuesta.json()) as CondicionesCancelacion;
+}
+
+/** Cancela la reserva y pide la devolución por Mercado Pago. */
+export async function cancelarReserva(token: string, reservaId: string): Promise<ResultadoCancelacion> {
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(`${API_URL}/reservas/${reservaId}/cancelar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    throw new ErrorMisReservas('No se pudo conectar con el servidor. Intentá nuevamente.', 0);
+  }
+  await revisarRespuesta(respuesta, 'No pudimos cancelar la reserva. Intentá nuevamente.');
+  return (await respuesta.json()) as ResultadoCancelacion;
+}
