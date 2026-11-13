@@ -2,9 +2,11 @@
 from models.user import User, RoleEnum
 from core.dependencies import get_current_user, get_current_user_optional, require_role
 
+import logging
 from typing import List, Optional
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from uuid import UUID
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
 from sqlalchemy.orm import Session, selectinload
 
 from core.config import settings
@@ -17,6 +19,8 @@ from models.reserva import (
 from models.configuracion import ConfiguracionCamping
 from models.tipo_reserva import FormaCobroEnum, TipoReserva
 from services.capacity_service import CapacityService
+from services.payment_service import asignar_jti, generar_token_qr
+from services.qr_service import qr_service
 from services.pricing_service import Cotizacion, PersonaPrecio, PricingService
 from services import socio_service
 from services.camping_service import (
@@ -31,6 +35,8 @@ from services.tipo_reserva_service import (
     verificar_maximo_del_tipo,
     verificar_unidades_libres,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reservas", tags=["Reservas"])
 capacity_service = CapacityService()
@@ -301,6 +307,63 @@ def obtener_mis_reservas(
         .filter(Reserva.user_id == usuario.id)
         .order_by(Reserva.fecha_ingreso.desc(), Reserva.fecha_reserva.desc())
         .all()
+    )
+
+
+@router.get(
+    "/{reserva_id}/qr",
+    response_class=Response,
+    responses={200: {"content": {"image/png": {}}, "description": "Imagen PNG del QR de acceso."}},
+)
+def descargar_qr(
+    reserva_id: UUID,
+    db: Session = Depends(get_db),
+    usuario: User = Depends(get_current_user),
+):
+    """QR de acceso de una reserva pagada del usuario con sesión, con el mismo jti del correo."""
+    # Una reserva de otro usuario responde igual que una que no existe, para no revelar cuáles hay
+    reserva = (
+        db.query(Reserva)
+        .filter(Reserva.id == reserva_id, Reserva.user_id == usuario.id)
+        .first()
+    )
+    if reserva is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reserva no encontrada.")
+    if reserva.estado_pago != EstadoPagoEnum.PAGADO or reserva.estado_reserva == EstadoReservaEnum.CANCELADA:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El QR solo está disponible para reservas pagadas.",
+        )
+
+    # Las reservas pagadas antes de guardar el jti reciben uno la primera vez. La fila se bloquea
+    # para que dos descargas simultáneas no generen dos jti distintos
+    if reserva.jwt_jti is None:
+        reserva = (
+            db.query(Reserva)
+            .filter(Reserva.id == reserva.id)
+            .populate_existing()
+            .with_for_update()
+            .one()
+        )
+        asignar_jti(reserva)
+        db.commit()
+
+    try:
+        png = qr_service.generar_qr_desde_jwt(generar_token_qr(reserva))
+    except (ValueError, RuntimeError):
+        logger.exception("No se pudo generar el QR de la reserva %s", reserva.id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No se pudo generar el QR. Intentá nuevamente.",
+        )
+
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={
+            "Content-Disposition": f'attachment; filename="QR_Acceso_{reserva.id}.png"',
+            "Cache-Control": "no-store",
+        },
     )
 
 

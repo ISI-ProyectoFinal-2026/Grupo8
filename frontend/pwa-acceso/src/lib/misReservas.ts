@@ -108,3 +108,37 @@ export async function obtenerMisReservas(token: string, signal?: AbortSignal): P
   }
   return (await respuesta.json()) as ReservaDetalle[];
 }
+
+/**
+ * Pide el QR de una reserva pagada. Es el mismo QR que llegó por correo.
+ * Si el token ya no sirve (401) avisa a la app para que cierre la sesión.
+ */
+export async function descargarQr(token: string, reservaId: string): Promise<Blob> {
+  const respuesta = await fetch(`${API_URL}/reservas/${reservaId}/qr`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (respuesta.status === 401) {
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    throw new ErrorMisReservas('Tu sesión venció. Iniciá sesión de nuevo.', 401);
+  }
+  if (respuesta.status === 403 || respuesta.status === 404) {
+    throw new ErrorMisReservas('El QR solo está disponible para reservas pagadas.', respuesta.status);
+  }
+  if (!respuesta.ok) {
+    throw new ErrorMisReservas('No pudimos descargar el QR. Intentá nuevamente.', respuesta.status);
+  }
+  return respuesta.blob();
+}
+
+/** Guarda el archivo en el dispositivo con el nombre indicado. */
+export function guardarArchivo(archivo: Blob, nombre: string): void {
+  const url = URL.createObjectURL(archivo);
+  const enlace = document.createElement('a');
+  enlace.href = url;
+  enlace.download = nombre;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  // Se libera un poco después, para que el navegador llegue a empezar la descarga
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+}
