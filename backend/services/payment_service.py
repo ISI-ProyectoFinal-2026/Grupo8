@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.tiempo import a_utc, ahora_utc
-from models.pago import Pago
+from models.pago import DEVOLUCION_PENDIENTE_REVISION, DEVOLUCION_REALIZADA, Pago
 from models.reserva import CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum, Reserva
 from security.schemas import JWTPayloadSchema
 from security.services import SecurityService
@@ -262,12 +262,16 @@ class ResultadoConfirmacion(str, enum.Enum):
     REEMBOLSO_PENDIENTE = "reembolso_pendiente"
 
 
-def _reembolsar(mp_payment_id) -> bool:
-    """Devuelve el total del pago con la API de reembolsos de Mercado Pago."""
+def reembolsar(mp_payment_id, monto: Decimal | None = None) -> bool:
+    """Devuelve el pago con la API de reembolsos de Mercado Pago: el total si no se pasa
+    monto, o solo ese monto (reembolso parcial)."""
     if mp_payment_id is None:
         return False
     try:
-        respuesta = payment_service.mp.refund().create(mp_payment_id)
+        if monto is None:
+            respuesta = payment_service.mp.refund().create(mp_payment_id)
+        else:
+            respuesta = payment_service.mp.refund().create(mp_payment_id, {"amount": float(monto)})
     except Exception as e:
         logger.error(f"Falló el reembolso del pago {mp_payment_id}: {e}")
         return False
@@ -376,13 +380,25 @@ def _cancelar_y_reembolsar(
 
     # El reembolso se pide con la reserva bloqueada, y el pago se marca como devuelto en la
     # misma transacción: un aviso repetido que espera el bloqueo ya no lo vuelve a devolver
-    reembolsado = _reembolsar(mp_payment_id)
+    reembolsado = reembolsar(mp_payment_id)
+    pago = db.query(Pago).filter(Pago.mp_payment_id == str(mp_payment_id))
     if reembolsado:
-        db.query(Pago).filter(Pago.mp_payment_id == str(mp_payment_id)).update(
-            {Pago.estado: "refunded"}, synchronize_session=False
+        pago.update(
+            {
+                Pago.estado: "refunded",
+                Pago.monto_devuelto: Pago.monto,
+                Pago.fecha_devolucion: ahora_utc(),
+                Pago.devolucion_estado: DEVOLUCION_REALIZADA,
+            },
+            synchronize_session=False,
         )
         logger.warning(f"Reserva {reserva.id} vencida y sin cupo: se reembolsó el pago {mp_payment_id}.")
     else:
+        # Queda marcado para revisión: el monto es el que falta devolver
+        pago.update(
+            {Pago.monto_devuelto: Pago.monto, Pago.devolucion_estado: DEVOLUCION_PENDIENTE_REVISION},
+            synchronize_session=False,
+        )
         logger.error(
             f"Reserva {reserva.id} vencida y sin cupo: no se pudo reembolsar el pago {mp_payment_id}. "
             "Hay que devolverlo a mano desde Mercado Pago."

@@ -57,7 +57,8 @@ class EmailService:
 
     @staticmethod
     def enviar_cancelacion_sync(destinatario: str, datos_reserva: dict):
-        """Avisa que la reserva quedó cancelada. datos_reserva lleva nombre_cliente, reserva_id y motivo_cancelacion."""
+        """Avisa que la reserva quedó cancelada. datos_reserva lleva nombre_cliente, reserva_id y
+        motivo_cancelacion, y opcionalmente detalle_devolucion (cuánto se devuelve y cómo)."""
         try:
             template = template_env.get_template("cancelacion_reserva.html")
             params: resend.Emails.SendParams = {

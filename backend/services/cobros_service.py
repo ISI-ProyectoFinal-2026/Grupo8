@@ -2,12 +2,12 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Dict
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from core.tiempo import ZONA_NEGOCIO
 from models.ingreso_fisico import IngresoFisico
-from models.pago import Pago
+from models.pago import DEVOLUCION_REALIZADA, Pago
 
 # Estado con el que Mercado Pago informa un pago acreditado
 ESTADO_APROBADO = "approved"
@@ -35,7 +35,8 @@ def resumen_cobros(db: Session, desde: date, hasta: date) -> dict:
 
     - Efectivo: monto cobrado en los ingresos manuales, en el día en que se escaneó el ingreso.
     - Mercado Pago: solo pagos aprobados, en el día de la aprobación. Si un pago se
-      reembolsa, Mercado Pago cambia su estado y deja de contarse.
+      reembolsa, Mercado Pago cambia su estado y deja de contarse. Si se devuelve una parte
+      (cancelación del socio), el pago sigue aprobado y se cuenta lo que quedó.
     """
     inicio = _inicio_del_dia(desde)
     fin = _inicio_del_dia(hasta + timedelta(days=1))
@@ -55,8 +56,13 @@ def resumen_cobros(db: Session, desde: date, hasta: date) -> dict:
     # Un pago aprobado siempre debería traer fecha de aprobación; si no, se usa la de creación
     fecha_pago = func.coalesce(Pago.fecha_aprobacion, Pago.fecha_creacion)
     dia_pago = _dia_en_argentina(fecha_pago)
+    # En una devolución parcial Mercado Pago deja el pago como aprobado: se resta lo devuelto
+    devuelto = case(
+        (Pago.devolucion_estado == DEVOLUCION_REALIZADA, func.coalesce(Pago.monto_devuelto, 0)),
+        else_=0,
+    )
     mercado_pago_por_dia: Dict[date, Decimal] = dict(
-        db.query(dia_pago, func.sum(Pago.monto))
+        db.query(dia_pago, func.sum(Pago.monto - devuelto))
         .filter(
             Pago.estado == ESTADO_APROBADO,
             Pago.monto.isnot(None),

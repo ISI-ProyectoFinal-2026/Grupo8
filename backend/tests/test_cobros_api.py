@@ -119,7 +119,8 @@ def _efectivo(db: Session, monto: Optional[str], cuando: str) -> None:
 
 
 def _pago(db: Session, monto: str, estado: str = "approved", aprobado: Optional[str] = None,
-          creado: str = "2026-11-04T12:00:00-03:00") -> None:
+          creado: str = "2026-11-04T12:00:00-03:00", devuelto: Optional[str] = None,
+          devolucion_estado: Optional[str] = None) -> None:
     db.add(Pago(
         mp_payment_id=str(uuid.uuid4().int)[:12],
         estado=estado,
@@ -129,6 +130,8 @@ def _pago(db: Session, monto: str, estado: str = "approved", aprobado: Optional[
         fecha_creacion=datetime.fromisoformat(creado),
         fecha_aprobacion=datetime.fromisoformat(aprobado) if aprobado else None,
         respuesta_mp={"status": estado},
+        monto_devuelto=Decimal(devuelto) if devuelto is not None else None,
+        devolucion_estado=devolucion_estado,
     ))
     db.flush()
 
@@ -183,6 +186,19 @@ def test_solo_cuenta_los_pagos_aprobados_de_mercado_pago(db_aislada, tokens):
 
     assert data["total_mercado_pago"] == 15000
     assert data["dias"][0]["mercado_pago"] == 15000
+
+
+def test_un_pago_con_devolucion_parcial_cuenta_lo_que_quedo(db_aislada, tokens):
+    # Cancelación del socio con el 40 % de devolución: Mercado Pago deja el pago aprobado
+    _pago(db_aislada, "10000", aprobado="2026-11-04T12:00:00-03:00",
+          devuelto="4000", devolucion_estado="devuelto")
+    # Si la devolución falló, la plata sigue en la cuenta hasta que se devuelva a mano
+    _pago(db_aislada, "5000", aprobado="2026-11-04T13:00:00-03:00",
+          devuelto="5000", devolucion_estado="pendiente_revision")
+
+    data = _consultar(tokens["ADMIN"], "2026-11-04", "2026-11-04")
+
+    assert data["total_mercado_pago"] == 11000
 
 
 def test_el_pago_cuenta_el_dia_de_la_aprobacion(db_aislada, tokens):
