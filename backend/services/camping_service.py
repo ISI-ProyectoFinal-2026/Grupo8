@@ -15,6 +15,8 @@ def configuracion_inicial() -> Dict[str, int]:
         "capacidad_total": settings.CAMPING_TOTAL_CAPACITY,
         "porcentaje_buffer_offline": settings.CAMPING_PORCENTAJE_BUFFER_OFFLINE,
         "max_personas_por_reserva": settings.MAX_PERSONAS_POR_RESERVA,
+        "dias_cancelacion": settings.CAMPING_DIAS_CANCELACION,
+        "porcentaje_devolucion": settings.CAMPING_PORCENTAJE_DEVOLUCION,
     }
 
 
@@ -69,12 +71,16 @@ def actualizar_configuracion(
     capacidad_total: int,
     porcentaje_buffer_offline: int,
     max_personas_por_reserva: int,
+    dias_cancelacion: int,
+    porcentaje_devolucion: int,
 ) -> ConfiguracionCamping:
-    """Guarda los tres valores juntos. Las reglas entre ellos ya las validó el schema."""
+    """Guarda todos los valores juntos. Las reglas entre ellos ya las validó el schema."""
     camping = obtener_o_crear_camping(db)
     camping.capacidad_total = capacidad_total
     camping.porcentaje_buffer_offline = porcentaje_buffer_offline
     camping.max_personas_por_reserva = max_personas_por_reserva
+    camping.dias_cancelacion = dias_cancelacion
+    camping.porcentaje_devolucion = porcentaje_devolucion
     db.commit()
     db.refresh(camping)
     return camping

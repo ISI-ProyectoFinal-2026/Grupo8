@@ -9,6 +9,7 @@ from core.config import Settings, settings
 from core.database import SessionLocal
 from core.dependencies import get_current_user
 from main import app
+from models.configuracion import ConfiguracionCamping
 from models.user import RoleEnum, User
 from services.camping_service import PORCENTAJE_BUFFER_RECOMENDADO, obtener_o_crear_camping
 
@@ -16,7 +17,13 @@ client = TestClient(app)
 
 URL = "/api/v1/admin/configuracion"
 
-VALIDA = {"capacidad_total": 80, "porcentaje_buffer_offline": 20, "max_personas_por_reserva": 6}
+VALIDA = {
+    "capacidad_total": 80,
+    "porcentaje_buffer_offline": 20,
+    "max_personas_por_reserva": 6,
+    "dias_cancelacion": 3,
+    "porcentaje_devolucion": 50,
+}
 
 
 @pytest.fixture(autouse=True)
@@ -74,6 +81,8 @@ def _guardada() -> Dict[str, int]:
             "capacidad_total": camping.capacidad_total,
             "porcentaje_buffer_offline": camping.porcentaje_buffer_offline,
             "max_personas_por_reserva": camping.max_personas_por_reserva,
+            "dias_cancelacion": camping.dias_cancelacion,
+            "porcentaje_devolucion": camping.porcentaje_devolucion,
         }
     finally:
         db.close()
@@ -89,6 +98,8 @@ def test_el_admin_lee_la_configuracion_guardada_y_el_buffer_recomendado(headers)
         "capacidad_total": settings.CAMPING_TOTAL_CAPACITY,
         "porcentaje_buffer_offline": settings.CAMPING_PORCENTAJE_BUFFER_OFFLINE,
         "max_personas_por_reserva": settings.MAX_PERSONAS_POR_RESERVA,
+        "dias_cancelacion": settings.CAMPING_DIAS_CANCELACION,
+        "porcentaje_devolucion": settings.CAMPING_PORCENTAJE_DEVOLUCION,
         "porcentaje_buffer_recomendado": PORCENTAJE_BUFFER_RECOMENDADO,
     }
 
@@ -110,6 +121,43 @@ def test_un_camping_existente_conserva_el_buffer_guardado(configurar_camping):
     assert _guardada()["porcentaje_buffer_offline"] == 10
 
 
+def test_las_reglas_de_cancelacion_por_defecto_son_1_dia_y_100_por_ciento():
+    # Se mira el valor de config.py, no el del .env de cada máquina
+    assert Settings.model_fields["CAMPING_DIAS_CANCELACION"].default == 1
+    assert Settings.model_fields["CAMPING_PORCENTAJE_DEVOLUCION"].default == 100
+
+
+def test_un_camping_creado_sin_reglas_de_cancelacion_toma_1_dia_y_100_por_ciento():
+    # Es lo que hace la migración con los campings que ya existían
+    db = SessionLocal()
+    camping = ConfiguracionCamping(
+        camping_id=f"CAMP-TEST-{uuid.uuid4()}",
+        capacidad_total=50,
+        porcentaje_buffer_offline=20,
+        max_personas_por_reserva=10,
+        precio_base_actual=5000.0,
+    )
+    try:
+        db.add(camping)
+        db.commit()
+        db.refresh(camping)
+
+        assert camping.dias_cancelacion == 1
+        assert camping.porcentaje_devolucion == 100
+    finally:
+        db.delete(camping)
+        db.commit()
+        db.close()
+
+
+def test_un_camping_existente_conserva_las_reglas_de_cancelacion_guardadas(configurar_camping):
+    configurar_camping(dias_cancelacion=5, porcentaje_devolucion=30)
+
+    guardada = _guardada()
+    assert guardada["dias_cancelacion"] == 5
+    assert guardada["porcentaje_devolucion"] == 30
+
+
 # --- Edición ---
 
 def test_el_admin_edita_la_configuracion_y_queda_guardada(headers):
@@ -126,14 +174,18 @@ def test_el_admin_edita_la_configuracion_y_queda_guardada(headers):
                  id="sin_buffer_el_maximo_puede_ser_toda_la_capacidad"),
     pytest.param({"capacidad_total": 50, "porcentaje_buffer_offline": 10, "max_personas_por_reserva": 45},
                  id="maximo_igual_al_cupo_online"),
-    pytest.param({"capacidad_total": 1, "porcentaje_buffer_offline": 0, "max_personas_por_reserva": 1},
+    pytest.param({"capacidad_total": 1, "porcentaje_buffer_offline": 0, "max_personas_por_reserva": 1,
+                  "dias_cancelacion": 0, "porcentaje_devolucion": 0},
                  id="valores_minimos"),
+    pytest.param({"dias_cancelacion": 365, "porcentaje_devolucion": 100},
+                 id="plazo_y_devolucion_maximos"),
 ])
 def test_acepta_los_valores_limite(headers, valores):
-    response = client.put(URL, json=valores, headers=headers["ADMIN"])
+    cuerpo = {**VALIDA, **valores}
+    response = client.put(URL, json=cuerpo, headers=headers["ADMIN"])
 
     assert response.status_code == 200, response.text
-    assert _guardada() == valores
+    assert _guardada() == cuerpo
 
 
 def test_el_backend_usa_el_maximo_editado_al_cotizar(headers):
@@ -173,6 +225,14 @@ def test_el_backend_usa_el_cupo_editado_en_el_monitor_de_ocupacion(headers):
     pytest.param({"porcentaje_buffer_offline": 10.5}, id="buffer_decimal"),
     pytest.param({"max_personas_por_reserva": True}, id="maximo_booleano"),
     pytest.param({"capacidad_total": None}, id="capacidad_nula"),
+    pytest.param({"dias_cancelacion": -1}, id="plazo_negativo"),
+    pytest.param({"dias_cancelacion": 366}, id="plazo_mayor_a_un_anio"),
+    pytest.param({"dias_cancelacion": 1.5}, id="plazo_decimal"),
+    pytest.param({"dias_cancelacion": "1"}, id="plazo_texto"),
+    pytest.param({"porcentaje_devolucion": -1}, id="devolucion_negativa"),
+    pytest.param({"porcentaje_devolucion": 101}, id="devolucion_mayor_a_100"),
+    pytest.param({"porcentaje_devolucion": 50.5}, id="devolucion_decimal"),
+    pytest.param({"porcentaje_devolucion": None}, id="devolucion_nula"),
 ])
 def test_valores_invalidos_devuelven_422_y_no_cambian_nada(headers, cambios):
     antes = _guardada()
@@ -184,7 +244,7 @@ def test_valores_invalidos_devuelven_422_y_no_cambian_nada(headers, cambios):
 
 
 @pytest.mark.parametrize("campo", list(VALIDA))
-def test_los_tres_campos_son_obligatorios(headers, campo):
+def test_todos_los_campos_son_obligatorios(headers, campo):
     cuerpo = dict(VALIDA)
     del cuerpo[campo]
 

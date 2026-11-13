@@ -7,6 +7,8 @@ import {
   validarBuffer,
   validarCapacidad,
   validarConfiguracion,
+  validarDiasCancelacion,
+  validarPorcentajeDevolucion,
   type ConfiguracionFormulario,
 } from './configuracion';
 
@@ -14,6 +16,8 @@ const formValido: ConfiguracionFormulario = {
   capacidad_total: '50',
   porcentaje_buffer_offline: '10',
   max_personas_por_reserva: '10',
+  dias_cancelacion: '1',
+  porcentaje_devolucion: '100',
 };
 
 describe('buffer en personas y cupo online', () => {
@@ -84,6 +88,56 @@ describe('validación del formulario', () => {
     });
   });
 
+  it.each([
+    ['', 'Ingresá hasta cuántos días antes se puede cancelar.'],
+    ['-1', 'El plazo tiene que ser un número entero de días, sin negativos.'],
+    ['1.5', 'El plazo tiene que ser un número entero de días, sin negativos.'],
+    ['abc', 'El plazo tiene que ser un número entero de días, sin negativos.'],
+    ['366', 'El plazo no puede superar 365 días.'],
+  ])('rechaza el plazo de cancelación "%s"', (valor, mensaje) => {
+    expect(validarDiasCancelacion(valor)).toBe(mensaje);
+  });
+
+  it.each(['0', '365'])(
+    'acepta el plazo de cancelación en el límite (%s días)',
+    (valor) => {
+      expect(validarDiasCancelacion(valor)).toBeNull();
+    }
+  );
+
+  it.each([
+    ['', 'Ingresá el porcentaje que se devuelve.'],
+    ['-1', 'La devolución tiene que ser un porcentaje entero, sin decimales.'],
+    [
+      '50,5',
+      'La devolución tiene que ser un porcentaje entero, sin decimales.',
+    ],
+    ['101', 'La devolución tiene que estar entre 0 % y 100 %.'],
+  ])('rechaza la devolución "%s"', (valor, mensaje) => {
+    expect(validarPorcentajeDevolucion(valor)).toBe(mensaje);
+  });
+
+  it.each(['0', '100'])(
+    'acepta la devolución en el límite (%s %%)',
+    (valor) => {
+      expect(validarPorcentajeDevolucion(valor)).toBeNull();
+    }
+  );
+
+  it('marca cada regla de cancelación inválida en su campo', () => {
+    expect(
+      validarConfiguracion({
+        ...formValido,
+        dias_cancelacion: '-2',
+        porcentaje_devolucion: '150',
+      })
+    ).toEqual({
+      dias_cancelacion:
+        'El plazo tiene que ser un número entero de días, sin negativos.',
+      porcentaje_devolucion: 'La devolución tiene que estar entre 0 % y 100 %.',
+    });
+  });
+
   it('no compara el máximo con el cupo si el cupo es inválido', () => {
     const errores = validarConfiguracion({
       ...formValido,
@@ -101,22 +155,32 @@ describe('conversión de datos', () => {
         capacidad_total: 80,
         porcentaje_buffer_offline: 20,
         max_personas_por_reserva: 6,
+        dias_cancelacion: 3,
+        porcentaje_devolucion: 50,
         porcentaje_buffer_recomendado: 10,
       })
     ).toEqual({
       capacidad_total: '80',
       porcentaje_buffer_offline: '20',
       max_personas_por_reserva: '6',
+      dias_cancelacion: '3',
+      porcentaje_devolucion: '50',
     });
   });
 
   it('envía números enteros y sin espacios', () => {
     expect(
-      construirPayload({ ...formValido, capacidad_total: ' 80 ' })
+      construirPayload({
+        ...formValido,
+        capacidad_total: ' 80 ',
+        dias_cancelacion: ' 2 ',
+      })
     ).toEqual({
       capacidad_total: 80,
       porcentaje_buffer_offline: 10,
       max_personas_por_reserva: 10,
+      dias_cancelacion: 2,
+      porcentaje_devolucion: 100,
     });
   });
 });

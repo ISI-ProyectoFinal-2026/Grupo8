@@ -1,5 +1,5 @@
-// Configuración del camping desde el panel (/admin/configuracion): cupo, buffer offline
-// y máximo de personas por reserva. Las reglas son las mismas que valida el backend.
+// Configuración del camping desde el panel (/admin/configuracion): cupo, buffer offline,
+// máximo de personas por reserva y reglas de cancelación. Las reglas son las mismas que valida el backend.
 import { ErrorApi } from '@/lib/descuentos';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -7,12 +7,19 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 // Tope de seguridad, igual que CAPACIDAD_MAXIMA_PERMITIDA del backend
 export const CAPACIDAD_MAXIMA = 1_000_000;
 
+// Tope del plazo de cancelación, igual que DIAS_CANCELACION_MAXIMO del backend
+export const DIAS_CANCELACION_MAXIMO = 365;
+
 const ENTERO_REGEX = /^\d+$/;
 
 export interface ConfiguracionCamping {
   capacidad_total: number;
   porcentaje_buffer_offline: number;
   max_personas_por_reserva: number;
+  /** Días antes del ingreso hasta los que se puede cancelar (0 = hasta el mismo día). */
+  dias_cancelacion: number;
+  /** Porcentaje del monto pagado que se devuelve al cancelar. */
+  porcentaje_devolucion: number;
   /** Sugerencia para el buffer; no se guarda. */
   porcentaje_buffer_recomendado: number;
 }
@@ -22,6 +29,8 @@ export interface ConfiguracionFormulario {
   capacidad_total: string;
   porcentaje_buffer_offline: string;
   max_personas_por_reserva: string;
+  dias_cancelacion: string;
+  porcentaje_devolucion: string;
 }
 
 export type CampoConfiguracion = keyof ConfiguracionFormulario;
@@ -34,6 +43,8 @@ export function formularioDesdeConfiguracion(
     capacidad_total: String(config.capacidad_total),
     porcentaje_buffer_offline: String(config.porcentaje_buffer_offline),
     max_personas_por_reserva: String(config.max_personas_por_reserva),
+    dias_cancelacion: String(config.dias_cancelacion),
+    porcentaje_devolucion: String(config.porcentaje_devolucion),
   };
 }
 
@@ -80,6 +91,26 @@ export function validarBuffer(valor: string): string | null {
   return null;
 }
 
+export function validarDiasCancelacion(valor: string): string | null {
+  if (!valor.trim())
+    return 'Ingresá hasta cuántos días antes se puede cancelar.';
+  const n = parsearEntero(valor);
+  if (n === null)
+    return 'El plazo tiene que ser un número entero de días, sin negativos.';
+  if (n > DIAS_CANCELACION_MAXIMO)
+    return `El plazo no puede superar ${DIAS_CANCELACION_MAXIMO} días.`;
+  return null;
+}
+
+export function validarPorcentajeDevolucion(valor: string): string | null {
+  if (!valor.trim()) return 'Ingresá el porcentaje que se devuelve.';
+  const n = parsearEntero(valor);
+  if (n === null)
+    return 'La devolución tiene que ser un porcentaje entero, sin decimales.';
+  if (n > 100) return 'La devolución tiene que estar entre 0 % y 100 %.';
+  return null;
+}
+
 export function validarConfiguracion(
   form: ConfiguracionFormulario
 ): ErroresConfiguracion {
@@ -111,6 +142,14 @@ export function validarConfiguracion(
     }
   }
 
+  const errorDias = validarDiasCancelacion(form.dias_cancelacion);
+  if (errorDias) errores.dias_cancelacion = errorDias;
+
+  const errorDevolucion = validarPorcentajeDevolucion(
+    form.porcentaje_devolucion
+  );
+  if (errorDevolucion) errores.porcentaje_devolucion = errorDevolucion;
+
   return errores;
 }
 
@@ -119,6 +158,8 @@ export function construirPayload(form: ConfiguracionFormulario) {
     capacidad_total: Number(form.capacidad_total.trim()),
     porcentaje_buffer_offline: Number(form.porcentaje_buffer_offline.trim()),
     max_personas_por_reserva: Number(form.max_personas_por_reserva.trim()),
+    dias_cancelacion: Number(form.dias_cancelacion.trim()),
+    porcentaje_devolucion: Number(form.porcentaje_devolucion.trim()),
   };
 }
 

@@ -13,6 +13,8 @@ import {
   validarBuffer,
   validarCapacidad,
   validarConfiguracion,
+  validarDiasCancelacion,
+  validarPorcentajeDevolucion,
   type ConfiguracionFormulario,
   type ErroresConfiguracion,
 } from '@/lib/configuracion';
@@ -30,7 +32,18 @@ const formularioVacio: ConfiguracionFormulario = {
   capacidad_total: '',
   porcentaje_buffer_offline: '',
   max_personas_por_reserva: '',
+  dias_cancelacion: '',
+  porcentaje_devolucion: '',
 };
+
+/** Frase que resume las reglas de cancelación tal como las va a ver el socio. */
+function resumenCancelacion(dias: number, porcentaje: number): string {
+  const plazo =
+    dias === 0
+      ? 'hasta el mismo día del ingreso'
+      : `hasta ${dias} ${dias === 1 ? 'día' : 'días'} antes del ingreso`;
+  return `Los socios pueden cancelar ${plazo} y se les devuelve el ${porcentaje} % de lo que pagaron.`;
+}
 
 export default function Configuracion() {
   const { token } = useAuth();
@@ -111,6 +124,17 @@ export default function Configuracion() {
     ? bufferEnPersonas(capacidad, porcentaje)
     : null;
 
+  // Resumen de cancelación: solo si los dos valores son válidos
+  const reglasValidas =
+    !validarDiasCancelacion(form.dias_cancelacion) &&
+    !validarPorcentajeDevolucion(form.porcentaje_devolucion);
+  const textoCancelacion = reglasValidas
+    ? resumenCancelacion(
+        Number(form.dias_cancelacion.trim()),
+        Number(form.porcentaje_devolucion.trim())
+      )
+    : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -119,8 +143,8 @@ export default function Configuracion() {
         </h1>
         <p className="mt-1 text-zinc-600">
           Definí cuántas personas entran al camping, qué parte del cupo se
-          guarda para los ingresos en la puerta y cuántas personas puede tener
-          cada reserva.
+          guarda para los ingresos en la puerta, cuántas personas puede tener
+          cada reserva y las reglas para cancelar una reserva.
         </p>
       </div>
 
@@ -133,28 +157,34 @@ export default function Configuracion() {
         </p>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Cupo y reservas</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {cargando ? (
-            <p className="text-zinc-600">Cargando configuración…</p>
-          ) : errorCarga ? (
-            <div className="space-y-3">
-              <p role="alert" className="text-red-700">
-                {errorCarga}
-              </p>
-              <Button variant="outline" onClick={() => void cargar()}>
-                Reintentar
-              </Button>
-            </div>
-          ) : (
-            <form
-              onSubmit={guardar}
-              noValidate
-              className="grid gap-4 sm:grid-cols-3"
-            >
+      {cargando || errorCarga ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Cupo y reservas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {cargando ? (
+              <p className="text-zinc-600">Cargando configuración…</p>
+            ) : (
+              <div className="space-y-3">
+                <p role="alert" className="text-red-700">
+                  {errorCarga}
+                </p>
+                <Button variant="outline" onClick={() => void cargar()}>
+                  Reintentar
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        // Un solo formulario para las dos tarjetas: se guardan todos los valores juntos
+        <form onSubmit={guardar} noValidate className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Cupo y reservas</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-3">
               <div>
                 <Label htmlFor="config-capacidad">
                   Cupo máximo del camping (personas)
@@ -238,22 +268,78 @@ export default function Configuracion() {
                   puerta.
                 </p>
               )}
+            </CardContent>
+          </Card>
 
-              {errorServidor && (
-                <p role="alert" className="text-sm text-red-600 sm:col-span-3">
-                  {errorServidor}
+          <Card>
+            <CardHeader>
+              <CardTitle>Cancelaciones</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="config-dias-cancelacion">
+                  Cancelar hasta (días antes del ingreso)
+                </Label>
+                <Input
+                  id="config-dias-cancelacion"
+                  className="mt-1"
+                  inputMode="numeric"
+                  value={form.dias_cancelacion}
+                  aria-invalid={!!errores.dias_cancelacion}
+                  aria-describedby="config-dias-cancelacion-ayuda"
+                  onChange={(e) => cambiar('dias_cancelacion', e.target.value)}
+                />
+                <MensajeError texto={errores.dias_cancelacion} />
+                <p
+                  id="config-dias-cancelacion-ayuda"
+                  className="mt-1 text-xs text-zinc-500"
+                >
+                  Con 0, se puede cancelar hasta el mismo día del ingreso.
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="config-devolucion">Devolución (%)</Label>
+                <Input
+                  id="config-devolucion"
+                  className="mt-1"
+                  inputMode="numeric"
+                  value={form.porcentaje_devolucion}
+                  aria-invalid={!!errores.porcentaje_devolucion}
+                  aria-describedby="config-devolucion-ayuda"
+                  onChange={(e) =>
+                    cambiar('porcentaje_devolucion', e.target.value)
+                  }
+                />
+                <MensajeError texto={errores.porcentaje_devolucion} />
+                <p
+                  id="config-devolucion-ayuda"
+                  className="mt-1 text-xs text-zinc-500"
+                >
+                  Parte de lo pagado que se devuelve por Mercado Pago al
+                  cancelar.
+                </p>
+              </div>
+
+              {textoCancelacion && (
+                <p className="rounded-md bg-zinc-50 px-3 py-2 text-sm text-zinc-700 sm:col-span-2">
+                  {textoCancelacion}
                 </p>
               )}
+            </CardContent>
+          </Card>
 
-              <div className="sm:col-span-3">
-                <Button type="submit" disabled={guardando}>
-                  {guardando ? 'Guardando…' : 'Guardar'}
-                </Button>
-              </div>
-            </form>
+          {errorServidor && (
+            <p role="alert" className="text-sm text-red-600">
+              {errorServidor}
+            </p>
           )}
-        </CardContent>
-      </Card>
+
+          <Button type="submit" disabled={guardando}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </form>
+      )}
     </div>
   );
 }
