@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import DialogoCancelacion from "@/components/DialogoCancelacion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import {
   obtenerMisReservas,
   type CategoriaReserva,
   type ReservaDetalle,
+  type ResultadoCancelacion,
 } from "@/lib/misReservas";
 import { CalendarX2, QrCode, RefreshCw } from "lucide-react";
 
@@ -39,6 +41,10 @@ export default function MisReservas() {
 
   const [descargandoId, setDescargandoId] = useState<string | null>(null);
   const [errorQr, setErrorQr] = useState<string | null>(null);
+
+  // Reserva cuyo diálogo de cancelación está abierto, y el resultado de la última cancelación
+  const [reservaACancelar, setReservaACancelar] = useState<ReservaDetalle | null>(null);
+  const [avisoCancelacion, setAvisoCancelacion] = useState<string | null>(null);
 
   const cargarReservas = useCallback(
     async (signal?: AbortSignal) => {
@@ -113,6 +119,24 @@ export default function MisReservas() {
     }
   };
 
+  const abrirCancelacion = (reserva: ReservaDetalle) => {
+    setAvisoCancelacion(null);
+    setReservaACancelar(reserva);
+  };
+
+  // La reserva pasa a Canceladas con la respuesta del backend, sin volver a pedir la lista
+  const alCancelar = (resultado: ResultadoCancelacion) => {
+    setReservas((anteriores) =>
+      anteriores.map((r) =>
+        r.id === resultado.id
+          ? { ...r, estado_reserva: resultado.estado_reserva, estado_pago: resultado.estado_pago }
+          : r
+      )
+    );
+    setAvisoCancelacion(resultado.mensaje);
+    setReservaACancelar(null);
+  };
+
   // Sin sesión no hay reservas propias para mostrar
   if (!token) {
     return (
@@ -171,7 +195,16 @@ export default function MisReservas() {
           <div className="flex gap-2 w-full md:w-auto">
 
             {/* Lógica para reservas PAGADAS / PRÓXIMAS */}
-            {/* "Cancelar" vuelve en el Sprint 6, con la cancelación de reservas */}
+            {/* "Cancelar" se muestra siempre: si está fuera de plazo, el diálogo explica por qué */}
+            {categoria === 'proxima' && (
+              <Button
+                variant="outline"
+                onClick={() => abrirCancelacion(reserva)}
+                className="flex-1 md:flex-none"
+              >
+                Cancelar
+              </Button>
+            )}
             {categoria === 'proxima' && (
               <Button
                 onClick={() => bajarQr(reserva.id)}
@@ -223,6 +256,12 @@ export default function MisReservas() {
         <p role="alert" className="text-center mb-6 text-red-600">{errorQr}</p>
       )}
 
+      {avisoCancelacion && (
+        <p role="status" className="mb-6 rounded-md bg-green-50 px-3 py-2 text-center text-green-800">
+          {avisoCancelacion}
+        </p>
+      )}
+
       {!error && !(cargando && reservas.length === 0) && (
         <Tabs defaultValue="pendiente" className="w-full">
           <TabsList className="grid w-full grid-cols-4 mb-8">
@@ -235,6 +274,13 @@ export default function MisReservas() {
           ))}
         </Tabs>
       )}
+
+      <DialogoCancelacion
+        reserva={reservaACancelar}
+        token={token}
+        onCerrar={() => setReservaACancelar(null)}
+        onCancelada={alCancelar}
+      />
     </div>
   );
 }

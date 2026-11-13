@@ -4,8 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AUTH_EXPIRED_EVENT } from '@/context/AuthContext';
 import {
   agruparReservas,
+  cancelarReserva,
   clasificarReserva,
   hoyISO,
+  obtenerCondicionesCancelacion,
   obtenerMisReservas,
   type EstadoReserva,
 } from './misReservas';
@@ -114,6 +116,79 @@ describe('obtenerMisReservas', () => {
     await expect(obtenerMisReservas('token')).rejects.toThrow(/no pudimos cargar tus reservas/i);
 
     expect(escuchador).not.toHaveBeenCalled();
+    window.removeEventListener(AUTH_EXPIRED_EVENT, escuchador);
+  });
+});
+
+describe('cancelación de reservas', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function respuesta(status: number, cuerpo: unknown) {
+    return { ok: status < 400, status, json: async () => cuerpo } as unknown as Response;
+  }
+
+  it('pide las condiciones de la reserva con el token', async () => {
+    const condiciones = {
+      puede_cancelar: true,
+      dias_minimos: 1,
+      fecha_limite: '2099-01-09',
+      porcentaje_devolucion: 100,
+      monto_devolucion: 15000,
+      mensaje: null,
+    };
+    const fetchFalso = vi.fn(async () => respuesta(200, condiciones));
+    vi.stubGlobal('fetch', fetchFalso);
+
+    expect(await obtenerCondicionesCancelacion('tok', 'r-1')).toEqual(condiciones);
+    const [url, opciones] = fetchFalso.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url.endsWith('/reservas/r-1/cancelacion')).toBe(true);
+    expect((opciones.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+  });
+
+  it('cancela con POST y devuelve el resultado', async () => {
+    const resultado = { id: 'r-1', estado_reserva: 'Cancelada', monto_devuelto: 15000 };
+    const fetchFalso = vi.fn(async () => respuesta(200, resultado));
+    vi.stubGlobal('fetch', fetchFalso);
+
+    expect(await cancelarReserva('tok', 'r-1')).toEqual(resultado);
+    const [url, opciones] = fetchFalso.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url.endsWith('/reservas/r-1/cancelar')).toBe(true);
+    expect(opciones.method).toBe('POST');
+  });
+
+  it('un 422 trae el motivo del backend', async () => {
+    const motivo = 'Lo sentimos, las reservas solo se pueden cancelar hasta 1 día antes del ingreso.';
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta(422, { detail: motivo })));
+
+    await expect(cancelarReserva('tok', 'r-1')).rejects.toMatchObject({ message: motivo, status: 422 });
+  });
+
+  it('una reserva de otro usuario (404) avisa que no se encontró', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta(404, { detail: 'Reserva no encontrada.' })));
+
+    await expect(obtenerCondicionesCancelacion('tok', 'r-1')).rejects.toMatchObject({
+      message: 'No encontramos la reserva.',
+      status: 404,
+    });
+  });
+
+  it('un error del servidor usa un mensaje genérico', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta(500, { detail: 'Traceback...' })));
+
+    await expect(cancelarReserva('tok', 'r-1')).rejects.toMatchObject({
+      message: 'No pudimos cancelar la reserva. Intentá nuevamente.',
+    });
+  });
+
+  it('con la sesión vencida avisa a la app para que la cierre', async () => {
+    const escuchador = vi.fn();
+    window.addEventListener(AUTH_EXPIRED_EVENT, escuchador);
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta(401, {})));
+
+    await expect(cancelarReserva('tok', 'r-1')).rejects.toMatchObject({ status: 401 });
+    expect(escuchador).toHaveBeenCalled();
     window.removeEventListener(AUTH_EXPIRED_EVENT, escuchador);
   });
 });
