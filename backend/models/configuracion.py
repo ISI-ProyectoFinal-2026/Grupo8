@@ -14,6 +14,9 @@ class ConfiguracionCamping(Base):
     porcentaje_buffer_offline = Column(Integer, nullable=False)
     max_personas_por_reserva = Column(Integer, nullable=False)
     precio_base_actual = Column(Float, nullable=False)
+    # Reglas de cancelación: hasta cuántos días antes del ingreso se puede cancelar y qué porcentaje se devuelve
+    dias_cancelacion = Column(Integer, nullable=False, server_default="1")
+    porcentaje_devolucion = Column(Integer, nullable=False, server_default="100")
 
     # Acá está la restricción (Constraint/Unique) que pide el DoD
     __table_args__ = (

@@ -31,6 +31,8 @@ const GUARDADA: ConfiguracionCamping = {
   capacidad_total: 50,
   porcentaje_buffer_offline: 10,
   max_personas_por_reserva: 10,
+  dias_cancelacion: 1,
+  porcentaje_devolucion: 100,
   porcentaje_buffer_recomendado: 20,
 };
 
@@ -157,7 +159,7 @@ describe('Pantalla de configuración del camping (Issue 19.1)', () => {
     );
   });
 
-  it('guarda los tres valores como números y avisa', async () => {
+  it('guarda todos los valores como números y avisa', async () => {
     simularApi(GUARDADA);
     mostrar();
     await waitFor(() => expect(campo(/cupo máximo/i).value).toBe('50'));
@@ -172,6 +174,8 @@ describe('Pantalla de configuración del camping (Issue 19.1)', () => {
       capacidad_total: 80,
       porcentaje_buffer_offline: 20,
       max_personas_por_reserva: 6,
+      dias_cancelacion: 1,
+      porcentaje_devolucion: 100,
     });
   });
 
@@ -256,5 +260,86 @@ describe('Pantalla de configuración del camping (Issue 19.1)', () => {
 
     await waitFor(() => expect(escuchador).toHaveBeenCalled());
     window.removeEventListener(AUTH_EXPIRED_EVENT, escuchador);
+  });
+});
+
+describe('Reglas de cancelación en la pantalla de configuración (Issue 22.1)', () => {
+  beforeEach(() => {
+    llamadas = [];
+    localStorage.clear();
+    localStorage.setItem(TOKEN_KEY, crearToken());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it('muestra el plazo y la devolución guardados con su resumen', async () => {
+    simularApi({ ...GUARDADA, dias_cancelacion: 3, porcentaje_devolucion: 50 });
+
+    mostrar();
+
+    await waitFor(() => expect(campo(/cancelar hasta/i).value).toBe('3'));
+    expect(campo(/devolución/i).value).toBe('50');
+    expect(screen.getByText(/los socios pueden cancelar/i).textContent).toBe(
+      'Los socios pueden cancelar hasta 3 días antes del ingreso y se les devuelve el 50 % de lo que pagaron.'
+    );
+  });
+
+  it('con plazo 0 explica que se puede cancelar hasta el mismo día', async () => {
+    simularApi(GUARDADA);
+    mostrar();
+    await waitFor(() => expect(campo(/cancelar hasta/i).value).toBe('1'));
+
+    expect(screen.getByText(/los socios pueden cancelar/i).textContent).toBe(
+      'Los socios pueden cancelar hasta 1 día antes del ingreso y se les devuelve el 100 % de lo que pagaron.'
+    );
+
+    escribir(/cancelar hasta/i, '0');
+    expect(screen.getByText(/los socios pueden cancelar/i).textContent).toBe(
+      'Los socios pueden cancelar hasta el mismo día del ingreso y se les devuelve el 100 % de lo que pagaron.'
+    );
+  });
+
+  it('guarda el plazo y la devolución editados junto con el resto', async () => {
+    simularApi(GUARDADA);
+    mostrar();
+    await waitFor(() => expect(campo(/cancelar hasta/i).value).toBe('1'));
+
+    escribir(/cancelar hasta/i, '7');
+    escribir(/devolución/i, '80');
+    fireEvent.click(screen.getByRole('button', { name: /^guardar$/i }));
+
+    expect(await screen.findByText('Configuración guardada.')).toBeTruthy();
+    expect(pedidosDe('PUT')[0].cuerpo).toEqual({
+      capacidad_total: 50,
+      porcentaje_buffer_offline: 10,
+      max_personas_por_reserva: 10,
+      dias_cancelacion: 7,
+      porcentaje_devolucion: 80,
+    });
+    expect(campo(/cancelar hasta/i).value).toBe('7');
+    expect(campo(/devolución/i).value).toBe('80');
+  });
+
+  it('no envía nada si el plazo es negativo o la devolución pasa del 100 %', async () => {
+    simularApi(GUARDADA);
+    mostrar();
+    await waitFor(() => expect(campo(/cancelar hasta/i).value).toBe('1'));
+
+    escribir(/cancelar hasta/i, '-1');
+    escribir(/devolución/i, '120');
+    fireEvent.click(screen.getByRole('button', { name: /^guardar$/i }));
+
+    expect(
+      await screen.findByText(
+        'El plazo tiene que ser un número entero de días, sin negativos.'
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByText('La devolución tiene que estar entre 0 % y 100 %.')
+    ).toBeTruthy();
+    expect(screen.queryByText(/los socios pueden cancelar/i)).toBeNull();
+    expect(pedidosDe('PUT')).toHaveLength(0);
   });
 });

@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     MAX_NOCHES_POR_RESERVA: int = 10
     # Plazo para pagar una reserva PENDIENTE: al vencer libera el cupo, se cancela y el link de pago deja de funcionar
     RESERVA_PENDIENTE_TTL_MINUTES: int = 10
+    # Reglas de cancelación: valores iniciales, después se editan desde el panel (Configuración).
+    # Se puede cancelar hasta N días antes del ingreso (0 = hasta el mismo día) y se devuelve ese porcentaje
+    CAMPING_DIAS_CANCELACION: int = 1
+    CAMPING_PORCENTAJE_DEVOLUCION: int = 100
 
     # --- Tarifas ---
     PRECIO_BASE_POR_PERSONA: float = 5000.0
