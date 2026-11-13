@@ -5,7 +5,7 @@ import jwt
 import pytest
 from fastapi.testclient import TestClient
 
-from core.config import settings
+from core.config import Settings, settings
 from core.database import SessionLocal
 from core.dependencies import get_current_user
 from main import app
@@ -93,9 +93,21 @@ def test_el_admin_lee_la_configuracion_guardada_y_el_buffer_recomendado(headers)
     }
 
 
-def test_el_buffer_recomendado_es_10_por_ciento():
-    # Equivale a los 5 lugares sobre 50 que se usaban antes
-    assert PORCENTAJE_BUFFER_RECOMENDADO == 10
+def test_el_buffer_recomendado_es_20_por_ciento():
+    # La web vende hasta el 80 % del cupo, como pide el documento del proyecto
+    assert PORCENTAJE_BUFFER_RECOMENDADO == 20
+
+
+def test_el_buffer_por_defecto_es_20_por_ciento():
+    # Se mira el valor de config.py, no el del .env de cada máquina
+    assert Settings.model_fields["CAMPING_PORCENTAJE_BUFFER_OFFLINE"].default == 20
+
+
+def test_un_camping_existente_conserva_el_buffer_guardado(configurar_camping):
+    configurar_camping(porcentaje_buffer_offline=10)
+
+    # Volver a pedir la configuración no la pisa con el valor por defecto
+    assert _guardada()["porcentaje_buffer_offline"] == 10
 
 
 # --- Edición ---

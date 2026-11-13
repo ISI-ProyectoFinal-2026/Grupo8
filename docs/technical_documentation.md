@@ -279,7 +279,7 @@ Permite al administrador saber cuántas personas hay dentro del camping y cuánt
 * **Nunca negativa:** Si se registran egresos antes de que lleguen los ingresos offline, la ocupación queda en 0 hasta que los guardias sincronicen.
 
 
-* **Capacidad y buffer:** Salen de `configuracion_camping`, que el administrador edita desde el panel (Issue 19.1). El buffer se guarda como porcentaje y se informa en personas, redondeado hacia arriba.
+* **Capacidad y buffer:** Salen de `configuracion_camping`, que el administrador edita desde el panel (Issue 19.1). El buffer es un margen configurable, 20 % por defecto: la web vende hasta el 80 % del cupo y el resto queda para los ingresos en la puerta. Se guarda como porcentaje y se informa en personas, redondeado hacia arriba. Cambiar el valor por defecto no modifica los campings que ya tienen uno guardado.
 
 
 

@@ -31,7 +31,7 @@ const GUARDADA: ConfiguracionCamping = {
   capacidad_total: 50,
   porcentaje_buffer_offline: 10,
   max_personas_por_reserva: 10,
-  porcentaje_buffer_recomendado: 10,
+  porcentaje_buffer_recomendado: 20,
 };
 
 interface LlamadaFetch {
@@ -66,7 +66,7 @@ function simularApi(config: ConfiguracionCamping, alGuardar?: () => Response) {
       if (llamada.metodo === 'GET') return respuesta(200, config);
       return (
         alGuardar?.() ??
-        respuesta(200, { ...llamada.cuerpo, porcentaje_buffer_recomendado: 10 })
+        respuesta(200, { ...llamada.cuerpo, porcentaje_buffer_recomendado: 20 })
       );
     })
   );
@@ -130,12 +130,12 @@ describe('Pantalla de configuración del camping (Issue 19.1)', () => {
     mostrar();
     await waitFor(() => expect(campo(/buffer offline/i).value).toBe('25'));
 
-    expect(screen.getByText(/recomendado: 10 %/i)).toBeTruthy();
+    expect(screen.getByText(/recomendado: 20 %/i)).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: /usar el recomendado/i })
     );
 
-    expect(campo(/buffer offline/i).value).toBe('10');
+    expect(campo(/buffer offline/i).value).toBe('20');
     expect(
       screen.queryByRole('button', { name: /usar el recomendado/i })
     ).toBeNull();

@@ -208,9 +208,9 @@ Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las ho
 * **Descripción:** Cupo máximo del camping, porcentaje de buffer offline y máximo de personas por reserva, tal como están guardados en `configuracion_camping`. Si la fila no existe, se crea con los valores del `.env`.
 * **Respuesta Exitosa (200 OK):**
 ```json
-{ "capacidad_total": 50, "porcentaje_buffer_offline": 10, "max_personas_por_reserva": 10, "porcentaje_buffer_recomendado": 10 }
+{ "capacidad_total": 50, "porcentaje_buffer_offline": 20, "max_personas_por_reserva": 10, "porcentaje_buffer_recomendado": 20 }
 ```
-* `porcentaje_buffer_recomendado` es la sugerencia que muestra el formulario (10 %, que equivale a 5 lugares sobre 50); no se guarda.
+* `porcentaje_buffer_recomendado` es la sugerencia que muestra el formulario (20 %, que equivale a 10 lugares sobre 50); no se guarda.
 
 ### `PUT /api/v1/admin/configuracion`
 
