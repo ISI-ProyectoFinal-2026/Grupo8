@@ -278,6 +278,28 @@ def test_con_backend_local_no_se_envia_notification_url(monkeypatch, reserva_pen
     assert preferencia["back_urls"]["success"] == "http://localhost:5173/pago/exito"
 
 
+def test_con_frontend_publicado_vuelve_solo_a_la_web(monkeypatch, reserva_pendiente):
+    preferencia = _crear_preferencia(
+        monkeypatch, reserva_pendiente,
+        frontend_url="https://qamp-web.example.com",
+        backend_url="https://qamp-api.example.com",
+    )
+
+    assert preferencia["auto_return"] == "approved"
+
+
+@pytest.mark.parametrize("frontend_url", ["http://localhost:5173", "http://127.0.0.1:5173", ""])
+def test_con_frontend_local_no_se_envia_auto_return(monkeypatch, reserva_pendiente, frontend_url):
+    # Mercado Pago rechaza la preferencia si pide auto_return con back_urls locales
+    preferencia = _crear_preferencia(
+        monkeypatch, reserva_pendiente,
+        frontend_url=frontend_url,
+        backend_url="https://qamp-api.example.com",
+    )
+
+    assert "auto_return" not in preferencia
+
+
 def test_payments_no_tiene_direcciones_fijas():
     codigo = Path(payments_module.__file__).read_text(encoding="utf-8")
 

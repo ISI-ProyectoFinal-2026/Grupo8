@@ -82,13 +82,22 @@ def urls_de_retorno() -> dict:
     }
 
 
+def _es_direccion_publica(url: str) -> bool:
+    return bool(url) and urlparse(url).hostname not in HOSTS_LOCALES
+
+
 def url_de_avisos() -> str | None:
     """notification_url de la preferencia, o None si el backend no tiene una dirección pública.
     Sin ella Mercado Pago no envía avisos y el pago se confirma con la reconciliación."""
     backend = settings.BACKEND_PUBLIC_URL.rstrip("/")
-    if not backend or urlparse(backend).hostname in HOSTS_LOCALES:
+    if not _es_direccion_publica(backend):
         return None
     return f"{backend}/api/payments/webhook"
+
+
+def usa_retorno_automatico() -> bool:
+    """Mercado Pago rechaza auto_return si las back_urls apuntan a una dirección local."""
+    return _es_direccion_publica(settings.FRONTEND_URL.rstrip("/"))
 
 
 def limpiar_respuesta_mp(respuesta: dict) -> dict:

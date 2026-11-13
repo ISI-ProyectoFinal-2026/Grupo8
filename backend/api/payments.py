@@ -10,6 +10,7 @@ from services.payment_service import (
     registrar_pago,
     url_de_avisos,
     urls_de_retorno,
+    usa_retorno_automatico,
 )
 from core.config import settings
 from services.capacity_service import plazo_vencido, vencimiento_pago
@@ -73,10 +74,6 @@ async def create_payment_preference(request: PaymentRequest, db: Session = Depen
             }
         ],
         "back_urls": urls_de_retorno(),
-
-        # Mercado Pago no permite auto_return con direcciones locales; se activa al publicar (17.6)
-        #"auto_return": "approved",
-        
         "external_reference": str(reserva.id),
 
         # El link de pago vence junto con el plazo de la reserva
@@ -85,6 +82,10 @@ async def create_payment_preference(request: PaymentRequest, db: Session = Depen
         # Sin efectivo (Pago Fácil, Rapipago): se acredita días después, con la reserva ya vencida
         "payment_methods": {"excluded_payment_types": [{"id": "ticket"}, {"id": "atm"}]},
     }
+
+    # Con el pago aprobado, Mercado Pago devuelve solo al cliente a la web
+    if usa_retorno_automatico():
+        preference_data["auto_return"] = "approved"
 
     notification_url = url_de_avisos()
     if notification_url:
