@@ -1,39 +1,19 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { AccesoDenegado } from "@/components/auth/AccesoDenegado";
+import { FormularioLogin } from "@/components/auth/FormularioLogin";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { useAuth } from "@/context/AuthContext";
-import { ErrorLogin, RUTA_POR_ROL, solicitarLogin } from "@/lib/auth";
+import { RUTA_POR_ROL } from "@/lib/auth";
 import { Tent } from "lucide-react";
-import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 
+/** Inicio de sesión de la web de reservas: solo para socios. */
 export default function Login() {
-  const { rol, iniciarSesion } = useAuth();
-  const [identificacion, setIdentificacion] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [enviando, setEnviando] = useState(false);
+  const { rol } = useAuth();
 
-  // Con la sesión abierta no hace falta el formulario: va directo a la pantalla de su rol
-  if (rol) return <Navigate to={RUTA_POR_ROL[rol]} replace />;
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setEnviando(true);
-    try {
-      const token = await solicitarLogin(identificacion, password);
-      // Al abrir la sesión esta pantalla redirige sola según el rol
-      if (!iniciarSesion(token)) setError("No se pudo iniciar la sesión. Intentá de nuevo.");
-    } catch (err) {
-      setError(
-        err instanceof ErrorLogin ? err.message : "Ocurrió un error inesperado. Intentá de nuevo."
-      );
-    } finally {
-      setEnviando(false);
-    }
-  };
+  // Con la sesión de socio abierta no hace falta el formulario
+  if (rol === "CLIENTE") return <Navigate to={RUTA_POR_ROL.CLIENTE} replace />;
+  // Un guardia o un administrador con sesión no tiene nada que hacer acá
+  if (rol) return <AccesoDenegado />;
 
   return (
     <div className="container mx-auto px-4 py-16 max-w-md flex flex-col items-center justify-center min-h-[80vh]">
@@ -44,48 +24,11 @@ export default function Login() {
 
       <Card className="w-full shadow-lg border-zinc-200">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Iniciar Sesión</CardTitle>
+          <h1 className="text-2xl font-semibold leading-none tracking-tight">Iniciar Sesión</h1>
           <CardDescription>Ingresá con tu DNI o Correo Electrónico</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="identificacion">DNI o Email</Label>
-              <Input
-                id="identificacion"
-                required
-                autoComplete="username"
-                placeholder="ej: emiliana@correo.com o 12345678"
-                value={identificacion}
-                onChange={(e) => setIdentificacion(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-
-            {error && (
-              <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </p>
-            )}
-
-            <Button
-              type="submit"
-              disabled={enviando}
-              className="w-full bg-green-600 hover:bg-green-700 h-11 text-md mt-4"
-            >
-              {enviando ? "Ingresando..." : "Ingresar"}
-            </Button>
-          </form>
+          <FormularioLogin roles={["CLIENTE"]} claseBoton="bg-green-600 hover:bg-green-700" />
         </CardContent>
       </Card>
     </div>

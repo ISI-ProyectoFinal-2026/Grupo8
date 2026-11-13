@@ -1,0 +1,30 @@
+{
+  "id": "/admin/",
+  "name": "Qamp Admin",
+  "short_name": "Qamp Admin",
+  "description": "Panel de administración de Qamp",
+  "start_url": "/admin/",
+  "scope": "/admin/",
+  "display": "standalone",
+  "theme_color": "#18181b",
+  "background_color": "#f4f4f5",
+  "lang": "es-AR",
+  "icons": [
+    {
+      "src": "/admin-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/admin-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/admin-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
