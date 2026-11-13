@@ -10,6 +10,7 @@ from core.database import Base, SessionLocal, engine
 from core.dependencies import get_current_user
 from main import app
 from models.user import RoleEnum, User
+from schemas.reserva import hoy_argentina
 from services.auth_service import hash_password, verificar_password
 
 Base.metadata.create_all(bind=engine)
@@ -166,6 +167,101 @@ def test_body_incompleto_da_422():
     response = client.post("/auth/login", json={"identificador": "41234567"})
 
     assert response.status_code == 422
+
+
+# --- Solo socios en la web de reservas ---
+
+@pytest.fixture(scope="module")
+def clientes():
+    """Un visitante con contraseña y socios en cada estado de membresía."""
+    hoy = hoy_argentina()
+    datos = {
+        "VISITANTE": {"is_socio": False, "membresia_vence": None, "activo": True},
+        "SOCIO_VIGENTE": {"is_socio": True, "membresia_vence": hoy + timedelta(days=30), "activo": True},
+        "SOCIO_VENCIDO": {"is_socio": True, "membresia_vence": hoy - timedelta(days=1), "activo": True},
+        "SOCIO_DE_BAJA": {"is_socio": True, "membresia_vence": hoy + timedelta(days=30), "activo": False},
+    }
+    db = SessionLocal()
+    creados = {}
+    try:
+        for clave, campos in datos.items():
+            usuario = User(
+                email=f"auth_{clave.lower()}_{uuid.uuid4().hex[:8]}@grupo8.com",
+                password_hash=hash_password(PASSWORD),
+                nombre=f"Cliente {clave}",
+                dni=str(uuid.uuid4().int)[:8],
+                rol=RoleEnum.CLIENTE,
+                **campos,
+            )
+            db.add(usuario)
+            db.commit()
+            db.refresh(usuario)
+            creados[clave] = {"id": usuario.id, "email": usuario.email, "dni": usuario.dni}
+    finally:
+        db.close()
+
+    yield creados
+
+    db = SessionLocal()
+    try:
+        ids = [u["id"] for u in creados.values()]
+        db.query(User).filter(User.id.in_(ids)).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize("campo", ["email", "dni"])
+def test_visitante_con_contrasena_no_inicia_sesion(clientes, campo):
+    response = _login(clientes["VISITANTE"][campo])
+
+    assert response.status_code == 401
+    assert response.json() == CREDENCIALES_INVALIDAS
+
+
+def test_visitante_recibe_lo_mismo_que_una_contrasena_incorrecta(clientes):
+    correcta = _login(clientes["VISITANTE"]["email"])
+    incorrecta = _login(clientes["VISITANTE"]["email"], "otra-clave-123")
+
+    assert correcta.status_code == incorrecta.status_code == 401
+    assert correcta.json() == incorrecta.json()
+    assert correcta.headers.get("www-authenticate") == incorrecta.headers.get("www-authenticate")
+
+
+def test_socio_vigente_inicia_sesion(clientes):
+    response = _login(clientes["SOCIO_VIGENTE"]["email"])
+
+    assert response.status_code == 200
+    usuario = response.json()["usuario"]
+    assert usuario["is_socio"] is True
+    assert usuario["membresia_vigente"] is True
+
+
+def test_socio_con_membresia_vencida_inicia_sesion(clientes):
+    response = _login(clientes["SOCIO_VENCIDO"]["email"])
+
+    assert response.status_code == 200
+    usuario = response.json()["usuario"]
+    assert usuario["is_socio"] is True
+    # Entra igual, para poder ver en Perfil que tiene la cuota vencida
+    assert usuario["membresia_vigente"] is False
+
+
+def test_socio_dado_de_baja_no_inicia_sesion(clientes):
+    response = _login(clientes["SOCIO_DE_BAJA"]["email"])
+
+    assert response.status_code == 401
+    assert response.json() == CREDENCIALES_INVALIDAS
+
+
+@pytest.mark.parametrize("rol", ["ADMIN", "SEGURIDAD"])
+def test_admin_y_guardia_inician_sesion_sin_ser_socios(usuarios, rol):
+    response = _login(usuarios[rol]["email"])
+
+    assert response.status_code == 200
+    usuario = response.json()["usuario"]
+    assert usuario["rol"] == rol
+    assert usuario["is_socio"] is False
 
 
 # --- GET /auth/me ---

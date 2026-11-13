@@ -5,6 +5,7 @@ from models.ingreso_fisico import IngresoFisico  # noqa: F401 (SQLAlchemy lo nec
 from services.camping_service import obtener_o_crear_camping
 from services.pricing_service import PersonaPrecio, PricingService
 from services.auth_service import hash_password
+from services.usuario_prueba_service import PASSWORD_HASH_NO_UTILIZABLE
 from schemas.reserva import hoy_argentina
 from datetime import datetime, timedelta
 
@@ -30,13 +31,15 @@ def run_seed():
     print("Usuarios base creados.")
 
     # 3. Crear 5 usuarios (2 socios, 3 visitantes)
+    # Solo los socios inician sesión en la web de reservas. Los visitantes existen
+    # para tener reservas a su nombre, pero no tienen una contraseña utilizable
     usuarios = []
     password_usuarios = hash_password("pass1234")
     for i in range(5):
         es_socio = i < 2
         u = User(
             email=f"user{i}@test.com", 
-            password_hash=password_usuarios, 
+            password_hash=password_usuarios if es_socio else PASSWORD_HASH_NO_UTILIZABLE, 
             nombre=f"Persona {i}", 
             dni=f"333{i}", 
             is_socio=es_socio,
