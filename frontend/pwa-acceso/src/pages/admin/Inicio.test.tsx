@@ -21,6 +21,8 @@ vi.mock('@/context/AuthContext', () => ({
 }));
 // El resumen de cobros tiene sus propios tests; acá solo se prueba el monitor
 vi.mock('@/components/admin/ResumenCobros', () => ({ ResumenCobros: () => null }));
+// Las personas esperadas también tienen sus propios tests
+vi.mock('@/components/admin/PersonasEsperadas', () => ({ PersonasEsperadas: () => null }));
 
 const ocupacion = (actual: number, capacidad = 50, buffer = 5): Ocupacion => ({
   ocupacion_actual: actual,

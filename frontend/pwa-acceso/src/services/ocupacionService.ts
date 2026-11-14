@@ -7,6 +7,12 @@ export interface Ocupacion {
   buffer_offline: number;
 }
 
+/** Reservas web que se esperan hoy y todavía no ingresaron. */
+export interface Esperados {
+  reservas: number;
+  personas: number;
+}
+
 export interface Egreso {
   id: string;
   cantidad_personas: number;
@@ -53,6 +59,18 @@ export async function obtenerOcupacion(
   });
   if (!response.ok) throw await leerError(response);
   return (await response.json()) as Ocupacion;
+}
+
+export async function obtenerEsperados(
+  token: string | null,
+  signal?: AbortSignal
+): Promise<Esperados> {
+  const response = await fetch(`${API_URL}/api/v1/admin/esperados`, {
+    headers: cabeceras(token),
+    signal,
+  });
+  if (!response.ok) throw await leerError(response);
+  return (await response.json()) as Esperados;
 }
 
 export async function registrarEgreso(
