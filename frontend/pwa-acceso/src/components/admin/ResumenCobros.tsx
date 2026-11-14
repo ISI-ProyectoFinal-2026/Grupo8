@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -169,9 +169,15 @@ function Detalle({ resumen }: { resumen: Resumen }) {
 }
 
 function Total({ titulo, monto, destacado = false }: { titulo: string; monto: number; destacado?: boolean }) {
+  // Cada total es un grupo con nombre propio: un lector de pantalla lee "Efectivo, $3.500"
+  const idTitulo = useId();
   return (
-    <div className={destacado ? 'rounded-md bg-zinc-900 p-3 text-white' : 'rounded-md bg-zinc-100 p-3'}>
-      <dt className={destacado ? 'text-sm text-zinc-300' : 'text-sm text-zinc-500'}>{titulo}</dt>
+    <div
+      role="group"
+      aria-labelledby={idTitulo}
+      className={destacado ? 'rounded-md bg-zinc-900 p-3 text-white' : 'rounded-md bg-zinc-100 p-3'}
+    >
+      <dt id={idTitulo} className={destacado ? 'text-sm text-zinc-300' : 'text-sm text-zinc-500'}>{titulo}</dt>
       <dd className="text-xl font-bold">{formatearMonto(monto)}</dd>
     </div>
   );

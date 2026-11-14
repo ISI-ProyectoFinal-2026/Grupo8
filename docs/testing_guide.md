@@ -154,6 +154,33 @@ Otros comandos útiles:
 * `Executable doesn't exist`: falta el navegador; correr `npm run e2e:instalar`.
 * La prueba falla al validar el QR: `VITE_PUBLIC_KEY` del frontend no corresponde a `JWT_PRIVATE_KEY` del backend.
 
+### 3.4. Corte de internet y cobro en efectivo con Playwright (Issue 24.2)
+
+La prueba `frontend/pwa-acceso/e2e/offline-sync.spec.ts` corre con el mismo comando que la 3.3 (`npm run test:e2e`). Comprueba que el guardia puede trabajar sin conexión y que, al volver la red, todo llega al panel.
+
+Qué hace:
+
+1. Prepara por API una reserva pagada y obtiene su QR. Es el mismo camino que la 3.3 recorre por pantalla, pero más rápido.
+2. El administrador anota la ocupación y el efectivo de partida. El guardia abre la app con internet, como al empezar el turno.
+3. Se corta internet **solo en el navegador del guardia** (`context.setOffline(true)`). El backend y el panel siguen conectados.
+4. La app se recarga sin conexión y abre igual, gracias al service worker.
+5. Sin conexión, el guardia escanea el QR y registra un ingreso manual cobrado en efectivo. La prueba comprueba los mensajes de la pantalla y que, en ese momento, el panel no cambió: nada salió del celular.
+6. Vuelve la conexión. La prueba espera la respuesta real del envío en lote (`POST /api/v1/ingresos/bulk-sync`), comprueba que el servidor confirmó los dos ingresos y recién después mira el panel.
+7. El panel muestra la ocupación y el efectivo actualizados.
+
+Decisiones:
+
+* **`context.setOffline` y no `page.route`.** Es lo más parecido a un celular que pierde el 4G: el navegador pasa a `navigator.onLine = false`, dispara los eventos `offline` y `online` y corta también lo que pide el service worker. `page.route` solo simula un error en pedidos puntuales y no dispara esos eventos.
+* **Sin esperas fijas.** No se usa `waitForTimeout`: la prueba avanza cuando llega la respuesta del servidor (`waitForResponse`) o cuando la pantalla muestra lo esperado.
+* **Sin leer IndexedDB desde la prueba.** El guardado local se comprueba por lo que ve el guardia y porque, al reconectar, el lote enviado tiene exactamente esos dos ingresos.
+* **Solo cambia el contexto del guardia.** El `request` de Playwright (con el que se arma la reserva) y el panel del administrador no se ven afectados por el corte.
+
+Errores que encontró esta prueba y se corrigieron:
+
+* **El service worker nunca se registraba.** `main.tsx` importaba `virtual:pwa-register` sin llamar a `registerSW()`, así que la app no abría si se recargaba sin internet (`ERR_INTERNET_DISCONNECTED`). Mientras la pestaña seguía abierta funcionaba, por eso las pruebas manuales de la 3.1 no lo detectaban.
+* **Etiquetas sin asociar.** Faltaban etiquetas asociadas en el formulario de ingreso manual. Además, en el resumen de cobros cada total pasó a ser un grupo con nombre ("Efectivo", "Mercado Pago", "Total") para que un lector de pantalla lea el monto junto a su título.
+* **Login por app.** Desde la 23.1 cada app tiene su propio login (`/login`, `/acceso/login`, `/admin/login`): las pruebas entran por el login de cada actor.
+
 ## 4. Entorno de Integración Continua (CI/CD)
 
 El sistema valida ambas bases de código antes de cualquier integración en la rama principal (`main` o `dev`) utilizando GitHub Actions (`.github/workflows/test.yml`).

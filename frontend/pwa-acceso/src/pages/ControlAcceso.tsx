@@ -177,29 +177,30 @@ export default function ControlAcceso() {
           <form onSubmit={handleIngresoManual} style={{ textAlign: 'left', backgroundColor: '#fdfdfd', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
             <h3 style={{ marginTop: 0 }}>Registro Manual de Ingreso</h3>
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>DNI / Pasaporte:</label>
-              <input type="text" value={formDni} onChange={e => setFormDni(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required />
+              <label htmlFor="manual-dni" style={{ display: 'block', marginBottom: '5px' }}>DNI / Pasaporte:</label>
+              <input id="manual-dni" type="text" value={formDni} onChange={e => setFormDni(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required />
             </div>
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>Nombre completo:</label>
-              <input type="text" value={formNombre} onChange={e => setFormNombre(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required />
+              <label htmlFor="manual-nombre" style={{ display: 'block', marginBottom: '5px' }}>Nombre completo:</label>
+              <input id="manual-nombre" type="text" value={formNombre} onChange={e => setFormNombre(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required />
             </div>
             <div style={{ marginBottom: '15px', display: 'flex', gap: '10px' }}>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>Acompañantes:</label>
-                <input type="number" min="0" value={formAcompanantes} onChange={e => setFormAcompanantes(parseInt(e.target.value) || 0)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
+                <label htmlFor="manual-acompanantes" style={{ display: 'block', marginBottom: '5px' }}>Acompañantes:</label>
+                <input id="manual-acompanantes" type="number" min="0" value={formAcompanantes} onChange={e => setFormAcompanantes(parseInt(e.target.value) || 0)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>Tipo de Ingreso:</label>
-                <select value={formTipo} onChange={e => setFormTipo(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}>
+                <label htmlFor="manual-tipo" style={{ display: 'block', marginBottom: '5px' }}>Tipo de Ingreso:</label>
+                <select id="manual-tipo" value={formTipo} onChange={e => setFormTipo(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}>
                   <option value="Espontaneo">Espontáneo (Sin reserva)</option>
                   <option value="Manual con Reserva">Manual con Reserva</option>
                 </select>
               </div>
             </div>
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>Monto cobrado en efectivo ($):</label>
+              <label htmlFor="manual-monto" style={{ display: 'block', marginBottom: '5px' }}>Monto cobrado en efectivo ($):</label>
               <input
+                id="manual-monto"
                 type="number"
                 min="0"
                 step="0.01"
