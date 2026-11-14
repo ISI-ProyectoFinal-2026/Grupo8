@@ -110,31 +110,34 @@ En producción no se ejecuta el seed de pruebas.
 
 ## 5. Prueba del pago con el sandbox (sub-issue 21.1)
 
-Fecha: ____ · Backend: ____ · Frontend: ____
+Fecha: 14/11/2026 · Backend: https://qamp.onrender.com · Frontend: https://grupo8.vercel.app
 
 ### 5.1. Checklist
 
-- [ ] `/health` del backend publicado responde `status: ok`.
-- [ ] Los logs de Render muestran las migraciones aplicadas hasta el head.
-- [ ] Ninguna credencial en el repositorio: `.env` no está versionado y `git grep -l "APP_USR\|BEGIN PRIVATE KEY" -- . ":!docs"` no devuelve nada.
-- [ ] El frontend publicado carga y entrar directo a `/pago/exito` no da 404.
-- [ ] Reserva creada desde el frontend publicado, con el email del dueño de la cuenta de Resend.
-- [ ] Mercado Pago abre el checkout de prueba.
-- [ ] Pago aprobado con la cuenta de prueba comprador y una tarjeta de prueba (titular `APRO`).
-- [ ] `auto_return`: Mercado Pago vuelve solo a `/pago/exito`.
-- [ ] Webhook recibido: los logs de Render muestran `AVISO DE MERCADO PAGO RECIBIDO` y la reserva actualizada a PAGADO, sin `401`.
-- [ ] La reserva figura pagada en la base (`estado_pago = PAGADO`) y tiene su fila en `pagos`.
-- [ ] Llegó el correo con el QR adjunto.
-- [ ] Pago rechazado (titular `OTHE`): la reserva sigue pendiente y no se envía correo.
+- [x] `/health` del backend publicado responde `status: ok`.
+- [x] Los logs de Render muestran las migraciones aplicadas hasta el head, y en Neon `alembic_version` coincide con `alembic heads`.
+- [x] Ninguna credencial en el repositorio: `.env` no está versionado y `git grep -l "APP_USR\|BEGIN PRIVATE KEY" -- . ":!docs"` no devuelve nada.
+- [x] Datos iniciales cargados en Neon con `seed.py`.
+- [x] El frontend publicado carga y entrar directo a `/pago/exito` no da 404.
+- [x] Reserva creada desde el frontend publicado, con el email del dueño de la cuenta de Resend.
+- [x] Mercado Pago abre el checkout de prueba.
+- [x] Pago aprobado con la cuenta de prueba comprador y una tarjeta de prueba (titular `APRO`).
+- [x] `auto_return`: Mercado Pago vuelve solo a `/pago/exito`.
+- [x] Webhook recibido: los logs de Render muestran `AVISO DE MERCADO PAGO RECIBIDO`, `El pago … es real y su estado es: approved` y la reserva actualizada a PAGADO, con respuesta `200`.
+- [x] La reserva figura pagada en la base (`estado_pago = PAGADO`) y tiene su fila en `pagos` con estado `approved`.
+- [x] Llegó el correo con el QR adjunto (en los logs: `Correo de confirmación despachado con éxito`).
+- [x] Pago rechazado (titular `OTHE`): queda en `pagos` con estado `rejected`, la reserva sigue pendiente y no se envía correo.
 
 ### 5.2. Problemas encontrados
 
 | Problema | Solución |
 |---|---|
 | Sin `vercel.json`, volver de Mercado Pago a `/pago/exito` daba 404 en Vercel. | Se agregó `frontend/pwa-acceso/vercel.json` con la reescritura a `index.html`. |
-| `alembic/env.py` armaba la conexión con `POSTGRES_*` y `127.0.0.1`, así que no podía migrar la base publicada. | Usa `DATABASE_URL` si está definida. |
+| `alembic/env.py` armaba la conexión con `POSTGRES_*` y `127.0.0.1`, así que no podía migrar la base publicada. El primer despliegue en Render falló con `connection to server at "127.0.0.1" … refused`. | `env.py` usa `DATABASE_URL` si está definida. Render publica desde `main`, así que el cambio tuvo que estar integrado antes del despliegue. |
 | `auto_return` estaba desactivado porque Mercado Pago lo rechaza con direcciones locales. | Se envía solo cuando `FRONTEND_URL` es una dirección publicada. |
 | `pipenv run` carga el `.env` local por encima de las variables de la terminal, y el seed podía terminar borrando la base local. | `PIPENV_DONT_LOAD_ENV=1` y verificación del host antes del seed. |
+| En local, correr los tests con la base atrasada hizo que `create_all` creara `tipos_reserva`, y después la migración falló con `DuplicateTable`. | Se borró esa tabla y se aplicaron las migraciones. Después de cada `git pull`, correr `alembic upgrade head` antes que los tests. |
 | La base gratuita de Render vence a los 30 días. | Base en Neon. |
 | El backend gratuito se suspende tras 15 minutos sin tráfico; el primer aviso de Mercado Pago puede llegar con el servicio dormido. | Abrir `/health` antes de pagar. Mercado Pago reintenta los avisos y queda "Verificar pago". |
-| _(completar con lo que aparezca en la prueba)_ | |
+| Además del aviso con `data.id` y `type=payment` (aceptado con `200`), Mercado Pago envía avisos en el formato `id` + `topic` (`payment` y `merchant_order`), que el backend rechaza con `401 SignatureMismatch`. Mercado Pago los reintenta. | No afecta al pago: la reserva se confirma con el primer aviso. Queda pendiente decidir si esos avisos se responden con `200` sin procesarlos, para que Mercado Pago deje de reintentarlos. |
+| En el checkout de prueba no se pudieron agregar tarjetas nuevas a la cuenta de prueba comprador. | Se usaron las tarjetas que ya tenía la cuenta, con titular `APRO` y `OTHE`. |
