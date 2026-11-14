@@ -63,6 +63,11 @@ function sesionDesdeToken(token: string | null, tolerarVencido = false): Sesion 
   }
 }
 
+/** Rol que trae el token, o null si no es un token utilizable. No abre ninguna sesión. */
+export function rolDeToken(token: string): Rol | null {
+  return sesionDesdeToken(token)?.rol ?? null;
+}
+
 function leerSesionGuardada(): Sesion | null {
   let token: string | null = null;
   try {

@@ -26,7 +26,7 @@ function mostrar() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/perfil" element={<p>Pantalla perfil</p>} />
+          <Route path="/mis-reservas" element={<p>Pantalla mis reservas</p>} />
           <Route path="/acceso" element={<p>Pantalla acceso</p>} />
           <Route path="/admin" element={<p>Pantalla admin</p>} />
         </Routes>
@@ -41,7 +41,7 @@ function completarYEnviar(identificador = '41234567', password = 'clave1234') {
   fireEvent.click(screen.getByRole('button', { name: /ingresar/i }));
 }
 
-describe('Login real (Issue 15.2)', () => {
+describe('Login de la web de reservas (Issues 15.2 y 23.1)', () => {
   beforeEach(() => {
     localStorage.clear();
   });
@@ -66,7 +66,7 @@ describe('Login real (Issue 15.2)', () => {
 
     mostrar();
     completarYEnviar('  ana@correo.com ', 'clave1234');
-    await screen.findByText('Pantalla perfil');
+    await screen.findByText('Pantalla mis reservas');
 
     const [url, opciones] = fetchFalso.mock.calls[0];
     expect(String(url).endsWith('/auth/login')).toBe(true);
@@ -77,20 +77,35 @@ describe('Login real (Issue 15.2)', () => {
     });
   });
 
-  it.each([
-    ['CLIENTE', 'Pantalla perfil'],
-    ['SEGURIDAD', 'Pantalla acceso'],
-    ['ADMIN', 'Pantalla admin'],
-  ])('un login correcto de %s guarda la sesión y redirige a su pantalla', async (rol, pantalla) => {
-    const token = crearToken(rol);
+  it('un login correcto de un socio guarda la sesión y lo lleva a Mis reservas', async () => {
+    const token = crearToken('CLIENTE');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(respuesta(200, { access_token: token })));
 
     mostrar();
     completarYEnviar();
 
-    await screen.findByText(pantalla);
+    await screen.findByText('Pantalla mis reservas');
     expect(localStorage.getItem(TOKEN_KEY)).toBe(token);
   });
+
+  it.each(['SEGURIDAD', 'ADMIN'])(
+    'un usuario %s no puede ingresar por el login de socios',
+    async (rol) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(respuesta(200, { access_token: crearToken(rol) }))
+      );
+
+      mostrar();
+      completarYEnviar();
+
+      const alerta = await screen.findByRole('alert');
+      expect(alerta.textContent).toMatch(/acceso denegado/i);
+      expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+      expect(screen.queryByText('Pantalla acceso')).toBeNull();
+      expect(screen.queryByText('Pantalla admin')).toBeNull();
+    }
+  );
 
   it('con credenciales incorrectas muestra un mensaje claro y no guarda sesión', async () => {
     vi.stubGlobal(
@@ -142,11 +157,20 @@ describe('Login real (Issue 15.2)', () => {
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
   });
 
-  it('si ya hay una sesión abierta, /login lleva directo a la pantalla del rol', () => {
+  it('si ya hay una sesión de socio abierta, /login lleva directo a Mis reservas', () => {
+    localStorage.setItem(TOKEN_KEY, crearToken('CLIENTE'));
+
+    mostrar();
+
+    expect(screen.getByText('Pantalla mis reservas')).toBeTruthy();
+  });
+
+  it('con la sesión de otra app abierta, /login muestra acceso denegado', () => {
     localStorage.setItem(TOKEN_KEY, crearToken('ADMIN'));
 
     mostrar();
 
-    expect(screen.getByText('Pantalla admin')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: /acceso denegado/i })).toBeTruthy();
+    expect(screen.queryByText('Pantalla admin')).toBeNull();
   });
 });
