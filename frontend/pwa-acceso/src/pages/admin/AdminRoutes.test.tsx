@@ -21,6 +21,8 @@ vi.mock('@/services/ocupacionService', async (importOriginal) => {
 vi.mock('@/components/admin/ResumenCobros', () => ({ ResumenCobros: () => null }));
 
 const NOMBRE_NAV = /navegación del panel de administración/i;
+const loginPanel = () =>
+  screen.queryByRole('heading', { level: 1, name: /panel de administración/i });
 
 function base64Url(objeto: object) {
   return btoa(JSON.stringify(objeto))
@@ -125,10 +127,11 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
   });
 
   describe('protección por rol', () => {
-    it('sin sesión redirige a /login y no muestra el panel', () => {
+    it('sin sesión redirige a /admin/login y no muestra el panel', () => {
       renderizarEn('/admin/socios');
 
-      expect(screen.getByText('Pantalla de login')).toBeTruthy();
+      expect(loginPanel()).toBeTruthy();
+      expect(screen.queryByText('Pantalla de login')).toBeNull();
       expect(screen.queryByRole('navigation', { name: NOMBRE_NAV })).toBeNull();
     });
 
@@ -148,31 +151,32 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
       }
     );
 
-    it('un token vencido se descarta y redirige a /login', () => {
+    it('un token vencido se descarta y redirige a /admin/login', () => {
       const ayer = Math.floor(Date.now() / 1000) - 86400;
       localStorage.setItem(TOKEN_KEY, crearToken('ADMIN', ayer));
 
       renderizarEn('/admin');
 
-      expect(screen.getByText('Pantalla de login')).toBeTruthy();
+      expect(loginPanel()).toBeTruthy();
       expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
     });
 
-    it('un token ilegible redirige a /login', () => {
+    it('un token ilegible redirige a /admin/login', () => {
       localStorage.setItem(TOKEN_KEY, 'no-es-un-jwt');
 
       renderizarEn('/admin');
 
-      expect(screen.getByText('Pantalla de login')).toBeTruthy();
+      expect(loginPanel()).toBeTruthy();
     });
   });
 
   describe('integración con App', () => {
-    it('/admin sin sesión muestra el login', () => {
+    it('/admin sin sesión muestra el login del panel', () => {
       window.history.pushState({}, '', '/admin');
 
       render(<App />);
 
+      expect(loginPanel()).toBeTruthy();
       expect(screen.getByLabelText(/dni o email/i)).toBeTruthy();
     });
 

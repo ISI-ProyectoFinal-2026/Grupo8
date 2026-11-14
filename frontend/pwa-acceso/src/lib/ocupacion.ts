@@ -43,3 +43,15 @@ export function validarCantidadEgreso(valor: string, dentro: number | null): str
   }
   return null;
 }
+
+/**
+ * Texto de las personas esperadas para el inicio del panel.
+ * Ej: "Se esperan 34 personas de 9 reservas".
+ */
+export function textoEsperados(reservas: number, personas: number): string {
+  if (reservas <= 0) return 'No se esperan más ingresos por reservas web hoy.';
+  const verbo = personas === 1 ? 'Se espera' : 'Se esperan';
+  const textoPersonas = personas === 1 ? '1 persona' : `${personas} personas`;
+  const textoReservas = reservas === 1 ? '1 reserva' : `${reservas} reservas`;
+  return `${verbo} ${textoPersonas} de ${textoReservas}`;
+}

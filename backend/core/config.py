@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # Dirección pública del backend, donde Mercado Pago envía los avisos de pago.
     # Con localhost no se envía notification_url: Mercado Pago no acepta direcciones locales.
     BACKEND_PUBLIC_URL: str = "http://localhost:8000"
+    # Solo para las pruebas E2E: dirección del Mercado Pago falso que levanta Playwright.
+    # Vacía (lo normal) usa la API real. En producción se ignora siempre
+    MERCADOPAGO_API_URL: str = ""
     RESEND_API_KEY: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

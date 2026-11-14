@@ -3,6 +3,7 @@ import {
   nivelOcupacion,
   porcentajeBuffer,
   porcentajeOcupacion,
+  textoEsperados,
   UMBRAL_AMARILLO,
   UMBRAL_ROJO,
   validarCantidadEgreso,
@@ -71,5 +72,20 @@ describe('validarCantidadEgreso', () => {
   it('rechaza más personas de las que hay dentro', () => {
     expect(validarCantidadEgreso('11', 10)).toBe('Solo hay 10 personas dentro del camping.');
     expect(validarCantidadEgreso('2', 1)).toBe('Solo hay 1 persona dentro del camping.');
+  });
+});
+
+describe('textoEsperados', () => {
+  it('arma el texto con personas y reservas', () => {
+    expect(textoEsperados(9, 34)).toBe('Se esperan 34 personas de 9 reservas');
+  });
+
+  it('usa el singular cuando corresponde', () => {
+    expect(textoEsperados(1, 1)).toBe('Se espera 1 persona de 1 reserva');
+    expect(textoEsperados(1, 3)).toBe('Se esperan 3 personas de 1 reserva');
+  });
+
+  it('sin reservas avisa que no se espera a nadie', () => {
+    expect(textoEsperados(0, 0)).toBe('No se esperan más ingresos por reservas web hoy.');
   });
 });

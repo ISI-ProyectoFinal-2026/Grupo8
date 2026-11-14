@@ -208,15 +208,95 @@ describe('Mis reservas', () => {
     await waitFor(() => expect(liberarUrl).toHaveBeenCalledWith('blob:qr-falso'));
   });
 
-  it('el botón "Cancelar" no se muestra por ahora', async () => {
+  it('"Cancelar" en una próxima abre el diálogo y al confirmar pasa a Canceladas sin recargar', async () => {
     localStorage.setItem(TOKEN_KEY, crearToken());
-    vi.stubGlobal('fetch', vi.fn(async () => respuesta(200, [PROXIMA])));
+    const fetchFalso = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/cancelacion')) {
+        return respuesta(200, {
+          puede_cancelar: true,
+          dias_minimos: 1,
+          fecha_limite: '2099-01-09',
+          porcentaje_devolucion: 100,
+          monto_devolucion: 7777,
+          mensaje: null,
+        });
+      }
+      if (init?.method === 'POST') {
+        return respuesta(200, {
+          id: PROXIMA.id,
+          estado_reserva: 'Cancelada',
+          estado_pago: 'Pagado',
+          monto_devuelto: 7777,
+          devolucion_realizada: true,
+          mensaje: 'La reserva quedó cancelada. Te devolvimos $ 7.777,00 por Mercado Pago.',
+        });
+      }
+      return respuesta(200, [PROXIMA]);
+    });
+    vi.stubGlobal('fetch', fetchFalso);
 
     mostrar();
     fireEvent.mouseDown(await screen.findByRole('tab', { name: /próximas/i }), { button: 0 });
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar cancelación' }));
 
-    await screen.findByRole('button', { name: /descargar qr/i });
-    expect(screen.queryByRole('button', { name: /cancelar/i })).toBeNull();
+    // Se cierra el diálogo y se muestra el resultado
+    expect(
+      await screen.findByText('La reserva quedó cancelada. Te devolvimos $ 7.777,00 por Mercado Pago.')
+    ).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // Ya no está en Próximas: está en Canceladas
+    expect(screen.queryByText(/\$7\.777/)).toBeNull();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /canceladas/i }), { button: 0 });
+    await waitFor(() => expect(screen.getByText(/\$7\.777/)).toBeTruthy());
+    // La lista no se volvió a pedir al backend
+    const pedidosDeLista = fetchFalso.mock.calls.filter(([url]) => String(url).endsWith('/reservas/mias'));
+    expect(pedidosDeLista).toHaveLength(1);
+  });
+
+  it('"Volver" cierra el diálogo y la reserva sigue en Próximas', async () => {
+    localStorage.setItem(TOKEN_KEY, crearToken());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.endsWith('/cancelacion')
+          ? respuesta(200, {
+              puede_cancelar: false,
+              dias_minimos: 1,
+              fecha_limite: '2099-01-09',
+              porcentaje_devolucion: 100,
+              monto_devolucion: 7777,
+              mensaje: 'Lo sentimos, las reservas solo se pueden cancelar hasta 1 día antes del ingreso.',
+            })
+          : respuesta(200, [PROXIMA])
+      )
+    );
+
+    mostrar();
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: /próximas/i }), { button: 0 });
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+    await screen.findByText('Lo sentimos, las reservas solo se pueden cancelar hasta 1 día antes del ingreso.');
+    expect(screen.queryByRole('button', { name: 'Confirmar cancelación' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByText(/\$7\.777/)).toBeTruthy();
+  });
+
+  it('las reservas pendientes, finalizadas y canceladas no tienen "Cancelar"', async () => {
+    localStorage.setItem(TOKEN_KEY, crearToken());
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta(200, [PENDIENTE, FINALIZADA, CANCELADA])));
+
+    mostrar();
+
+    await screen.findByText(/\$18\.450/);
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull();
+    for (const [pestana, monto] of [[/finalizadas/i, /\$3\.333/], [/canceladas/i, /\$1\.111/]] as const) {
+      fireEvent.mouseDown(screen.getByRole('tab', { name: pestana }), { button: 0 });
+      await waitFor(() => expect(screen.getByText(monto)).toBeTruthy());
+      expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull();
+    }
   });
 
   it('si la descarga del QR falla, avisa y no descarga nada', async () => {

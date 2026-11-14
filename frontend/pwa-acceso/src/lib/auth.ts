@@ -7,8 +7,18 @@ const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
 export const RUTA_POR_ROL: Record<Rol, string> = {
   SEGURIDAD: '/acceso',
   ADMIN: '/admin',
-  CLIENTE: '/perfil',
+  CLIENTE: '/mis-reservas',
 };
+
+/** Inicio de sesión de cada app: cada rol entra por la suya. */
+export const LOGIN_POR_ROL: Record<Rol, string> = {
+  SEGURIDAD: '/acceso/login',
+  ADMIN: '/admin/login',
+  CLIENTE: '/login',
+};
+
+export const MENSAJE_ACCESO_DENEGADO =
+  'Acceso denegado: tu usuario no tiene permiso para ingresar a esta aplicación.';
 
 /** Error con un mensaje listo para mostrarle a la persona que intenta ingresar. */
 export class ErrorLogin extends Error {}

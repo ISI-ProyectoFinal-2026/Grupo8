@@ -12,6 +12,7 @@ import ControlAcceso from "./pages/ControlAcceso";
 import Disponibilidad from "./pages/Disponibilidad";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import LoginAcceso from "./pages/LoginAcceso";
 import MisReservas from "./pages/MisReservas";
 import Perfil from "./pages/Perfil";
 import Reservas from "./pages/Reservas";
@@ -20,6 +21,7 @@ import PagoRechazado from "./pages/PagoRechazado";
 import PagoPendiente from "./pages/PagoPendiente";
 import PagarReserva from "./pages/PagarReserva";
 import { syncService } from "./services/syncService";
+import { LOGIN_POR_ROL } from "./lib/auth";
 import { useEffect } from "react";
 
 function App() {
@@ -35,12 +37,14 @@ function App() {
     <AuthProvider>
       <Routes>
         {/* Panel de administración: es una app aparte, sin el Header ni el Footer de la web.
-            Está protegido para ADMIN dentro de AdminRoutes y sus pantallas se registran en pages/admin/routes.tsx */}
+            Tiene su propio login en /admin/login y su propio manifest. Está protegido para ADMIN
+            dentro de AdminRoutes y sus pantallas se registran en pages/admin/routes.tsx */}
         <Route path="/admin/*" element={<AdminRoutes />} />
 
-        {/* PWA de control de acceso: también es una app aparte, con su propio marco.
+        {/* PWA de control de acceso: también es una app aparte, con su propio marco y su propio login.
             Solo entra el personal de SEGURIDAD */}
-        <Route element={<RutaProtegida roles={["SEGURIDAD"]} />}>
+        <Route path="/acceso/login" element={<LoginAcceso />} />
+        <Route element={<RutaProtegida roles={["SEGURIDAD"]} rutaLogin={LOGIN_POR_ROL.SEGURIDAD} />}>
           <Route element={<LayoutAcceso />}>
             <Route path="/acceso" element={<ControlAcceso />} />
           </Route>
@@ -51,6 +55,7 @@ function App() {
           {/* Rutas Públicas para Visitantes */}
           <Route path="/" element={<Home />} />
           <Route path="/disponibilidad" element={<Disponibilidad />} />
+          {/* Inicio de sesión de los socios */}
           <Route path="/login" element={<Login />} />
           <Route path="/reservas" element={<Reservas />} />
           <Route path="/reservas/pagar" element={<PagarReserva />} />
