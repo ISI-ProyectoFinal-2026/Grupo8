@@ -1,3 +1,4 @@
+import enum
 import re
 from datetime import date, datetime
 from typing import List, Optional
@@ -214,6 +215,64 @@ class ReservaDetalle(ReservaResponse):
     def cantidad_socios(self) -> int:
         return sum(1 for persona in self.personas if persona.condicion == CondicionPersonaEnum.socio)
 
+
+
+# --- Gestión de reservas en el panel (Issue 23.3) ---
+
+class TipoClienteEnum(str, enum.Enum):
+    socio = "socio"
+    visitante = "visitante"
+
+
+class ReservaAdmin(ReservaResponse):
+    """Una fila de la tabla de Gestión de reservas."""
+
+    @computed_field
+    @property
+    def tipo_cliente(self) -> TipoClienteEnum:
+        """
+        Es de socio si la hizo un socio con la sesión iniciada o si el titular (la primera
+        persona) se cargó como socio. Misma regla que el filtro de services/reservas_admin_service.py.
+        """
+        titular_socio = bool(self.personas) and self.personas[0].condicion == CondicionPersonaEnum.socio
+        if self.user_id is not None or titular_socio:
+            return TipoClienteEnum.socio
+        return TipoClienteEnum.visitante
+
+
+class ReservasPaginadas(BaseModel):
+    """Respuesta de GET /reservas/: la página pedida y el total de reservas que cumplen los filtros."""
+
+    total: int
+    items: List[ReservaAdmin]
+
+
+class PagoAdmin(BaseModel):
+    """Un pago informado por Mercado Pago, tal como lo ve el administrador."""
+
+    id: UUID
+    mp_payment_id: str
+    # Estado tal cual lo informa Mercado Pago (approved, rejected, refunded...)
+    estado: str
+    monto: Optional[float] = None
+    metodo_pago: Optional[str] = None
+    fecha_creacion: datetime
+    fecha_aprobacion: Optional[datetime] = None
+    monto_devuelto: Optional[float] = None
+    devolucion_estado: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReservaAdminDetalle(ReservaAdmin):
+    """Respuesta de GET /reservas/{id}: la reserva con su tipo, sus pagos y si ya ingresó."""
+
+    # Nulo en las reservas anteriores a la Issue 19
+    tipo_reserva_nombre: Optional[str] = None
+    pagos: List[PagoAdmin] = []
+    ya_ingreso: bool
+    # Primer escaneo registrado de la reserva (UTC); nulo si todavía no ingresó
+    fecha_primer_ingreso: Optional[datetime] = None
 
 
 class CancelacionCondiciones(BaseModel):

@@ -1,4 +1,5 @@
 import {
+  ClipboardList,
   DoorOpen,
   Home,
   LayoutDashboard,
@@ -12,6 +13,7 @@ import type { ReactElement } from 'react';
 import Configuracion from './Configuracion';
 import Descuentos from './Descuentos';
 import Egresos from './Egresos';
+import GestionReservas from './GestionReservas';
 import Incidentes from './Incidentes';
 import Inicio from './Inicio';
 import Socios from './Socios';
@@ -35,6 +37,12 @@ export interface AdminRoute {
  */
 export const adminRoutes: AdminRoute[] = [
   { path: '', titulo: 'Inicio', icono: LayoutDashboard, element: <Inicio /> },
+  {
+    path: 'reservas',
+    titulo: 'Gestión de reservas',
+    icono: ClipboardList,
+    element: <GestionReservas />,
+  },
   { path: 'socios', titulo: 'Socios', icono: Users, element: <Socios /> },
   {
     path: 'descuentos',

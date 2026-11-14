@@ -324,7 +324,7 @@ def test_una_reserva_anterior_con_telefono_se_sigue_pudiendo_leer(reservas_cread
     response = client.get("/reservas/?fecha_desde=2097-03-01&limit=100")
 
     assert response.status_code == 200
-    por_id = {r["id"]: r for r in response.json()}
+    por_id = {r["id"]: r for r in response.json()["items"]}
     assert por_id[anterior]["telefono"] == "2604000000"
     assert por_id[sin_telefono]["telefono"] is None
 
@@ -340,7 +340,7 @@ def test_listado_filtra_por_fecha_de_ingreso_y_devuelve_los_campos_nuevos(reserv
     response = client.get("/reservas/?fecha_desde=2099-01-01&limit=100")
 
     assert response.status_code == 200
-    por_id = {r["id"]: r for r in response.json()}
+    por_id = {r["id"]: r for r in response.json()["items"]}
     assert lejana in por_id
     assert cercana not in por_id
     assert por_id[lejana]["titular"] == "Titular Lejano"
