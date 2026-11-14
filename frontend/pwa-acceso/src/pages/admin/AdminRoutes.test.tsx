@@ -71,6 +71,7 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
 
     it.each([
       ['/admin', 'Inicio'],
+      ['/admin/reservas', 'Gestión de reservas'],
       ['/admin/socios', 'Socios'],
       ['/admin/descuentos', 'Descuentos'],
       ['/admin/incidentes', 'Incidentes'],
@@ -95,6 +96,7 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
 
       expect(hrefs).toEqual([
         '/admin',
+        '/admin/reservas',
         '/admin/socios',
         '/admin/descuentos',
         '/admin/incidentes',

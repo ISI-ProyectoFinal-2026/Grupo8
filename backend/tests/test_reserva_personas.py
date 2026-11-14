@@ -241,7 +241,7 @@ def test_el_listado_devuelve_las_personas_y_las_reservas_viejas_quedan_sin_perso
         response = client.get("/reservas/?fecha_desde=2097-01-01&limit=100")
 
         assert response.status_code == 200
-        por_id = {r["id"]: r for r in response.json()}
+        por_id = {r["id"]: r for r in response.json()["items"]}
         assert len(por_id[nueva.json()["id"]]["personas"]) == 3
         assert por_id[vieja_id]["personas"] == []
     finally:

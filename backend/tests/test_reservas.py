@@ -19,8 +19,10 @@ def test_obtener_reservas(como_admin):
     # Verificamos que la respuesta sea exitosa
     assert response.status_code == 200
     
-    # Verificamos que lo que nos devuelva sea una lista
-    assert isinstance(response.json(), list)
+    # El listado viene paginado: el total y la página pedida
+    datos = response.json()
+    assert isinstance(datos["total"], int)
+    assert isinstance(datos["items"], list)
 
 def test_crear_reserva_sin_datos_completos():
     # Simulamos enviar una reserva pero "olvidando" las personas

@@ -15,9 +15,14 @@ from schemas.cotizacion import CotizarDetalle, CotizarRequest, CotizarResponse
 from schemas.reserva import (
     CancelacionCondiciones,
     CancelacionResultado,
+    PagoAdmin,
+    ReservaAdmin,
+    ReservaAdminDetalle,
     ReservaCreate,
     ReservaDetalle,
     ReservaResponse,
+    ReservasPaginadas,
+    TipoClienteEnum,
 )
 from models.reserva import (
     Reserva, ReservaPersona, EstadoPagoEnum, EstadoReservaEnum,
@@ -34,6 +39,7 @@ from services.cancelacion_service import (
     reserva_del_usuario,
 )
 from services.capacity_service import CapacityService
+from services.reservas_admin_service import FiltrosReservas, listar_reservas, obtener_detalle
 from services.payment_service import asignar_jti, generar_token_qr
 from services.qr_service import qr_service
 from services.pricing_service import Cotizacion, PersonaPrecio, PricingService
@@ -450,27 +456,55 @@ def cancelar(
     )
 
 
-@router.get("/", response_model=List[ReservaResponse])
+@router.get("/", response_model=ReservasPaginadas)
 def obtener_reservas(
     skip: int = Query(0, ge=0, description="Cantidad de registros a omitir (Paginación)"),
-    limit: int = Query(10, le=100, description="Límite de registros a devolver (Paginación)"),
+    limit: int = Query(10, ge=1, le=100, description="Límite de registros a devolver (Paginación)"),
     estado: Optional[EstadoPagoEnum] = Query(None, description="Filtrar por estado de pago"),
-    fecha_desde: Optional[date] = Query(None, description="Filtrar por reservas con ingreso a partir de esta fecha"),
+    estado_reserva: Optional[EstadoReservaEnum] = Query(None, description="Filtrar por estado de la reserva"),
+    fecha_desde: Optional[date] = Query(None, description="Reservas con ingreso a partir de esta fecha"),
+    fecha_hasta: Optional[date] = Query(None, description="Reservas con ingreso hasta esta fecha (incluida)"),
+    tipo_cliente: Optional[TipoClienteEnum] = Query(None, description="socio o visitante"),
+    busqueda: Optional[str] = Query(
+        None, max_length=100, description="Titular, email o número de reserva"
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(RoleEnum.ADMIN)) #candado administrativo
 ):
+    """Listado de Gestión de reservas: la página pedida y el total, para paginar."""
     capacity_service.cancelar_reservas_vencidas(db)
 
-    # Iniciamos la consulta base
-    query = db.query(Reserva).options(selectinload(Reserva.personas))
+    filtros = FiltrosReservas(
+        estado_pago=estado,
+        estado_reserva=estado_reserva,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        tipo_cliente=tipo_cliente,
+        busqueda=busqueda,
+    )
+    total, reservas = listar_reservas(db, filtros, skip=skip, limit=limit)
+    return ReservasPaginadas(
+        total=total,
+        items=[ReservaAdmin.model_validate(reserva) for reserva in reservas],
+    )
 
-    # Aplicamos FILTROS dinámicamente si el usuario los mandó
-    if estado:
-        query = query.filter(Reserva.estado_pago == estado)
-    if fecha_desde:
-        query = query.filter(Reserva.fecha_ingreso >= fecha_desde)
 
-    # Aplicamos la PAGINACIÓN y ejecutamos la consulta
-    reservas = query.offset(skip).limit(limit).all()
+@router.get("/{reserva_id}", response_model=ReservaAdminDetalle)
+def obtener_detalle_reserva(
+    reserva_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(RoleEnum.ADMIN)),
+):
+    """Detalle de una reserva para el panel: personas, tipo de reserva, pagos y si ya ingresó."""
+    detalle = obtener_detalle(db, reserva_id)
+    if detalle is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La reserva no existe.")
 
-    return reservas
+    reserva = ReservaAdmin.model_validate(detalle.reserva).model_dump()
+    return ReservaAdminDetalle(
+        **reserva,
+        tipo_reserva_nombre=detalle.tipo_reserva_nombre,
+        pagos=[PagoAdmin.model_validate(pago) for pago in detalle.pagos],
+        ya_ingreso=detalle.fecha_primer_ingreso is not None,
+        fecha_primer_ingreso=detalle.fecha_primer_ingreso,
+    )

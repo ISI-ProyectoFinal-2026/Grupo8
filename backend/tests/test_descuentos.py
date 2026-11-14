@@ -450,7 +450,7 @@ def test_cambiar_un_descuento_no_altera_los_importes_de_reservas_ya_creadas(
 
     try:
         def guardado():
-            lista = client.get(f"/reservas/?fecha_desde={fecha}&limit=100", headers=admin).json()
+            lista = client.get(f"/reservas/?fecha_desde={fecha}&limit=100", headers=admin).json()["items"]
             return next(r for r in lista if r["id"] == reserva_id)
 
         antes = guardado()
