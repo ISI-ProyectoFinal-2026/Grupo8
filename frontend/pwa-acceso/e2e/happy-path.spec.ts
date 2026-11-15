@@ -1,8 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { CREDENCIALES } from './entorno';
 import { enviarAvisoDePago } from './helpers/mercadoPago';
 import { esperarQrDelCorreo, leerQr } from './helpers/qr';
-import { hoyEnArgentina, iniciarSesion } from './helpers/sesion';
+import { barraDeOcupacion, leerOcupacion } from './helpers/panel';
+import { LOGIN, hoyEnArgentina, iniciarSesion } from './helpers/sesion';
 
 /**
  * Sub-issue 24.1: recorrido feliz completo, con tres personas distintas en tres navegadores:
@@ -12,10 +13,6 @@ import { hoyEnArgentina, iniciarSesion } from './helpers/sesion';
 
 const PERSONAS = 2;
 const NOMBRES = ['Ana Prueba', 'Bruno Prueba'];
-
-/** La barra del monitor del panel expone la ocupación en aria-valuenow. */
-const barraDeOcupacion = (panel: Page) =>
-  panel.getByRole('progressbar', { name: 'Ocupación del camping' });
 
 test('reserva, pago, QR, ingreso y egreso: la ocupación del panel sube y vuelve a bajar', async ({
   page: cliente,
@@ -27,13 +24,10 @@ test('reserva, pago, QR, ingreso y egreso: la ocupación del panel sube y vuelve
   // --- Administrador: ocupación de partida -------------------------------------------------
   const contextoAdmin = await browser.newContext();
   const panel = await contextoAdmin.newPage();
-  await iniciarSesion(panel, CREDENCIALES.admin);
+  await iniciarSesion(panel, LOGIN.admin, CREDENCIALES.admin);
   await panel.goto('/admin');
-  await expect(barraDeOcupacion(panel)).toBeVisible();
   // Se compara contra el valor inicial y no contra 0: el test sigue sirviendo si hay datos previos
-  const ocupacionInicial = Number(
-    await barraDeOcupacion(panel).getAttribute('aria-valuenow')
-  );
+  const ocupacionInicial = await leerOcupacion(panel);
 
   await test.step('el cliente busca disponibilidad y completa la reserva', async () => {
     await cliente.goto('/');
@@ -104,7 +98,7 @@ test('reserva, pago, QR, ingreso y egreso: la ocupación del panel sube y vuelve
     const guardia = await contextoGuardia.newPage();
     // Reloj controlable: la PWA sincroniza cada 5 minutos y el test adelanta ese tiempo
     await guardia.clock.install();
-    await iniciarSesion(guardia, CREDENCIALES.guardia);
+    await iniciarSesion(guardia, LOGIN.guardia, CREDENCIALES.guardia);
     await guardia.goto('/acceso');
 
     await guardia.getByRole('button', { name: /Escanear QR/ }).click();
