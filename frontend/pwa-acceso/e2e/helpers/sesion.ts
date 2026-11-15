@@ -1,4 +1,5 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { URL_BACKEND } from '../entorno';
 
 /** Desde la 23.1 cada app tiene su propia pantalla de login y solo acepta su rol. */
 export const LOGIN = {
@@ -25,4 +26,27 @@ export function hoyEnArgentina(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Argentina/Buenos_Aires',
   }).format(new Date());
+}
+
+/** Hoy + n días (n puede ser negativo), en Argentina y con formato YYYY-MM-DD. */
+export function diasDesdeHoy(dias: number): string {
+  const [anio, mes, dia] = hoyEnArgentina().split('-').map(Number);
+  return new Date(Date.UTC(anio, mes - 1, dia + dias))
+    .toISOString()
+    .slice(0, 10);
+}
+
+/** Token de sesión pedido por API, para preparar datos sin pasar por la pantalla. */
+export async function tokenPorApi(
+  request: APIRequestContext,
+  credenciales: { email: string; password: string }
+): Promise<string> {
+  const respuesta = await request.post(`${URL_BACKEND}/auth/login`, {
+    data: {
+      identificador: credenciales.email,
+      password: credenciales.password,
+    },
+  });
+  expect(respuesta.ok(), await respuesta.text()).toBeTruthy();
+  return ((await respuesta.json()) as { access_token: string }).access_token;
 }

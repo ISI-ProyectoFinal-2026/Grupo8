@@ -9,19 +9,30 @@ interface TipoReserva {
   nombre: string;
 }
 
+export interface OpcionesReserva {
+  /** Fecha de ingreso (y de egreso: es una entrada por el día). Por defecto, hoy */
+  fecha?: string;
+  /** Token del socio: con sesión la reserva queda a su nombre y aparece en Mis reservas */
+  tokenSocio?: string;
+}
+
 /**
- * Prepara por API una reserva pagada y devuelve el texto de su QR.
+ * Prepara por API una reserva pagada y devuelve su id y el texto de su QR.
  *
  * Es el mismo camino que la 24.1 recorre por pantalla (reserva → preferencia → pago en el
- * Mercado Pago falso → aviso firmado → correo con el QR), pero sin navegador: lo que se prueba
- * en la 24.2 es la app del guardia, y armar los datos por API es más rápido y más estable.
+ * Mercado Pago falso → aviso firmado → correo con el QR), pero sin navegador: armar los datos
+ * por API es más rápido y más estable, y deja la pantalla para lo que cada prueba quiere probar.
  */
 export async function crearReservaPagada(
   request: APIRequestContext,
-  nombres: string[]
-): Promise<{ email: string; tokenQr: string }> {
-  const email = `offline-${Date.now()}@example.com`;
-  const hoy = hoyEnArgentina();
+  nombres: string[],
+  opciones: OpcionesReserva = {}
+): Promise<{ reservaId: string; email: string; tokenQr: string }> {
+  const email = `reserva-${Date.now()}@example.com`;
+  const fecha = opciones.fecha ?? hoyEnArgentina();
+  const sesion = opciones.tokenSocio
+    ? { Authorization: `Bearer ${opciones.tokenSocio}` }
+    : undefined;
 
   const tipos = (await (
     await request.get(`${URL_BACKEND}/api/v1/tipos-reserva`)
@@ -33,9 +44,10 @@ export async function crearReservaPagada(
   ).toBeTruthy();
 
   const reserva = await request.post(`${URL_BACKEND}/reservas/`, {
+    headers: sesion,
     data: {
-      fecha_ingreso: hoy,
-      fecha_egreso: hoy,
+      fecha_ingreso: fecha,
+      fecha_egreso: fecha,
       tipo_reserva_id: entradaGeneral!.id,
       email,
       personas: nombres.map((nombre) => ({
@@ -65,5 +77,5 @@ export async function crearReservaPagada(
   expect((await enviarAvisoDePago(request, paymentId!)).status()).toBe(200);
 
   const tokenQr = leerQr(await esperarQrDelCorreo(request, email));
-  return { email, tokenQr };
+  return { reservaId, email, tokenQr };
 }
