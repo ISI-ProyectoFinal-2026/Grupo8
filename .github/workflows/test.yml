@@ -102,6 +102,11 @@ jobs:
       - name: Instalar dependencias (npm ci)
         run: npm ci
 
+      # Reglas de accesibilidad de eslint-plugin-jsx-a11y (Sub-issue 27.1).
+      # Solo estas: el lint completo todavía tiene errores de formato fuera de esta issue
+      - name: Lint de accesibilidad (jsx-a11y)
+        run: npm run lint:a11y
+
       - name: Compilar el proyecto (validación de TypeScript)
         run: npm run build
 

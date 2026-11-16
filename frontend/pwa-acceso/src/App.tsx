@@ -24,6 +24,7 @@ import PagarReserva from "./pages/PagarReserva";
 import { syncService } from "./services/syncService";
 import { LOGIN_POR_ROL } from "./lib/auth";
 import { useEffect } from "react";
+import { TituloDePagina } from "./components/TituloDePagina";
 
 function App() {
 
@@ -36,6 +37,8 @@ function App() {
     <BrowserRouter>
     {/* La sesión (token y rol) queda disponible para todo el árbol de rutas */}
     <AuthProvider>
+      {/* Título de la pestaña según la pantalla (accesibilidad, 27.1) */}
+      <TituloDePagina />
       <Routes>
         {/* Panel de administración: es una app aparte, sin el Header ni el Footer de la web.
             Tiene su propio login en /admin/login y su propio manifest. Está protegido para ADMIN

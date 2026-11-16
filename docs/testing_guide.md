@@ -210,6 +210,55 @@ Pendientes detectados (no se modificaron porque están fuera del alcance):
 * La lista de canceladas solo se descarga al abrir la app o al volver la conexión. Si el guardia tiene la app abierta desde antes de la cancelación y pierde la red sin recargar, el QR cancelado se acepta.
 * La PWA no revisa la fecha de ingreso del QR (`dat`), solo el vencimiento: el QR de una reserva futura se acepta hoy.
 
+### 3.6. Accesibilidad automática con axe y jsx-a11y (Issue 27.1)
+
+El objetivo es que las tres apps cumplan WCAG 2.2 nivel AA (cumplir la 2.2 implica cumplir la 2.0 y la 2.1, que es la que toma la Ley 26.653). Hay dos revisiones automáticas que se complementan:
+
+| Revisión | Qué mira | Cuándo corre |
+|---|---|---|
+| `eslint-plugin-jsx-a11y` | El código de los componentes: etiquetas sin asociar, imágenes sin `alt`, clics en elementos que no son botones, roles ARIA inválidos | En cada PR (CI) y a mano con `npm run lint:a11y` |
+| `@axe-core/playwright` | La pantalla ya dibujada en el navegador: contraste, nombres accesibles, estructura de títulos, idioma | Con las pruebas E2E (`npm run test:e2e`) |
+
+#### Lint de accesibilidad
+
+Desde `frontend/pwa-acceso`:
+
+```bash
+npm run lint:a11y
+```
+
+Revisa `src/**/*.tsx` (sin los tests) con las reglas recomendadas de jsx-a11y. Los componentes de shadcn/ui (`Button`, `Input`, `Label`, `Textarea`) se revisan como el elemento HTML que dibujan. Las reglas están en `eslint.a11y.config.js` y `eslint.config.js` también las incluye, así que `npm run lint` las corre junto con el resto.
+
+En el CI corre solo `lint:a11y` porque el lint completo todavía tiene errores de formato de Prettier que no son parte de esta issue.
+
+#### Pruebas con axe
+
+La prueba `frontend/pwa-acceso/e2e/accesibilidad.spec.ts` corre con el mismo comando que las demás (`npm run test:e2e`). Para correr solo esta:
+
+```bash
+npx playwright test accesibilidad
+```
+
+Abre cada pantalla como lo haría una persona (con el login que corresponda), comprueba el título de la pestaña y corre axe con las reglas de WCAG 2.0, 2.1 y 2.2 A y AA:
+
+* Web de reservas: Home, Reservas, Mis reservas y botón de arrepentimiento.
+* Panel: inicio, Gestión de reservas e Historial de ingresos.
+* PWA del guardia: escáner e historial.
+
+La prueba falla si axe encuentra problemas **graves o críticos**. Los moderados y leves no la hacen fallar, pero aparecen como anotaciones en el informe. El detalle completo de cada pantalla queda adjunto en el informe HTML (`npm run test:e2e:informe`, archivo `axe-problemas.json`).
+
+Las pantallas que todavía no están integradas (botón de arrepentimiento, 25.3; Historial de ingresos, 26.6) están marcadas con `pendiente` y Playwright las muestra como salteadas. Al integrarlas se borra esa línea.
+
+#### Títulos de la pestaña
+
+Cada pantalla tiene su propio título (WCAG 2.4.2), por ejemplo "Mis reservas | Qamp", "Escáner | Qamp Acceso" o "Gestión de reservas | Qamp Panel". Se arman en un solo lugar, `src/lib/titulos.ts`, y los aplica `TituloDePagina` desde `App.tsx`. Los del panel salen de `pages/admin/routes.tsx`, así que una pantalla nueva del panel ya tiene título. Para una pantalla nueva de la web o de la PWA, se agrega su ruta en `titulos.ts`.
+
+#### Errores habituales
+
+* `ERESOLVE unable to resolve dependency tree` al instalar: `eslint-plugin-jsx-a11y` todavía no declara compatibilidad con ESLint 10, aunque funciona. El `overrides` de `package.json` lo resuelve; si aparece, revisar que siga ahí.
+* `A form label must be associated with a control`: el `Label` necesita `htmlFor` con el `id` del campo.
+* La prueba de axe falla con `color-contrast`: el color de texto no llega a 4,5:1 sobre su fondo (3:1 en textos grandes). Se corrige en la paleta común de la 24.5.
+
 ## 4. Entorno de Integración Continua (CI/CD)
 
 El sistema valida ambas bases de código antes de cualquier integración en la rama principal (`main` o `dev`) utilizando GitHub Actions (`.github/workflows/test.yml`).
@@ -220,7 +269,7 @@ El sistema valida ambas bases de código antes de cualquier integración en la r
 
 * **Job Backend:** Levanta un servicio auxiliar de PostgreSQL 15 con credenciales de prueba e inicializa un chequeo de salud continuo (`pg_isready`). Instala Pipenv y ejecuta el script de generación de claves ES256 antes de correr `pytest`.
 
-* **Job Frontend:** Emplea Node.js 20.19.0, instala dependencias estructuradas (`npm ci`), compila la validación estricta de TypeScript (`npm run build`) y ejecuta toda la suite de `vitest` en memoria usando `fake-indexeddb` sin requerir base de datos externa.
+* **Job Frontend:** Emplea Node.js 20.19.0, instala dependencias estructuradas (`npm ci`), corre el lint de accesibilidad (`npm run lint:a11y`), compila la validación estricta de TypeScript (`npm run build`) y ejecuta toda la suite de `vitest` en memoria usando `fake-indexeddb` sin requerir base de datos externa.
 
 
 ### 4.2. Umbrales de Cobertura y Bugs Detectados
