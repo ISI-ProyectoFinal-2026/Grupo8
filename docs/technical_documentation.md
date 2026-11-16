@@ -93,6 +93,9 @@ El núcleo (FastAPI) está organizado de forma modular (`api/`, `core/`, `models
 * Este token de sesión interno se firma con el algoritmo simétrico HS256 utilizando `AUTH_SECRET_KEY`.
 
 
+* **Usuarios dados de baja:** un JWT no se puede anular, pero el backend busca al usuario en cada petición. Si está inactivo responde 401, así que una sesión abierta deja de valer en la petición siguiente, sin lista de tokens revocados. En el login, el inactivo se rechaza después de comprobar la contraseña, con el mismo "Credenciales inválidas", para no revelar si la cuenta existe.
+
+
 
 ## 4. Sistema Offline-First y Motor Criptográfico (PWA)
 
@@ -128,7 +131,7 @@ La PWA emplea IndexedDB envuelta en promesas con la librería Dexie.js (archivo 
 
 ### 5.1. Bootstrap y Lista Negra
 
-* Antes del turno, el frontend consume `GET /api/v1/sincronizacion/bootstrap`, descargando paginada la lista de reservas canceladas en las últimas 72 horas (parámetros `page` y `limit=1000`).
+* Al abrir la pantalla del guardia y al volver la conexión, el frontend consume `GET /api/v1/sincronizacion/bootstrap` con el token del guardia y descarga todas las páginas de la lista de reservas canceladas que todavía pueden presentarse (egreso hoy o posterior). La lista local se **reemplaza** completa en una sola transacción; si falla cualquier página, se conserva la anterior. Detalle en [pwa-bootstrap-y-blacklist.md](./pwa-bootstrap-y-blacklist.md).
 
 
 * Descarga también la configuración guardada desde el panel: aforo máximo (50 por defecto) y margen offline en personas (10 % de la capacidad, redondeado hacia arriba: 5 por defecto).
@@ -152,7 +155,22 @@ La PWA emplea IndexedDB envuelta en promesas con la librería Dexie.js (archivo 
 * Se emplea un mecanismo de mitigación de red intermitente mediante *Backoff Exponencial* (reintentos con retrasos de 5s, 15s y 45s).
 
 
-* En caso de conflictos (ej. un mismo QR validado por dos guardias distintos y enviado simultáneamente), el backend asienta el primer `IngresoFisico` y deposita el segundo en la tabla `ConflictosSincronizacion` sin colgar la cola. Retorna los `sincronizados_jti` para que el frontend limpie su *store* selectivamente (`bulkDelete`).
+* **Éxito parcial:** cada registro del lote se valida y se guarda por separado (un *savepoint* por registro). Uno inválido va a `errores` y el resto se guarda. La PWA borra de su cola solo los `jti` confirmados en `sincronizados_jti`; los que fallaron quedan para el próximo intento.
+
+
+* **El `jti` se genera una sola vez**, al registrar el ingreso (`crypto.randomUUID()`), y viaja igual en cada reintento. Así un reintento nunca duplica un cobro.
+
+
+* **QR clonado (doble gasto offline):** la columna `jti` es única, así que la base es el árbitro final, incluso con dos pedidos simultáneos. El mismo `jti` desde el mismo `dispositivo_id` es un reintento de red; desde otro dispositivo es un clon: el primero que llegó queda como ingreso, el segundo se guarda en `conflictos_sincronizacion` y la reserva pasa a `ALERTA_CLONACION`. No se expulsa a nadie automáticamente, porque el titular real puede ser el que sincronizó segundo: decide un administrador.
+
+
+* **La alerta no se puede pisar:** el estado de la reserva solo cambia por métodos del modelo que se niegan a tocar una reserva en alerta, y la fila se bloquea (`SELECT ... FOR UPDATE`). Un pago que llega durante la alerta se registra, pero no confirma ni cancela la reserva.
+
+
+* **Resolución:** al entrar en alerta se guarda el estado anterior (`estado_antes_alerta`). Cuando el administrador resuelve el incidente, la reserva vuelve a ese estado, ajustado al pago actual, y queda una fila de auditoría en `resoluciones_alerta` con quién resolvió y cuándo.
+
+
+* **Hora del escaneo:** se guarda la hora en que se escaneó, no la de la sincronización, en UTC (`timestamptz`). El sistema confía en el reloj del celular del guardia; ver [zonas-horarias.md](./zonas-horarias.md).
 
 
 
@@ -316,11 +334,35 @@ Permite al administrador saber cuántas personas hay dentro del camping y cuánt
 
 
 
-## 10. Calidad de Software (QA), Pruebas y Cobertura
+## 10. Socios y Membresías
+
+### 10.1. Baja lógica y vigencia
+
+* Un socio no se borra: se da de baja con la columna `activo`. Así las reservas y los pagos siguen apuntando a la persona, la baja se puede deshacer ("Reactivar") y queda el historial.
+* Son dos datos distintos: `activo` responde "¿la cuenta existe para el sistema?" y `membresia_vence` responde "¿la cuota está al día?".
+
+| `activo` | Cuota | ¿Vale como socio? | ¿Puede iniciar sesión? |
+|---|---|---|---|
+| sí | al día (el día del vencimiento todavía vale) | sí | sí |
+| sí | vencida o sin fecha | no (`CUOTA_VENCIDA`) | sí, para ver su estado |
+| no | cualquiera | no (`NO_ES_SOCIO`) | no |
+
+* **Una sola regla:** la vigencia se decide solo en `socio_service.py` (`membresia_vigente()` y `validar_socio()`), con la fecha de Buenos Aires. La usan la validación por DNI, `/auth/me`, el padrón y las reservas.
+* **El descuento de socio lo decide el backend:** al crear una reserva, cada persona marcada como socia se valida con esa regla. Si no vale, se responde 422 con el DNI y el motivo, en vez de cobrarla como visitante sin avisar.
+* **Editar no es lo mismo que renovar o dar de baja:** el `PUT` solo corrige datos personales. El vencimiento y la baja tienen sus propias operaciones, con sus reglas, para que nadie las saltee cambiando un campo.
+
+### 10.2. Búsqueda del padrón
+
+* Un solo campo de búsqueda: si son números (con o sin puntos), busca DNI que empiecen así; si tiene letras, cada palabra tiene que aparecer en el nombre, en cualquier orden.
+* No distingue acentos ni mayúsculas. Se usa `translate()` con la misma tabla de letras en Python y en SQL, sin la extensión `unaccent`, que pide permisos de superusuario.
+* El texto viaja como parámetro (nunca pegado al SQL), con `%` y `_` escapados y un máximo de 100 caracteres. El filtrado lo hace la base.
+* En el panel, la búsqueda espera 300 ms desde la última tecla (*debounce*) y descarta respuestas viejas que lleguen tarde.
+
+## 11. Calidad de Software (QA), Pruebas y Cobertura
 
 Se consolidó un esfuerzo masivo de aserción elevando la calidad técnica de las bases estructurales.
 
-### 10.1. Pruebas de Backend (`pytest`)
+### 11.1. Pruebas de Backend (`pytest`)
 
 * Se desarrollaron tests asíncronos configurando `AnyIO` y evadiendo errores de integridad referencial inyectando usuarios efímeros pre-reservas en GitHub Actions.
 
@@ -332,7 +374,7 @@ Se consolidó un esfuerzo masivo de aserción elevando la calidad técnica de la
 
 
 
-### 10.2. Pruebas de Frontend (`vitest`)
+### 11.2. Pruebas de Frontend (`vitest`)
 
 * Se utilizó la dependencia de desarrollo `fake-indexeddb` para someter a prueba a Dexie fuera del navegador.
 
@@ -344,3 +386,9 @@ Se consolidó un esfuerzo masivo de aserción elevando la calidad técnica de la
 
 
 * Se simularon caídas de `navigator.onLine`, validando intercepciones transparentes mediante `try/catch` sin generar cierres de aplicación inesperados.
+
+
+### 11.3. Pruebas de punta a punta (Playwright)
+
+* `npm run test:e2e` levanta una base `_e2e` limpia, el backend, el build de la PWA y un Mercado Pago y un Resend falsos, y recorre el sistema con varios navegadores a la vez (cliente o socio, guardia y administrador).
+* Cubren el recorrido feliz, el trabajo del guardia sin conexión y la cancelación hasta el rechazo del QR en la puerta. Las decisiones y la forma de correrlas están en la [Guía de Pruebas](./testing_guide.md), secciones 3.3 a 3.5.

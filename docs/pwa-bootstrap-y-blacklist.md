@@ -36,6 +36,13 @@ Desde la Issue 20.4 la lista es real y la PWA la usa para rechazar QR sin conexi
 - Al escanear, `ControlAcceso` busca el `reserva_id` del QR en la lista local y, si está,
   muestra "Reserva Cancelada / Acceso Revocado" y no registra el ingreso.
 
+Desde la Issue 22 las reservas llegan a `CANCELADA` cuando el socio cancela desde Mis
+reservas. La prueba E2E de la 24.3 cubre el recorrido completo: cancelar en la web, descargar
+la lista y rechazar el QR sin conexión.
+
 ### Pendiente
-- Hoy ningún flujo del backend pasa una reserva a `CANCELADA` (no hay endpoint de
-  cancelación). La lista va a estar vacía hasta que exista esa operación.
+- La lista se actualiza solo al abrir Control de Acceso o al volver la conexión. Si el guardia
+  tiene la app abierta desde antes de una cancelación y pierde la señal sin recargar, ese QR
+  todavía entra.
+- La PWA controla la firma y el vencimiento del QR, pero no su fecha de ingreso (`dat`): el
+  QR de una reserva futura se acepta hoy.

@@ -118,12 +118,13 @@ Rutas operativas que soportan el comportamiento *offline-first* de la Progressiv
 ### `GET /api/v1/sincronizacion/bootstrap`
 
 * **Tag:** Sincronización Offline.
-* **Descripción:** Entrega la configuración inicial y la lista negra paginada requerida para que los dispositivos móviles operen sin internet.
-* **Parámetros Query:** `page` (default: 1), `limit` (default: 1000).
+* **Seguridad:** JWT con rol `SEGURIDAD` o `ADMIN`. Sin token responde 401 y con otro rol, 403.
+* **Descripción:** Entrega la configuración inicial y la lista de reservas canceladas que la PWA usa para rechazar QR sin conexión.
+* **Parámetros Query:** `page` (desde 1) y `limit` (de 1 a 1000, por defecto 1000). Fuera de rango responde 422.
 * **Respuesta Exitosa (200 OK):**
 ```json
 {
-  "blacklist": ["1234", "5678", "9999"],
+  "blacklist": ["3f2b8c1e-5d4a-4b6f-9a7e-1c2d3e4f5a6b"],
   "configuracion": {
     "capacidad_maxima": 50,
     "buffer_seguridad": 5
@@ -135,7 +136,7 @@ Rutas operativas que soportan el comportamiento *offline-first* de la Progressiv
 
 ```
 
-(Nota: `blacklist` extrae los identificadores cancelados en las últimas 72 horas).
+`blacklist` trae los ids de las reservas `CANCELADA` cuya fecha de egreso es hoy o posterior (fecha de Buenos Aires), ordenadas por id para que recorrer las páginas no repita ni pierda ninguna. Las reservas en `ALERTA_CLONACION` no entran: una alerta es una sospecha, no una cancelación.
 
 `capacidad_maxima` y `buffer_seguridad` salen de la configuración del camping guardada desde el panel. El buffer se envía en personas: el porcentaje de la capacidad redondeado hacia arriba.
 
@@ -184,6 +185,13 @@ Rutas operativas que soportan el comportamiento *offline-first* de la Progressiv
 ```
 
 Un registro inválido va a `errores` (`indice`, `jti`, `motivo`) y no frena el resto del lote.
+
+Reglas de cada registro:
+
+* `fecha_escaneo` tiene que traer zona horaria; se guarda en UTC. Sin zona, el registro va a `errores` (ver [zonas-horarias.md](./zonas-horarias.md)).
+* El `jti` es único en la base. Si llega uno ya guardado:
+  * desde el **mismo** `dispositivo_id`, es un reintento de red: se confirma en `sincronizados_jti` sin crear nada;
+  * desde **otro** dispositivo, es un QR clonado: se guarda en `conflictos_sincronizacion`, la reserva pasa a `ALERTA_CLONACION` y el `jti` también se confirma, para que la PWA lo saque de su cola.
 
 * **Manejo de Errores:** Retorna HTTP 500 realizando un *rollback* de todo el lote ante un fallo crítico en la base de datos.
 
@@ -301,3 +309,27 @@ FastAPI gestiona dos tipos de llaves criptográficas completamente separadas par
 
 * **Sesiones de API (HS256):** El sistema utiliza la variable `AUTH_SECRET_KEY` (criptografía simétrica) para firmar los tokens de los administradores y personal de barrera. Se verifica internamente en el backend.
 * **Códigos QR de Acceso (ES256):** El sistema utiliza un par asimétrico de llaves de curva elíptica. El backend emplea la `JWT_PRIVATE_KEY` de manera exclusiva para emitir y firmar las credenciales QR. La `VITE_PUBLIC_KEY` se extrae mediante `/bootstrap` y permite a la aplicación PWA verificar la autenticidad matemática de los QRs sin capacidad de emitir nuevos.
+
+
+## 8. Socios y Membresías
+
+Todas las rutas de `/admin/socios` exigen rol `ADMIN`.
+
+| Método y ruta | Qué hace |
+|---|---|
+| `GET /socios/validar/{dni}` | Público. Responde `valido` y, si no vale, el `motivo`: `NO_EXISTE`, `NO_ES_SOCIO` (también para los dados de baja) o `CUOTA_VENCIDA`. |
+| `GET /admin/socios?buscar=&estado=` | Padrón. `buscar`: comienzo del DNI (acepta puntos) o palabras del nombre, sin importar acentos ni mayúsculas. `estado`: `vigente`, `vencida` o `baja`. Sin parámetros devuelve todos. |
+| `POST /admin/socios` | Alta de un socio. |
+| `PUT /admin/socios/{id}` | Corrige `nombre`, `dni` o `email`. Aplica solo los campos enviados; cualquier otro (por ejemplo `membresia_vence` o `activo`) da 422. |
+| `POST /admin/socios/{id}/renovar` | Body `{"membresia_vence": "AAAA-MM-DD"}`, con fecha de hoy o posterior. |
+| `POST /admin/socios/{id}/baja` | Baja lógica (`activo = false`). |
+| `POST /admin/socios/{id}/reactivar` | Deshace la baja sin tocar el vencimiento. |
+
+Códigos: **404** si no existe o no es socio; **409** si choca con el estado actual (DNI o email repetido, renovar o dar de baja a un dado de baja, reactivar a un activo); **422** si los datos están mal formados.
+
+## 9. Alertas de Clonación
+
+Las dos rutas exigen rol `ADMIN`.
+
+* **`GET /api/v1/admin/alertas`:** reservas en `ALERTA_CLONACION`, con `reserva_id`, `titular`, `fecha_ingreso` y `fecha_alerta_clonacion`.
+* **`POST /api/v1/admin/alertas/{reserva_id}/resolver`:** body opcional `{"nota": "..."}` (hasta 500 caracteres). Devuelve la reserva al estado que tenía antes de la alerta, ajustado al pago actual: si estaba pendiente y el pago entró mientras tanto, queda `CONFIRMADA`. Guarda en `resoluciones_alerta` quién resolvió, cuándo y la nota. Responde 404 si la reserva no existe y 409 si ya no está en alerta (por ejemplo, porque otro administrador la resolvió antes).
