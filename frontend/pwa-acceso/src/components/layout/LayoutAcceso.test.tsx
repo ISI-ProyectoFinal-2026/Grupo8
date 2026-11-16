@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+// Dexie (useLiveQuery) solo emite si existe indexedDB, como en el navegador
+import 'fake-indexeddb/auto';
+
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +11,7 @@ import { dbService } from '@/services/dbService';
 import { LayoutAcceso } from './LayoutAcceso';
 
 vi.mock('@/services/dbService', () => ({
-  dbService: { obtenerIngresosPendientes: vi.fn() },
+  dbService: { contarIngresosPendientes: vi.fn() },
 }));
 
 function base64Url(objeto: object) {
@@ -41,11 +44,11 @@ function simularConexion(enLinea: boolean) {
   Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => enLinea });
 }
 
-describe('Marco de la app del guardia (24.5)', () => {
+describe('Marco de la app del guardia (24.5 y 26.1)', () => {
   beforeEach(() => {
     localStorage.setItem(TOKEN_KEY, crearToken());
     simularConexion(true);
-    vi.mocked(dbService.obtenerIngresosPendientes).mockResolvedValue([]);
+    vi.mocked(dbService.contarIngresosPendientes).mockResolvedValue(0);
   });
 
   afterEach(() => {
@@ -54,16 +57,43 @@ describe('Marco de la app del guardia (24.5)', () => {
     simularConexion(true);
   });
 
-  it('muestra "Online" y cambia a "Offline" cuando se corta la conexión', () => {
+  it('muestra "Online" y cambia a "Offline" cuando se corta la conexión (26.1)', async () => {
     mostrar();
-    expect(screen.getByRole('status').textContent).toBe('Online');
+    const badge = screen.getByText('Online');
+    expect(badge.getAttribute('role')).toBe('status');
+    // El ícono acompaña al texto, pero el lector de pantalla solo lee el texto
+    expect(badge.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    await screen.findByText('Todo sincronizado');
 
     simularConexion(false);
     act(() => {
       window.dispatchEvent(new Event('offline'));
     });
 
-    expect(screen.getByRole('status').textContent).toBe('Offline');
+    // Es el mismo nodo: la región ya estaba en el DOM y solo cambió su texto, que es lo que se anuncia
+    expect(badge.textContent).toBe('Offline');
+    expect(screen.queryByText('Online')).toBeNull();
+  });
+
+  it('muestra "N ingresos pendientes" en una región role="status" propia (26.1)', async () => {
+    vi.mocked(dbService.contarIngresosPendientes).mockResolvedValue(3);
+    mostrar();
+
+    const contador = await screen.findByText('3 ingresos pendientes');
+    expect(contador.getAttribute('role')).toBe('status');
+    expect(screen.getAllByRole('status')).toHaveLength(2);
+  });
+
+  it('avisa "Sincronizando…" mientras syncService envía el lote (26.1)', async () => {
+    vi.mocked(dbService.contarIngresosPendientes).mockResolvedValue(1);
+    mostrar();
+    await screen.findByText('1 ingreso pendiente');
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('sync-status', { detail: { estado: 'iniciando', detalles: { cantidad: 1 } } }));
+    });
+
+    expect(screen.getByText('Sincronizando 1 ingreso pendiente…')).toBeTruthy();
   });
 
   it('la barra inferior marca la pantalla actual y lleva al registro manual', () => {
@@ -90,12 +120,13 @@ describe('Marco de la app del guardia (24.5)', () => {
   });
 
   it('el menú muestra el estado de sincronización y permite cerrar sesión', async () => {
-    vi.mocked(dbService.obtenerIngresosPendientes).mockResolvedValue([{}, {}] as never);
+    vi.mocked(dbService.contarIngresosPendientes).mockResolvedValue(2);
     mostrar();
 
     fireEvent.click(screen.getByRole('button', { name: 'Abrir menú' }));
 
-    expect(await screen.findByText('2 ingresos pendientes de sincronizar')).toBeTruthy();
+    // El texto aparece en la barra superior y en el menú
+    expect(await screen.findAllByText('2 ingresos pendientes')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: /cerrar sesión/i }));
 
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
@@ -106,6 +137,6 @@ describe('Marco de la app del guardia (24.5)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Abrir menú' }));
 
-    expect(await screen.findByText('Todo sincronizado')).toBeTruthy();
+    expect(await screen.findAllByText('Todo sincronizado')).toHaveLength(2);
   });
 });

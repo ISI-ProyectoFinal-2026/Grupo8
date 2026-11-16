@@ -94,6 +94,13 @@ export const dbService = {
     );
   },
 
+  // Solo cuenta, sin traer los datos de cada visitante (lo usa el indicador de la barra superior)
+  async contarIngresosPendientes(): Promise<number> {
+    return await db.ingresos_pendientes
+      .filter((ingreso) => ingreso.sincronizado === false)
+      .count();
+  },
+
   async marcarComoSincronizados(jtisSincronizados: string[]) {
     await db.ingresos_pendientes
       .where('jti')
