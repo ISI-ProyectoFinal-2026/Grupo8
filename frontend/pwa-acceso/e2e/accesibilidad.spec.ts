@@ -2,7 +2,13 @@ import { expect, test, type Page } from '@playwright/test';
 import { CREDENCIALES } from './entorno';
 import { revisarAccesibilidad } from './helpers/accesibilidad';
 import { barraDeOcupacion } from './helpers/panel';
-import { LOGIN, hoyEnArgentina, iniciarSesion } from './helpers/sesion';
+import { crearReservaPagada } from './helpers/reservaPagada';
+import {
+  LOGIN,
+  hoyEnArgentina,
+  iniciarSesion,
+  tokenPorApi,
+} from './helpers/sesion';
 
 /**
  * Sub-issue 27.1: revisión automática de accesibilidad (WCAG 2.2 AA) con axe en las pantallas
@@ -32,8 +38,8 @@ interface Pantalla {
   pendiente?: string;
 }
 
-/** Reservas no se abre con la URL: necesita la búsqueda de Home, igual que en la 24.1. */
-async function abrirReservas(page: Page): Promise<void> {
+/** Disponibilidad no se abre con la URL: necesita la búsqueda de Home, igual que en la 24.1. */
+async function abrirDisponibilidad(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByLabel('Fecha de ingreso').fill(hoyEnArgentina());
   await page.getByLabel(/Cantidad de personas/).fill('1');
@@ -41,6 +47,13 @@ async function abrirReservas(page: Page): Promise<void> {
   await page.getByRole('option', { name: /Entrada general/ }).click();
   await page.getByLabel(/Cantidad de noches/).fill('0');
   await page.getByRole('button', { name: 'Continuar', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Continuar con la reserva' })
+  ).toBeVisible();
+}
+
+async function abrirReservas(page: Page): Promise<void> {
+  await abrirDisponibilidad(page);
   await page.getByRole('button', { name: 'Continuar con la reserva' }).click();
   await expect(
     page.getByRole('heading', { name: 'Completá tu Reserva' })
@@ -58,9 +71,69 @@ const PANTALLAS: Pantalla[] = [
     },
   },
   {
+    nombre: 'Disponibilidad',
+    titulo: 'Disponibilidad | Qamp',
+    abrir: abrirDisponibilidad,
+  },
+  {
     nombre: 'Reservas',
     titulo: 'Completá tu reserva | Qamp',
     abrir: abrirReservas,
+  },
+  {
+    // Los mensajes de error también tienen que cumplir (contraste, asociación con el campo)
+    nombre: 'Reservas con errores',
+    titulo: 'Completá tu reserva | Qamp',
+    abrir: async (page) => {
+      await abrirReservas(page);
+      await page
+        .getByRole('button', { name: 'Pagar con Mercado Pago' })
+        .click();
+      await expect(page.getByRole('alert').first()).toBeVisible();
+    },
+  },
+  {
+    nombre: 'Iniciar sesión',
+    titulo: 'Iniciar sesión | Qamp',
+    abrir: async (page) => {
+      await page.goto('/login');
+      await expect(page.getByLabel('DNI o Email')).toBeVisible();
+    },
+  },
+  {
+    nombre: 'Mi perfil',
+    actor: 'socio',
+    titulo: 'Mi perfil | Qamp',
+    abrir: async (page) => {
+      await page.goto('/perfil');
+      await expect(
+        page.getByRole('heading', { name: 'Mi Perfil', level: 1 })
+      ).toBeVisible();
+    },
+  },
+  {
+    nombre: 'Beneficios',
+    titulo: 'Beneficios | Qamp',
+    abrir: async (page) => {
+      await page.goto('/beneficios');
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    },
+  },
+  {
+    nombre: 'Acerca de',
+    titulo: 'Acerca de | Qamp',
+    abrir: async (page) => {
+      await page.goto('/acerca');
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    },
+  },
+  {
+    nombre: 'Contacto',
+    titulo: 'Contacto | Qamp',
+    abrir: async (page) => {
+      await page.goto('/contacto');
+      await expect(page.getByLabel('Mensaje')).toBeVisible();
+    },
   },
   {
     nombre: 'Mis reservas',
@@ -163,4 +236,74 @@ test.describe('Accesibilidad (axe, WCAG 2.2 AA)', () => {
       await revisarAccesibilidad(page, testInfo);
     });
   }
+});
+
+// =========================================================================================
+// Sub-issue 27.2: la web de reservas se usa solo con teclado
+// =========================================================================================
+test.describe('Teclado en la web de reservas', () => {
+  test('el primer Tab ofrece "Saltar al contenido" y lleva el foco al contenido', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.getByLabel('Fecha de ingreso')).toBeVisible();
+
+    await page.keyboard.press('Tab');
+    const saltar = page.getByRole('link', { name: 'Saltar al contenido' });
+    await expect(saltar).toBeFocused();
+    await expect(saltar).toBeVisible();
+
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('main')).toBeFocused();
+  });
+
+  test('al enviar con errores, el foco va al primer campo y el campo describe su error', async ({
+    page,
+  }) => {
+    await abrirReservas(page);
+    await page.getByRole('button', { name: 'Pagar con Mercado Pago' }).click();
+
+    const email = page.getByLabel('Email de contacto');
+    await expect(email).toBeFocused();
+    await expect(email).toHaveAttribute('aria-invalid', 'true');
+    await expect(email).toHaveAccessibleDescription(/.+/);
+  });
+
+  test('el diálogo de cancelación encierra el foco y lo devuelve al cerrar', async ({
+    page,
+    request,
+  }) => {
+    const tokenSocio = await tokenPorApi(request, CREDENCIALES.socio);
+    const { reservaId } = await crearReservaPagada(request, ['Teo Teclado'], {
+      tokenSocio,
+    });
+
+    await iniciarSesion(page, LOGIN.cliente, CREDENCIALES.socio);
+    await page.goto('/mis-reservas');
+    await page.getByRole('tab', { name: 'Próximas' }).click();
+    const cancelar = page
+      .getByRole('article', { name: `Reserva ${reservaId.slice(0, 8)}` })
+      .getByRole('button', { name: 'Cancelar' });
+
+    // Se abre con el teclado
+    await cancelar.focus();
+    await page.keyboard.press('Enter');
+    const dialogo = page.getByRole('dialog', { name: 'Cancelar reserva' });
+    await expect(dialogo).toBeVisible();
+    await expect(dialogo.getByRole('button', { name: 'Volver' })).toBeVisible();
+
+    // Con Tab el foco no sale del diálogo
+    const focoAdentro = () =>
+      dialogo.evaluate((nodo) => nodo.contains(document.activeElement));
+    await expect.poll(focoAdentro).toBe(true);
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('Tab');
+      expect(await focoAdentro()).toBe(true);
+    }
+
+    // Esc lo cierra y el foco vuelve al botón que lo abrió
+    await page.keyboard.press('Escape');
+    await expect(dialogo).toBeHidden();
+    await expect(cancelar).toBeFocused();
+  });
 });

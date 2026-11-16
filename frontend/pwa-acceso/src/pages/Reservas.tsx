@@ -1,3 +1,4 @@
+import { ErrorDeCampo } from "@/components/ErrorDeCampo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import {
   type PersonaCotizar,
 } from "@/lib/cotizacion";
 import { obtenerUsuarioActual, type UsuarioSesion } from "@/lib/auth";
+import { atributosDeError, enfocarPrimerError } from "@/lib/errorDeCampo";
 import { formatearFecha } from "@/lib/fechas";
 import { mensajeMotivoSocio } from "@/lib/validacionSocio";
 import { useValidacionSocios, type Verificacion } from "@/lib/useValidacionSocios";
@@ -66,16 +68,9 @@ const extraerMensajeError = async (response: Response): Promise<string> => {
   return "No se pudo guardar la reserva. Intentá nuevamente.";
 };
 
-// Mensaje de error bajo un campo
-const MensajeError = ({ texto }: { texto?: string }) =>
-  texto ? (
-    <p role="alert" className="mt-2 text-sm text-red-600">
-      {texto}
-    </p>
-  ) : null;
-
-// Resultado de verificar el DNI de un socio contra el backend
-const EstadoDni = ({ verificacion }: { verificacion?: Verificacion }) => {
+// Resultado de verificar el DNI de un socio contra el backend. Si es un error, usa el mismo id
+// que el error del campo, así el campo de DNI lo tiene como descripción
+const EstadoDni = ({ idCampo, verificacion }: { idCampo: string; verificacion?: Verificacion }) => {
   if (!verificacion) return null;
   switch (verificacion.estado) {
     case "verificando":
@@ -87,20 +82,18 @@ const EstadoDni = ({ verificacion }: { verificacion?: Verificacion }) => {
         </p>
       );
     case "rechazado":
-      return <MensajeError texto={mensajeMotivoSocio(verificacion.motivo)} />;
+      return <ErrorDeCampo idCampo={idCampo} mensaje={mensajeMotivoSocio(verificacion.motivo)} className="mt-2" />;
     case "error":
-      return <MensajeError texto="No pudimos verificar el DNI. Revisá tu conexión e intentá nuevamente." />;
+      return (
+        <ErrorDeCampo
+          idCampo={idCampo}
+          mensaje="No pudimos verificar el DNI. Revisá tu conexión e intentá nuevamente."
+          className="mt-2"
+        />
+      );
   }
 };
 
-// Lleva la vista al primer error, aunque esté fuera de pantalla
-const irAlPrimerError = () => {
-  setTimeout(() => {
-    document
-      .querySelector('[role="alert"]')
-      ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
-  }, 0);
-};
 // ---------------------------------------------------
 
 export default function Reservas() {
@@ -143,6 +136,8 @@ export default function Reservas() {
   const [confirmacionEmail, setConfirmacionEmail] = useState("");
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [enviando, setEnviando] = useState(false);
+  // Error al guardar la reserva (cupos, validación del backend o red): queda junto al botón de pago
+  const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
 
   // --- Datos de la cuenta: con sesión de cliente, el titular no vuelve a cargar sus datos ---
   const [usuarioCargado, setUsuarioCargado] = useState<UsuarioSesion | null>(null);
@@ -314,7 +309,7 @@ export default function Reservas() {
     setErrores(nuevos);
 
     if (Object.keys(nuevos).length > 0) {
-      irAlPrimerError();
+      enfocarPrimerError();
       return false;
     }
     return true;
@@ -326,6 +321,7 @@ export default function Reservas() {
 
     if (!validarFormulario() || !tipo) return;
 
+    setErrorEnvio(null);
     setEnviando(true);
     try {
       // 0. ANTES DE COBRAR: cada socio tiene que tener el DNI verificado con la cuota al día.
@@ -333,7 +329,7 @@ export default function Reservas() {
       const sociosAVerificar = visitantes.filter((v, i) => v.condicion === "socio" && !esTitularPrecargado(i));
       const verificaciones = await Promise.all(sociosAVerificar.map((v) => verificar(v.dni.trim())));
       if (verificaciones.some((v) => v.estado !== "ok")) {
-        irAlPrimerError();
+        enfocarPrimerError();
         return;
       }
 
@@ -368,7 +364,7 @@ export default function Reservas() {
 
       if (!reservaResponse.ok) {
         // Mostramos el motivo real (validación, cupos, etc.) en lugar de un mensaje genérico
-        alert(await extraerMensajeError(reservaResponse));
+        setErrorEnvio(await extraerMensajeError(reservaResponse));
         return;
       }
 
@@ -386,7 +382,7 @@ export default function Reservas() {
 
     } catch (error) {
       console.error("Error en el proceso:", error);
-      alert("Ocurrió un error de red. Verificá que el servidor backend esté encendido.");
+      setErrorEnvio("Ocurrió un error de red. Revisá tu conexión e intentá nuevamente.");
     } finally {
       setEnviando(false);
     }
@@ -410,17 +406,21 @@ export default function Reservas() {
               <CardDescription>A este correo enviaremos los QR de acceso y el comprobante de pago.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Input
-                type="email"
-                required
-                aria-label="Email de contacto"
-                placeholder="ejemplo@correo.com"
-                value={emailContacto}
-                aria-invalid={!!errores.email}
-                onChange={(e) => setEmailContacto(e.target.value)}
-              />
-              <MensajeError texto={errores.email} />
-              
+              <div className="space-y-2">
+                <Label htmlFor="email-contacto">Email de contacto</Label>
+                <Input
+                  id="email-contacto"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="ejemplo@correo.com"
+                  value={emailContacto}
+                  {...atributosDeError("email-contacto", errores.email)}
+                  onChange={(e) => setEmailContacto(e.target.value)}
+                />
+                <ErrorDeCampo idCampo="email-contacto" mensaje={errores.email} />
+              </div>
+
               <div className="mt-4 space-y-2">
                 <Label htmlFor="email-confirmacion">Confirmar correo electrónico</Label>
                 <Input
@@ -429,12 +429,12 @@ export default function Reservas() {
                   required
                   placeholder="Repetí tu correo"
                   value={confirmacionEmail}
-                  aria-invalid={!!errores.confirmacionEmail}
+                  {...atributosDeError("email-confirmacion", errores.confirmacionEmail)}
                   // Hay que escribirlo: si se pudiera pegar, la confirmación no serviría para detectar errores de tipeo
                   onPaste={(e) => e.preventDefault()}
                   onChange={(e) => setConfirmacionEmail(e.target.value)}
                 />
-                <MensajeError texto={errores.confirmacionEmail} />
+                <ErrorDeCampo idCampo="email-confirmacion" mensaje={errores.confirmacionEmail} />
               </div>
             </CardContent>
           </Card>
@@ -458,10 +458,10 @@ export default function Reservas() {
                     required
                     maxLength={100}
                     value={titular}
-                    aria-invalid={!!errores.titular}
+                    {...atributosDeError("titular", errores.titular)}
                     onChange={(e) => setTitular(limpiarNombre(e.target.value))}
                   />
-                  <MensajeError texto={errores.titular} />
+                  <ErrorDeCampo idCampo="titular" mensaje={errores.titular} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="cantidad-personas">Cantidad de personas (máx. {tipo.max_personas})</Label>
@@ -472,10 +472,10 @@ export default function Reservas() {
                     maxLength={3}
                     required
                     value={cantidadUnidad}
-                    aria-invalid={!!errores.cantidad}
+                    {...atributosDeError("cantidad-personas", errores.cantidad)}
                     onChange={(e) => setCantidadUnidad(soloDigitos(e.target.value))}
                   />
-                  <MensajeError texto={errores.cantidad} />
+                  <ErrorDeCampo idCampo="cantidad-personas" mensaje={errores.cantidad} />
                 </div>
               </CardContent>
             </Card>
@@ -488,6 +488,9 @@ export default function Reservas() {
               visitante.condicion === "socio" && !precargado
                 ? resultados[visitante.dni.trim()]
                 : undefined;
+            // El DNI también es inválido si el backend lo rechazó o no se pudo verificar (lo muestra EstadoDni)
+            const dniInvalido =
+              Boolean(errorDni) || verificacion?.estado === "rechazado" || verificacion?.estado === "error";
 
             return (
               <Card key={index} className="border-tierra-200">
@@ -522,10 +525,10 @@ export default function Reservas() {
                         required
                         maxLength={100}
                         value={visitante.nombre}
-                        aria-invalid={!!errores[`nombre-${index}`]}
+                        {...atributosDeError(`nombre-${index}`, errores[`nombre-${index}`])}
                         onChange={(e) => actualizarVisitante(index, "nombre", limpiarNombre(e.target.value))}
                       />
-                      <MensajeError texto={errores[`nombre-${index}`]} />
+                      <ErrorDeCampo idCampo={`nombre-${index}`} mensaje={errores[`nombre-${index}`]} />
                     </div>
                   )}
                   <div className="space-y-2">
@@ -537,10 +540,10 @@ export default function Reservas() {
                       maxLength={3}
                       required
                       value={visitante.edad}
-                      aria-invalid={!!errores[`edad-${index}`]}
+                      {...atributosDeError(`edad-${index}`, errores[`edad-${index}`])}
                       onChange={(e) => actualizarVisitante(index, "edad", soloDigitos(e.target.value))}
                     />
-                    <MensajeError texto={errores[`edad-${index}`]} />
+                    <ErrorDeCampo idCampo={`edad-${index}`} mensaje={errores[`edad-${index}`]} />
                   </div>
                   {!precargado && (
                     <div className="space-y-2">
@@ -567,7 +570,7 @@ export default function Reservas() {
                         maxLength={8}
                         required
                         value={visitante.dni}
-                        aria-invalid={!!errorDni || verificacion?.estado === "rechazado" || verificacion?.estado === "error"}
+                        {...atributosDeError(`dni-${index}`, dniInvalido)}
                         onChange={(e) => {
                           const dni = soloDigitos(e.target.value);
                           actualizarVisitante(index, "dni", dni);
@@ -576,8 +579,8 @@ export default function Reservas() {
                         }}
                         onBlur={() => verificarDni(visitante.dni)}
                       />
-                      <MensajeError texto={errorDni} />
-                      {!errorDni && <EstadoDni verificacion={verificacion} />}
+                      <ErrorDeCampo idCampo={`dni-${index}`} mensaje={errorDni} />
+                      {!errorDni && <EstadoDni idCampo={`dni-${index}`} verificacion={verificacion} />}
                     </div>
                   )}
                 </CardContent>
@@ -619,7 +622,7 @@ export default function Reservas() {
                 </span>
                 <span>{cotizacion ? formatearMonto(cotizacion.subtotal) : "—"}</span>
               </div>
-              {!porUnidad && <MensajeError texto={errores.cantidad} />}
+              {!porUnidad && <ErrorDeCampo idCampo="cantidad-personas" mensaje={errores.cantidad} className="mt-2" />}
 
               {cotizacion && cotizacion.descuento_total > 0 && (
                 <div className="flex justify-between text-bosque-600 font-medium">
@@ -648,7 +651,12 @@ export default function Reservas() {
                 </p>
               )}
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex-col items-stretch gap-3">
+              {errorEnvio && (
+                <p role="alert" className="whitespace-pre-line text-sm text-destructive">
+                  {errorEnvio}
+                </p>
+              )}
               <Button
                 type="submit"
                 disabled={enviando}

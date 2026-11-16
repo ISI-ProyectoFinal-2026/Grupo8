@@ -221,7 +221,7 @@ test('Bloque 2: el QR de una reserva cancelada se rechaza en la puerta sin inter
     // rechazo vino de la lista descargada
     await expect(
       guardia.getByRole('heading', {
-        name: '⚠️ Reserva Cancelada / Acceso Revocado',
+        name: 'Reserva Cancelada / Acceso Revocado',
       })
     ).toBeVisible();
     await expect(

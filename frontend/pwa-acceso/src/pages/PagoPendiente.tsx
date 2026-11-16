@@ -20,7 +20,7 @@ export default function PagoPendiente() {
           <div className="flex justify-center mb-4">
             <Clock className="w-16 h-16 text-yellow-500" />
           </div>
-          <CardTitle className="text-2xl text-yellow-700">Pago pendiente</CardTitle>
+          <CardTitle className="text-2xl text-yellow-700"><h1>Pago pendiente</h1></CardTitle>
           <CardDescription className="text-lg">
             Estamos esperando la confirmación de tu pago.
           </CardDescription>
@@ -30,15 +30,13 @@ export default function PagoPendiente() {
             Mercado Pago todavía no informó el resultado de la operación. Tu reserva quedará en
             espera y, cuando se confirme el pago, te enviaremos el código QR por correo electrónico.
           </p>
-          <Link to="/mis-reservas">
-            <Button className="w-full bg-yellow-700 hover:bg-yellow-800 h-12 text-md">
-              Ver mis reservas
-            </Button>
-          </Link>
+          <Button asChild className="w-full bg-yellow-700 hover:bg-yellow-800 h-12 text-md">
+            <Link to="/mis-reservas">Ver mis reservas</Link>
+          </Button>
           <div className="pt-4">
-            <Link to="/">
-              <Button variant="outline" className="w-full">Volver al inicio</Button>
-            </Link>
+            <Button asChild variant="outline" className="w-full">
+              <Link to="/">Volver al inicio</Link>
+            </Button>
           </div>
         </CardContent>
       </Card>

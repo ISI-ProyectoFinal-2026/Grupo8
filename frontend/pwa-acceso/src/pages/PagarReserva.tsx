@@ -59,13 +59,13 @@ export default function PagarReserva() {
       <div className="container mx-auto px-4 py-16 max-w-md flex flex-col items-center justify-center min-h-[80vh]">
         <Card className="w-full shadow-lg text-center">
           <CardHeader>
-            <CardTitle className="text-2xl">No hay una reserva para pagar</CardTitle>
+            <CardTitle className="text-2xl"><h1>No hay una reserva para pagar</h1></CardTitle>
             <CardDescription className="text-lg">Empezá una reserva nueva desde el inicio.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link to="/">
-              <Button className="w-full h-12 text-md">Volver al inicio</Button>
-            </Link>
+            <Button asChild className="w-full h-12 text-md">
+              <Link to="/">Volver al inicio</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -80,7 +80,7 @@ export default function PagarReserva() {
             <div className="flex justify-center mb-4">
               <TimerOff className="w-16 h-16 text-red-500" />
             </div>
-            <CardTitle className="text-2xl text-red-700">Tu reserva venció</CardTitle>
+            <CardTitle className="text-2xl text-red-700"><h1>Tu reserva venció</h1></CardTitle>
             <CardDescription className="text-lg">Se terminó el tiempo para pagar.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -103,7 +103,7 @@ export default function PagarReserva() {
           <div className="flex justify-center mb-4">
             <Clock className="w-16 h-16 text-bosque-600" />
           </div>
-          <CardTitle className="text-2xl text-bosque-700">Tu reserva está guardada</CardTitle>
+          <CardTitle className="text-2xl text-bosque-700"><h1>Tu reserva está guardada</h1></CardTitle>
           <CardDescription className="text-lg">{reserva.titulo}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -119,7 +119,7 @@ export default function PagarReserva() {
             Pasado ese tiempo la reserva se cancela y los lugares quedan libres para otras personas.
           </p>
           {error && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           )}

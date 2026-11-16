@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import DialogoCancelacion from "@/components/DialogoCancelacion";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/AuthContext";
 import { formatearMonto } from "@/lib/cotizacion";
 import { formatearFecha } from "@/lib/fechas";
+import { cn } from "@/lib/utils";
 import {
   agruparReservas,
   descargarQr,
@@ -17,10 +18,33 @@ import {
   type ReservaDetalle,
   type ResultadoCancelacion,
 } from "@/lib/misReservas";
-import { CalendarX2, QrCode, RefreshCw } from "lucide-react";
+import {
+  CalendarCheck,
+  CalendarX2,
+  CircleCheck,
+  CircleX,
+  Clock,
+  QrCode,
+  RefreshCw,
+  type LucideIcon,
+} from "lucide-react";
 
 // URL base del backend (se puede sobreescribir con VITE_API_URL en el .env del frontend)
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
+
+// El estado no se distingue solo por el color: cada etiqueta lleva texto y un ícono propio
+const ICONO_POR_CATEGORIA: Record<CategoriaReserva, LucideIcon> = {
+  pendiente: Clock,
+  proxima: CalendarCheck,
+  finalizada: CircleCheck,
+  cancelada: CircleX,
+};
+
+// Resultado de "Verificar pago": se muestra en la pantalla en lugar de una ventana del navegador
+interface AvisoPago {
+  tipo: "ok" | "info" | "error";
+  texto: string;
+}
 
 const PESTANAS: { valor: CategoriaReserva; titulo: string }[] = [
   { valor: "pendiente", titulo: "Pendientes" },
@@ -45,6 +69,11 @@ export default function MisReservas() {
   // Reserva cuyo diálogo de cancelación está abierto, y el resultado de la última cancelación
   const [reservaACancelar, setReservaACancelar] = useState<ReservaDetalle | null>(null);
   const [avisoCancelacion, setAvisoCancelacion] = useState<string | null>(null);
+  const [avisoPago, setAvisoPago] = useState<AvisoPago | null>(null);
+
+  // Botón "Cancelar" que abrió el diálogo, para devolverle el foco al cerrarlo
+  const botonQueAbrio = useRef<HTMLElement | null>(null);
+  const refAvisoCancelacion = useRef<HTMLParagraphElement>(null);
 
   const cargarReservas = useCallback(
     async (signal?: AbortSignal) => {
@@ -77,6 +106,7 @@ export default function MisReservas() {
   const verificarPago = async (reservaId: string) => {
     try {
       setReconciliandoId(reservaId);
+      setAvisoPago(null);
 
       const response = await fetch(
         `${API_URL}/api/payments/reconcile/${reservaId}`,
@@ -88,18 +118,18 @@ export default function MisReservas() {
 
       if (response.ok) {
         if (data.status === "reconciliado") {
-          alert(`¡Éxito! ${data.message}`);
+          setAvisoPago({ tipo: "ok", texto: data.message });
           // La reserva pasó a pagada: recargamos la lista para que cambie de pestaña
           await cargarReservas();
         } else {
-          alert(`Información: ${data.message}`);
+          setAvisoPago({ tipo: "info", texto: data.message });
         }
       } else {
-        alert(`Error del servidor: ${data.detail || "No se pudo verificar"}`);
+        setAvisoPago({ tipo: "error", texto: data.detail || "No pudimos verificar el pago. Intentá nuevamente." });
       }
     } catch (error) {
       console.error("Error consultando API:", error);
-      alert("Error de red al intentar comunicarse con el servidor.");
+      setAvisoPago({ tipo: "error", texto: "No pudimos comunicarnos con el servidor. Revisá tu conexión." });
     } finally {
       setReconciliandoId(null);
     }
@@ -119,7 +149,8 @@ export default function MisReservas() {
     }
   };
 
-  const abrirCancelacion = (reserva: ReservaDetalle) => {
+  const abrirCancelacion = (reserva: ReservaDetalle, boton: HTMLElement) => {
+    botonQueAbrio.current = boton;
     setAvisoCancelacion(null);
     setReservaACancelar(reserva);
   };
@@ -135,6 +166,15 @@ export default function MisReservas() {
     );
     setAvisoCancelacion(resultado.mensaje);
     setReservaACancelar(null);
+  };
+
+  // Al cerrar el diálogo el foco vuelve al botón "Cancelar". Si la reserva se canceló, la tarjeta
+  // pasó a Canceladas y el botón ya no está: el foco va al mensaje con el resultado
+  const devolverFoco = (evento: Event) => {
+    evento.preventDefault();
+    const boton = botonQueAbrio.current;
+    (boton?.isConnected ? boton : refAvisoCancelacion.current)?.focus();
+    botonQueAbrio.current = null;
   };
 
   // Sin sesión no hay reservas propias para mostrar
@@ -167,6 +207,8 @@ export default function MisReservas() {
       );
     }
 
+    const IconoEstado = ICONO_POR_CATEGORIA[categoria];
+
     return filtradas.map((reserva) => (
       <Card
         key={reserva.id}
@@ -189,10 +231,12 @@ export default function MisReservas() {
             </p>
           </div>
           <Badge variant={categoria === 'cancelada' ? 'destructive' : 'default'}
-                 className={
-                   categoria === 'proxima' ? 'bg-bosque-600' :
-                   categoria === 'pendiente' ? 'bg-amber-100 text-amber-900 hover:bg-amber-100' : ''
-                 }>
+                 className={cn(
+                   'gap-1',
+                   categoria === 'proxima' && 'bg-bosque-600',
+                   categoria === 'pendiente' && 'bg-amber-100 text-amber-900 hover:bg-amber-100'
+                 )}>
+            <IconoEstado className="h-3.5 w-3.5" />
             {reserva.estado_reserva.toUpperCase()}
           </Badge>
         </CardHeader>
@@ -205,7 +249,7 @@ export default function MisReservas() {
             {categoria === 'proxima' && (
               <Button
                 variant="outline"
-                onClick={() => abrirCancelacion(reserva)}
+                onClick={(e) => abrirCancelacion(reserva, e.currentTarget)}
                 className="flex-1 md:flex-none"
               >
                 Cancelar
@@ -252,18 +296,36 @@ export default function MisReservas() {
       )}
 
       {error && (
-        <div role="alert" className="text-center py-8 text-red-600 space-y-3">
+        <div role="alert" className="text-center py-8 text-destructive space-y-3">
           <p>{error}</p>
           <Button variant="outline" onClick={() => cargarReservas()}>Reintentar</Button>
         </div>
       )}
 
       {errorQr && (
-        <p role="alert" className="text-center mb-6 text-red-600">{errorQr}</p>
+        <p role="alert" className="text-center mb-6 text-destructive">{errorQr}</p>
+      )}
+
+      {avisoPago && (
+        <p
+          role={avisoPago.tipo === "error" ? "alert" : "status"}
+          className={cn(
+            "mb-6 rounded-md px-3 py-2 text-center",
+            avisoPago.tipo === "error" ? "bg-red-50 text-red-700" : "bg-bosque-50 text-bosque-800"
+          )}
+        >
+          {avisoPago.texto}
+        </p>
       )}
 
       {avisoCancelacion && (
-        <p role="status" className="mb-6 rounded-md bg-bosque-50 px-3 py-2 text-center text-bosque-800">
+        <p
+          ref={refAvisoCancelacion}
+          role="status"
+          // Recibe el foco al cerrar el diálogo después de cancelar
+          tabIndex={-1}
+          className="mb-6 rounded-md bg-bosque-50 px-3 py-2 text-center text-bosque-800"
+        >
           {avisoCancelacion}
         </p>
       )}
@@ -286,6 +348,7 @@ export default function MisReservas() {
         token={token}
         onCerrar={() => setReservaACancelar(null)}
         onCancelada={alCancelar}
+        devolverFoco={devolverFoco}
       />
     </div>
   );

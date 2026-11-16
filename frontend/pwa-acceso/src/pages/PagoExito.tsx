@@ -18,7 +18,7 @@ export default function PagoExito() {
           <div className="flex justify-center mb-4">
             <CheckCircle2 className="w-16 h-16 text-bosque-500" />
           </div>
-          <CardTitle className="text-2xl text-bosque-700">¡Reserva Realizada!</CardTitle>
+          <CardTitle className="text-2xl text-bosque-700"><h1>¡Reserva Realizada!</h1></CardTitle>
           <CardDescription className="text-lg">Tu pago fue acreditado con éxito.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -31,9 +31,9 @@ export default function PagoExito() {
             Descargar QR
           </Button>
           <div className="pt-4">
-            <Link to="/">
-              <Button variant="outline" className="w-full">Volver al inicio</Button>
-            </Link>
+            <Button asChild variant="outline" className="w-full">
+              <Link to="/">Volver al inicio</Link>
+            </Button>
           </div>
         </CardContent>
       </Card>

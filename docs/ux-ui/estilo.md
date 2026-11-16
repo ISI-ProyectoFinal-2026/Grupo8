@@ -15,7 +15,7 @@ Todo está definido en `frontend/pwa-acceso/src/index.css` (variables) y `tailwi
 | Verde al pasar el mouse | #184B1E | `bosque-700` | Hover de los botones principales |
 | Gris de botones | #E8E3DD | `bg-secondary` (`tierra-200`) | Botones secundarios (reemplaza al salvia) |
 | Verde oscuro | #233826 | `bg-lateral` | Barra lateral del panel y barra superior de la app del guardia |
-| Bordes | #E8E3DD / #D7CFC6 | `border` / `border-input` | Tarjetas / campos |
+| Bordes | #E8E3DD / #8C8075 | `border` / `border-input` | Tarjetas / campos (el de los campos se oscureció en la 27.2) |
 | Error | #B42318 | `text-destructive` | Mensajes de error y "Cerrar sesión" |
 
 ## Contraste verificado (mínimo 4,5:1)
@@ -34,8 +34,9 @@ Todo está definido en `frontend/pwa-acceso/src/index.css` (variables) y `tailwi
 | Texto del menú (`tierra-200`) | Barra lateral | 9,9:1 |
 | Error | Blanco / fondo arriba | 6,6:1 / 4,9:1 |
 | Anillo de foco (verde de acción) | Fondo arriba | 6,0:1 (se pide 3:1) |
+| Borde de los campos (#8C8075) | Blanco | 3,9:1 (se pide 3:1, WCAG 1.4.11) |
 
-`tierra-300` y `tierra-400` no tienen contraste suficiente sobre fondos claros: solo se usan para bordes e íconos decorativos, nunca para texto.
+`tierra-300` y `tierra-400` no tienen contraste suficiente sobre fondos claros: solo se usan para bordes de tarjetas e íconos decorativos, nunca para texto ni para el borde de un campo. Los mensajes de error van en `text-destructive`: el `text-red-600` de Tailwind no llega a 4,5:1 sobre el fondo de la página (3,6:1).
 
 ## Tipografía y formas
 

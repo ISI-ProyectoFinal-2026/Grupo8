@@ -24,6 +24,11 @@ interface Props {
   token: string;
   onCerrar: () => void;
   onCancelada: (resultado: ResultadoCancelacion) => void;
+  /**
+   * Dónde queda el foco al cerrar. El diálogo no tiene un botón propio que lo abra (lo abre
+   * cada tarjeta), así que Radix no sabe a dónde devolverlo: lo decide quien lo usa.
+   */
+  devolverFoco?: (evento: Event) => void;
 }
 
 function textoDelPlazo(dias: number): string {
@@ -44,6 +49,7 @@ export default function DialogoCancelacion({
   token,
   onCerrar,
   onCancelada,
+  devolverFoco,
 }: Props) {
   const [condiciones, setCondiciones] = useState<CondicionesCancelacion | null>(
     null
@@ -117,7 +123,7 @@ export default function DialogoCancelacion({
 
   return (
     <Dialog open={reserva !== null} onOpenChange={cambiarApertura}>
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={devolverFoco}>
         <DialogHeader>
           <DialogTitle>Cancelar reserva</DialogTitle>
           <DialogDescription>
@@ -134,7 +140,7 @@ export default function DialogoCancelacion({
         )}
 
         {errorCarga && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-destructive">
             {errorCarga}
           </p>
         )}
@@ -173,7 +179,7 @@ export default function DialogoCancelacion({
         )}
 
         {errorConfirmacion && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-destructive">
             {errorConfirmacion}
           </p>
         )}
