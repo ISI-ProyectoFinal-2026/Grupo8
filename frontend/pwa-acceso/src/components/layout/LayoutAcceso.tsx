@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { History, LogOut, Menu, RefreshCw, ScanLine, ShieldCheck, UserPlus, Wifi, WifiOff, type LucideIcon } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { LogoQamp } from '@/components/marca/LogoQamp';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { useAuth } from '@/context/AuthContext';
+import { useConexion } from '@/hooks/useConexion';
 import { cn } from '@/lib/utils';
-import { dbService } from '@/services/dbService';
 
 interface Seccion {
   ruta: string;
@@ -21,19 +21,13 @@ const SECCIONES: Seccion[] = [
   { ruta: '/acceso/manual', titulo: 'Registro manual', icono: UserPlus },
 ];
 
-/** Hay conexión o no, según el navegador. */
-function useEnLinea(): boolean {
-  const [enLinea, setEnLinea] = useState(() => navigator.onLine);
-  useEffect(() => {
-    const actualizar = () => setEnLinea(navigator.onLine);
-    window.addEventListener('online', actualizar);
-    window.addEventListener('offline', actualizar);
-    return () => {
-      window.removeEventListener('online', actualizar);
-      window.removeEventListener('offline', actualizar);
-    };
-  }, []);
-  return enLinea;
+/** Texto del contador. Vacío mientras se hace la primera lectura de IndexedDB. */
+function textoPendientes(pendientes: number | null | undefined, sincronizando: boolean): string {
+  if (pendientes === undefined) return '';
+  if (pendientes === null) return 'Estado de sincronización no disponible';
+  if (pendientes === 0) return 'Todo sincronizado';
+  const ingresos = `${pendientes} ${pendientes === 1 ? 'ingreso pendiente' : 'ingresos pendientes'}`;
+  return sincronizando ? `Sincronizando ${ingresos}…` : ingresos;
 }
 
 /**
@@ -44,22 +38,8 @@ function useEnLinea(): boolean {
 export function LayoutAcceso() {
   const { cerrarSesion } = useAuth();
   const { pathname } = useLocation();
-  const enLinea = useEnLinea();
+  const { enLinea, pendientes, sincronizando } = useConexion();
   const [menuAbierto, setMenuAbierto] = useState(false);
-  const [pendientes, setPendientes] = useState<number | null>(null);
-
-  // Al abrir el menú se cuentan los ingresos que todavía no llegaron al servidor
-  useEffect(() => {
-    if (!menuAbierto) return;
-    let vigente = true;
-    dbService
-      .obtenerIngresosPendientes()
-      .then((lista) => vigente && setPendientes(lista.length))
-      .catch(() => vigente && setPendientes(null));
-    return () => {
-      vigente = false;
-    };
-  }, [menuAbierto]);
 
   const titulo = SECCIONES.find((s) => s.ruta === pathname)?.titulo ?? 'Escáner';
 
@@ -92,6 +72,17 @@ export function LayoutAcceso() {
             {enLinea ? 'Online' : 'Offline'}
           </span>
         </div>
+        {/* Región aparte: cada escaneo anuncia solo el contador, sin repetir "Online" */}
+        <p
+          role="status"
+          className="mx-auto flex min-h-8 max-w-3xl items-center gap-2 px-4 pb-2 text-sm text-white/90"
+        >
+          <RefreshCw
+            className={cn('h-4 w-4 shrink-0', sincronizando && 'motion-safe:animate-spin')}
+            aria-hidden="true"
+          />
+          {textoPendientes(pendientes, sincronizando)}
+        </p>
       </header>
 
       <main className="relative flex-1 pb-28">
@@ -146,11 +137,9 @@ export function LayoutAcceso() {
 
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <RefreshCw className="h-5 w-5" aria-hidden="true" />
-            {pendientes === null
-              ? 'Estado de sincronización no disponible'
-              : pendientes === 0
-                ? 'Todo sincronizado'
-                : `${pendientes} ${pendientes === 1 ? 'ingreso pendiente' : 'ingresos pendientes'} de sincronizar`}
+            {pendientes === undefined
+              ? 'Contando ingresos pendientes…'
+              : textoPendientes(pendientes, sincronizando)}
           </p>
 
           <Button
