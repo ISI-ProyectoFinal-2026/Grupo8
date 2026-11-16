@@ -17,14 +17,14 @@ describe('ScannerQR — ingreso manual del token (Issue 16.5)', () => {
   it('conserva el campo y el botón para ingresar un token a mano', () => {
     render(<ScannerQR onScanSuccess={vi.fn()} />);
 
-    expect(screen.getByPlaceholderText('Pega el JWT aquí...')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Pegá el código del QR')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Validar' })).toBeTruthy();
   });
 
   it('envía el token sin espacios y limpia el campo', () => {
     const alEscanear = vi.fn();
     render(<ScannerQR onScanSuccess={alEscanear} />);
-    const campo = screen.getByPlaceholderText('Pega el JWT aquí...') as HTMLInputElement;
+    const campo = screen.getByPlaceholderText('Pegá el código del QR') as HTMLInputElement;
 
     fireEvent.change(campo, { target: { value: '  aaa.bbb.ccc  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Validar' }));
@@ -38,7 +38,7 @@ describe('ScannerQR — ingreso manual del token (Issue 16.5)', () => {
     const alEscanear = vi.fn();
     render(<ScannerQR onScanSuccess={alEscanear} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Pega el JWT aquí...'), { target: { value: '   ' } });
+    fireEvent.change(screen.getByPlaceholderText('Pegá el código del QR'), { target: { value: '   ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Validar' }));
 
     expect(alEscanear).not.toHaveBeenCalled();

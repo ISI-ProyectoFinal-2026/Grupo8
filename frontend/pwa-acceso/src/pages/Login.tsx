@@ -3,7 +3,6 @@ import { FormularioLogin } from "@/components/auth/FormularioLogin";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { useAuth } from "@/context/AuthContext";
 import { RUTA_POR_ROL } from "@/lib/auth";
-import { Tent } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 /** Inicio de sesión de la web de reservas: solo para socios. */
@@ -16,19 +15,15 @@ export default function Login() {
   if (rol) return <AccesoDenegado />;
 
   return (
-    <div className="container mx-auto px-4 py-16 max-w-md flex flex-col items-center justify-center min-h-[80vh]">
-      <div className="flex items-center gap-2 mb-8 text-green-700">
-        <Tent className="w-10 h-10" />
-        <span className="text-3xl font-black tracking-tighter">Qamp</span>
-      </div>
-
-      <Card className="w-full shadow-lg border-zinc-200">
+    <div className="container mx-auto px-4 py-16 max-w-md flex flex-col items-center justify-center min-h-[60vh]">
+      {/* El nombre del camping ya está en el encabezado de la web */}
+      <Card className="w-full">
         <CardHeader className="text-center">
           <h1 className="text-2xl font-semibold leading-none tracking-tight">Iniciar Sesión</h1>
           <CardDescription>Ingresá con tu DNI o Correo Electrónico</CardDescription>
         </CardHeader>
         <CardContent>
-          <FormularioLogin roles={["CLIENTE"]} claseBoton="bg-green-600 hover:bg-green-700" />
+          <FormularioLogin roles={["CLIENTE"]} claseBoton="h-12" />
         </CardContent>
       </Card>
     </div>

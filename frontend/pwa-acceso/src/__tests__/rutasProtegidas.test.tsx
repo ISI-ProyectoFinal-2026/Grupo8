@@ -74,10 +74,16 @@ describe('Rutas protegidas por rol', () => {
     window.history.pushState({}, '', '/');
   });
 
-  it.each(['/acceso', '/perfil', '/mis-reservas'])('sin sesión, %s redirige al login', (ruta) => {
+  it.each(['/acceso', '/acceso/manual', '/acceso/historial', '/perfil', '/mis-reservas'])('sin sesión, %s redirige al login', (ruta) => {
     abrir(ruta);
 
     expect(formularioLogin()).toBeTruthy();
+  });
+
+  it('el guardia entra al historial de la app de acceso', () => {
+    abrir('/acceso/historial', 'SEGURIDAD');
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Historial' })).toBeTruthy();
   });
 
   it('el guardia entra a /acceso', () => {
@@ -91,7 +97,8 @@ describe('Rutas protegidas por rol', () => {
 
     expect(pantallaAcceso()).toBeTruthy();
     expect(screen.queryByRole('link', { name: /^beneficios$/i })).toBeNull();
-    expect(screen.getByRole('button', { name: /cerrar sesión/i })).toBeTruthy();
+    // "Cerrar sesión" está en el menú ☰ de la app del guardia
+    expect(screen.getByRole('button', { name: 'Abrir menú' })).toBeTruthy();
   });
 
   it.each(['CLIENTE', 'ADMIN'])('el rol %s no entra a /acceso y ve acceso denegado', (rol) => {

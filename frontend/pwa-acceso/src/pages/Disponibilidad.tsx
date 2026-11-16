@@ -52,10 +52,10 @@ export default function Disponibilidad() {
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-lg">
-      <Card className="shadow-lg border-zinc-200 text-center">
+      <Card className="shadow-lg border-tierra-200 text-center">
         <CardHeader>
-          <CalendarDays className="w-14 h-14 text-green-600 mx-auto mb-4" />
-          <CardTitle className="text-2xl text-zinc-900">
+          <CalendarDays className="w-14 h-14 text-bosque-600 mx-auto mb-4" />
+          <CardTitle className="text-2xl text-tierra-900">
             {tipo.nombre}
           </CardTitle>
           <CardDescription>
@@ -68,31 +68,31 @@ export default function Disponibilidad() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="bg-zinc-50 p-4 rounded-lg">
-            <p className="text-sm text-zinc-500 mb-1">Precio</p>
-            <p className="text-3xl font-bold text-zinc-900">
+          <div className="bg-tierra-50 p-4 rounded-lg">
+            <p className="text-sm text-tierra-500 mb-1">Precio</p>
+            <p className="text-3xl font-bold text-tierra-900">
               {describirPrecio(tipo)}
             </p>
             {porUnidad ? (
-              <p className="mt-2 text-sm text-zinc-600">
+              <p className="mt-2 text-sm text-tierra-600">
                 Total estimado: {formatearPrecio(tipo.precio)} × {noches}{' '}
                 {noches === 1 ? 'noche' : 'noches'} ={' '}
                 <strong>{formatearPrecio(tipo.precio * noches)}</strong>
               </p>
             ) : (
-              <p className="mt-2 text-sm text-zinc-600">
+              <p className="mt-2 text-sm text-tierra-600">
                 Los descuentos para socios y por edad se aplican al completar la
                 reserva.
               </p>
             )}
           </div>
-          <p className="flex items-start gap-2 text-left text-sm text-zinc-600">
+          <p className="flex items-start gap-2 text-left text-sm text-tierra-600">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
             La disponibilidad se confirma al reservar.
           </p>
           <div className="space-y-2">
             <Button
-              className="w-full bg-green-600 hover:bg-green-700 h-12 text-md"
+              className="w-full bg-bosque-600 hover:bg-bosque-700 h-12 text-md"
               onClick={() =>
                 navigate('/reservas', {
                   state: { fecha, fechaEgreso: egreso, personas, tipo },
