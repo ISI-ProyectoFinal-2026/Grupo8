@@ -544,12 +544,12 @@ export default function Reservas() {
                   </div>
                   {!precargado && (
                     <div className="space-y-2">
-                      <Label>Condición</Label>
+                      <Label htmlFor={`condicion-${index}`}>Condición</Label>
                       <Select
                         value={visitante.condicion}
                         onValueChange={(val) => actualizarVisitante(index, "condicion", val)}
                       >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger id={`condicion-${index}`}><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="visitante">Visitante General</SelectItem>
                           <SelectItem value="socio">Socio del Camping</SelectItem>
@@ -559,8 +559,9 @@ export default function Reservas() {
                   )}
                   {visitante.condicion === "socio" && !precargado && (
                     <div className="space-y-2">
-                      <Label>DNI (Obligatorio para socios)</Label>
+                      <Label htmlFor={`dni-${index}`}>DNI (Obligatorio para socios)</Label>
                       <Input
+                        id={`dni-${index}`}
                         type="text"
                         inputMode="numeric"
                         maxLength={8}
@@ -651,7 +652,7 @@ export default function Reservas() {
               <Button
                 type="submit"
                 disabled={enviando}
-                className="w-full bg-[#009EE3] hover:bg-[#0086c2] text-white h-14 text-lg font-semibold flex gap-2"
+                className="w-full bg-[#0076B4] hover:bg-[#00669C] text-white h-14 text-lg font-semibold flex gap-2"
               >
                 <CreditCard className="w-5 h-5" />
                 Pagar con Mercado Pago

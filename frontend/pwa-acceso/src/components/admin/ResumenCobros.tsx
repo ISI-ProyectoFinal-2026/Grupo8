@@ -129,11 +129,11 @@ function Detalle({ resumen }: { resumen: Resumen }) {
 
   return (
     <div className="space-y-4">
-      <dl aria-label="Totales del período" className="grid gap-3 sm:grid-cols-3">
+      <div role="group" aria-label="Totales del período" className="grid gap-3 sm:grid-cols-3">
         <Total titulo="Efectivo" monto={resumen.total_efectivo} />
         <Total titulo="Mercado Pago" monto={resumen.total_mercado_pago} />
         <Total titulo="Total" monto={resumen.total} destacado />
-      </dl>
+      </div>
 
       {resumen.total === 0 ? (
         <p role="status" className="text-sm text-zinc-600">
@@ -169,7 +169,8 @@ function Detalle({ resumen }: { resumen: Resumen }) {
 }
 
 function Total({ titulo, monto, destacado = false }: { titulo: string; monto: number; destacado?: boolean }) {
-  // Cada total es un grupo con nombre propio: un lector de pantalla lee "Efectivo, $3.500"
+  // Cada total es un grupo con nombre propio: un lector de pantalla lee "Efectivo, $3.500".
+  // El grupo envuelve a su propia lista <dl>: un <div> con rol no puede ser hijo directo de un <dl>
   const idTitulo = useId();
   return (
     <div
@@ -177,8 +178,11 @@ function Total({ titulo, monto, destacado = false }: { titulo: string; monto: nu
       aria-labelledby={idTitulo}
       className={destacado ? 'rounded-md bg-zinc-900 p-3 text-white' : 'rounded-md bg-zinc-100 p-3'}
     >
-      <dt id={idTitulo} className={destacado ? 'text-sm text-zinc-300' : 'text-sm text-zinc-500'}>{titulo}</dt>
-      <dd className="text-xl font-bold">{formatearMonto(monto)}</dd>
+      <dl>
+        {/* zinc-600 sobre zinc-100 llega a 7:1; zinc-500 se quedaba en 4,4:1 */}
+        <dt id={idTitulo} className={destacado ? 'text-sm text-zinc-300' : 'text-sm text-zinc-600'}>{titulo}</dt>
+        <dd className="text-xl font-bold">{formatearMonto(monto)}</dd>
+      </dl>
     </div>
   );
 }
