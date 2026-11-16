@@ -100,8 +100,19 @@ Estos endpoints estructuran la operación principal del sistema de reservas y su
 * **Descripción:** Devuelve el QR de acceso de la reserva como imagen PNG descargable (`Content-Disposition: attachment`). Es el mismo QR del correo de confirmación: el `jti` se guarda en `reservas.jwt_jti` al confirmar el pago y la descarga usa ese mismo valor, así cada reserva tiene un único QR válido. Las reservas pagadas antes de guardar el `jti` reciben uno la primera vez que se descarga el QR.
 * **Seguridad:** Exige sesión (401 sin token). Si la reserva no existe o es de otro usuario, devuelve 404; si no está pagada o fue cancelada, 403.
 * **`GET /reservas/`**
-* **Seguridad:** Ruta crítica blindada mediante RBAC y `OAuth2PasswordBearer`.
-* **Dependencias:** Exige autenticación válida mediante `get_current_user` y permisos exclusivos autorizados por `require_role` (Administrador).
+* **Descripción:** Listado de la pantalla Gestión de reservas del panel (Issue 23.3). Las más nuevas primero.
+* **Seguridad:** Solo `ADMIN` (`require_role`): sin token devuelve 401 y con otro rol, 403.
+* **Parámetros Query (todos opcionales y combinables):**
+  * `skip` (desde 0) y `limit` (de 1 a 100, por defecto 10): paginación.
+  * `estado`: estado de pago (`Pendiente`, `Pagado` o `Cancelado`). `estado_reserva`: estado de la reserva (`Pendiente`, `Confirmada`, `Cancelada`, ...). Se envía el texto tal como aparece en la respuesta.
+  * `fecha_desde` y `fecha_hasta` (`AAAA-MM-DD`, ambas incluidas): filtran por fecha de ingreso.
+  * `tipo_cliente`: `socio` (la hizo una cuenta con sesión o el titular se cargó como socio) o `visitante`.
+  * `busqueda` (hasta 100 caracteres): titular (cada palabra, en cualquier orden), email o comienzo del número de reserva, con o sin `#`. No distingue acentos ni mayúsculas.
+* **Respuesta (200 OK):** `{"total": 57, "items": [...]}`. `total` cuenta todas las reservas que cumplen los filtros (no solo la página) y cada ítem es la reserva con sus personas y `tipo_cliente`.
+* Antes de responder cancela las pendientes con el plazo de pago vencido, igual que los demás listados.
+* **`GET /reservas/{id}`**
+* **Descripción:** Detalle de una reserva para el panel: todo lo del listado más `tipo_reserva_nombre`, `pagos` (cada pago de Mercado Pago con estado, monto, método, fechas y devolución si la hubo), `ya_ingreso` y `fecha_primer_ingreso` (UTC; nula si todavía no ingresó).
+* **Seguridad:** Solo `ADMIN`. Devuelve 404 si la reserva no existe.
 * **`/admin/descuentos`** (solo `ADMIN`: sin token devuelve 401 y con otro rol, 403)
 * **`GET /admin/descuentos`:** Lista todos los descuentos, activos e inactivos.
 * **`POST /admin/descuentos`:** Crea un descuento (201). Devuelve 409 si el código ya existe y 422 si algún valor es inválido.
@@ -196,7 +207,7 @@ Reglas de cada registro:
 * **Manejo de Errores:** Retorna HTTP 500 realizando un *rollback* de todo el lote ante un fallo crítico en la base de datos.
 
 
-## 5. Endpoints del Panel: Ocupación, Configuración, Tipos de Reserva, Egresos y Cobros
+## 5. Endpoints del Panel: Ocupación, Esperados, Configuración, Tipos de Reserva, Egresos y Cobros
 
 Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las horas se guardan en UTC y los días se cuentan con la hora de Buenos Aires (ver `zonas-horarias.md`).
 
@@ -209,6 +220,14 @@ Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las ho
 * **Atraso:** Los ingresos que el guardia registra sin conexión se cuentan recién cuando la PWA los sincroniza.
 ```json
 { "ocupacion_actual": 32, "capacidad_maxima": 50, "buffer_offline": 5 }
+```
+
+### `GET /api/v1/admin/esperados`
+
+* **Descripción:** Reservas y personas que se esperan hoy y todavía no ingresaron (Issue 23.2). Lo muestra el Inicio del panel junto a la ocupación.
+* **Qué cuenta:** reservas `PAGADO`, no canceladas, cuya estadía incluye hoy (de `fecha_ingreso` a `fecha_egreso`, ambas incluidas, con la fecha de Buenos Aires) y sin ningún ingreso registrado. No se suman a `ocupacion_actual`.
+```json
+{ "reservas": 3, "personas": 9 }
 ```
 
 ### `GET /api/v1/admin/configuracion`

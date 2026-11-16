@@ -83,7 +83,7 @@ El resto de las variables de `.env.example` tienen valores por defecto en `core/
 ### 3.3. Frontend (Vercel)
 
 * **Root Directory:** `frontend/pwa-acceso`. **Framework Preset:** Vite.
-* **Variables de entorno:** `VITE_API_URL` (dirección de Render, sin `/` final) y `VITE_PUBLIC_KEY` (la misma clave pública que tiene el backend). Vite las incorpora al compilar, así que después de cambiarlas hay que volver a desplegar.
+* **Variables de entorno:** `VITE_API_URL` (dirección de Render, sin `/` final), `VITE_PUBLIC_KEY` (la misma clave pública que tiene el backend) y las `VITE_CAMPING_*` con los datos del camping que muestra la web (ver `frontend/pwa-acceso/.env.example`). Vite las incorpora al compilar, así que después de cambiarlas hay que volver a desplegar.
 * `vercel.json` reescribe todas las rutas a `index.html`. Sin ese archivo, entrar directo a una ruta como `/pago/exito` (que es a donde vuelve Mercado Pago) da 404.
 
 ### 3.4. Datos iniciales

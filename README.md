@@ -96,6 +96,8 @@ npm install
 Crea un archivo `.env` dentro de la carpeta del frontend y pega la clave pública generada en el backend:
 `VITE_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"`
 
+El archivo `.env.example` de la misma carpeta trae todas las variables, incluidas las `VITE_CAMPING_*`: nombre, contacto, horarios y redes del camping que muestra la web de reservas. Se puede copiar como `.env` y completar.
+
 ### 3. Probar la PWA localmente
 Compila y levanta la versión de producción:
 ```bash

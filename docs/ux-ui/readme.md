@@ -1,5 +1,7 @@
 # Issue 3 - Diseño de Interfaz (UI/UX)
 
+> La paleta y la tipografía de este documento fueron reemplazadas en la Issue 24.5. Las vigentes están en [estilo.md](./estilo.md).
+
 ### Objetivo
 
 Diseñar la experiencia de usuario del MVP del SGIC, definiendo un sistema de diseño consistente y los wireframes para los tres módulos principales:

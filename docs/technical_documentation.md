@@ -235,20 +235,23 @@ Orquesta el proceso inmediato desde la validación del pago hasta el envío del 
 
 ## 8. Web de Reservas y Panel de Administración (Frontend)
 
-Las pantallas del cliente, la PWA del guardia y el panel del administrador conviven en la misma aplicación de React (`frontend/pwa-acceso`) y comparten una única sesión.
+Las pantallas del cliente, la PWA del guardia y el panel del administrador conviven en la misma aplicación de React (`frontend/pwa-acceso`) y comparten una única sesión, pero cada una se usa como una app aparte, con su propio inicio de sesión y su propio marco: la web en `/`, el panel en `/admin` y la PWA del guardia en `/acceso`.
 
 ### 8.1. Sesión y Rutas por Rol
 
 * **Sesión:** `context/AuthContext.tsx` guarda el token de `POST /auth/login` en `localStorage` (`qamp_token`) y lee el rol del claim `rol`. Ese rol solo decide qué se muestra: el backend vuelve a validar el rol en cada request.
 
 
-* **Redirección:** Después del login, cada rol va a su pantalla (`RUTA_POR_ROL` en `lib/auth.ts`): `SEGURIDAD` a `/acceso`, `ADMIN` a `/admin` y `CLIENTE` a `/perfil`. El menú del `Header` cambia según el rol.
+* **Un inicio de sesión por app (Issue 23.1):** `/login` (clientes y socios), `/admin/login` (administrador) y `/acceso/login` (guardia), definidos en `LOGIN_POR_ROL` (`lib/auth.ts`). Las tres usan `FormularioLogin`, que lee el rol del token **antes** de guardar la sesión: si el rol no corresponde a esa app, muestra "Acceso denegado" y no inicia sesión. Así un guardia no entra al panel ni un administrador queda logueado en la web de reservas.
+
+
+* **Redirección:** Después del login, cada rol va a su pantalla (`RUTA_POR_ROL` en `lib/auth.ts`): `SEGURIDAD` a `/acceso`, `ADMIN` a `/admin` y `CLIENTE` a `/mis-reservas`. El menú del `Header` cambia según el rol.
 
 
 * **Sesión vencida:** Cuando una pantalla recibe un 401, dispara el evento `AUTH_EXPIRED_EVENT` y el contexto cierra la sesión. La excepción es el guardia: si su token vence sin conexión, la sesión se conserva para que pueda seguir escaneando, y se le pide iniciar sesión cuando `bulk-sync` responde 401 al volver la red.
 
 
-* **Guards:** `RutaProtegida` deja pasar solo a los roles indicados (sin sesión redirige a `/login`; con otro rol muestra "Acceso denegado"). `RutaSocio` consulta `GET /auth/me` y limita "Perfil" y "Mis reservas" a los socios; un socio con la cuota vencida entra igual para ver su estado.
+* **Guards:** `RutaProtegida` deja pasar solo a los roles indicados (sin sesión redirige al login de esa app, indicado en `rutaLogin`; con otro rol muestra "Acceso denegado"). `RutaSocio` consulta `GET /auth/me` y limita "Perfil" y "Mis reservas" a los socios; un socio con la cuota vencida entra igual para ver su estado.
 
 
 
@@ -260,7 +263,10 @@ Las pantallas del cliente, la PWA del guardia y el panel del administrador convi
 * **Agregar una pantalla:** Cada pantalla se registra con una entrada en `pages/admin/routes.tsx` (`path`, `titulo`, `icono`, `element`). El menú y las rutas se arman a partir de esa lista, por lo que no hace falta tocar `App.tsx` ni el layout.
 
 
-* **Pantallas actuales:** Inicio (monitor de ocupación y resumen de cobros), Socios, Descuentos, Incidentes, Egresos y Alertas.
+* **Pantallas actuales:** Inicio (monitor de ocupación, personas esperadas y resumen de cobros), Gestión de reservas, Socios, Descuentos, Incidentes, Egresos, Alertas, Tipos de reserva y Configuración. Las entradas con `alPie: true` (hoy, Configuración) se muestran al final del menú, encima de "Cerrar sesión".
+
+
+* **Instalable (Issue 23.1):** el panel se puede instalar como app separada de la del guardia. Mientras está abierto, `hooks/useManifest.ts` cambia el manifest de la página por `public/manifest-admin.webmanifest` ("Qamp Admin", `start_url` y `scope` en `/admin/`). El service worker sigue siendo uno solo para todo el sitio.
 
 
 
@@ -276,6 +282,36 @@ Las pantallas del cliente, la PWA del guardia y el panel del administrador convi
 
 
 * **Correo:** Se pide confirmar el email (no se puede pegar en ese campo) para evitar errores al enviar el QR. Si el email sale de la cuenta con sesión, no se pide confirmarlo. Es una validación solo del frontend: el backend recibe un único email.
+
+
+
+### 8.4. Gestión de Reservas (Issue 23.3)
+
+* La pantalla del panel lista todas las reservas con `GET /reservas/` y abre el detalle con `GET /reservas/{id}` (personas, tipo de reserva, pagos de Mercado Pago y si ya ingresó). Es solo de consulta: no modifica reservas.
+
+
+* **Filtros y paginación en el backend:** estado de pago, estado de la reserva, rango de fechas de ingreso, socio o visitante y un campo de búsqueda. La respuesta trae `total` e `items`, y el panel pide de a 20.
+
+
+* **Búsqueda:** por titular (cada palabra, en cualquier orden), email o comienzo del número de reserva (con o sin `#`), sin importar acentos ni mayúsculas. Reutiliza la misma tabla de letras que la búsqueda del padrón de socios (ver 10.2). La lógica vive en `services/reservas_admin_service.py`.
+
+
+* **Socio o visitante:** una reserva es "de socio" si la hizo una cuenta con sesión o si el titular se cargó como socio. La misma regla se usa en el filtro (SQL) y en el campo `tipo_cliente` de la respuesta, para que nunca den resultados distintos.
+
+
+
+### 8.5. Estilo Común (Issue 24.5)
+
+* Las tres apps comparten colores, tipografía y componentes. Todo se define en `src/index.css` (variables) y `tailwind.config.js` (escalas `tierra` y `bosque`); las pantallas no usan colores sueltos. La guía completa, con el contraste verificado de cada combinación, está en [ux-ui/estilo.md](./ux-ui/estilo.md).
+
+
+* **Marca:** el panel y la PWA dicen "Qamp". La web de reservas muestra el nombre y los datos de contacto del camping que contrató el sistema, tomados de las variables `VITE_CAMPING_*` del `.env` del frontend (`src/lib/camping.ts`), así se adapta a otro camping sin tocar código.
+
+
+* **PWA del guardia:** `components/layout/LayoutAcceso.tsx` arma una barra superior (menú ☰ con el estado de sincronización y "Cerrar sesión", título e indicador Online/Offline) y una barra inferior con Historial (`/acceso/historial`), Escáner (`/acceso`) y Registro manual (`/acceso/manual`).
+
+
+* **Accesibilidad:** todos los textos cumplen un contraste mínimo de 4,5:1, el foco del teclado se ve siempre y ningún estado se comunica solo con color (se suma ícono y texto).
 
 
 
@@ -331,6 +367,18 @@ Permite al administrador saber cuántas personas hay dentro del camping y cuánt
 
 
 * Debajo del monitor está el resumen de cobros, con la última semana por defecto y un rango elegible de hasta 92 días.
+
+
+
+### 9.5. Personas Esperadas (Issue 23.2)
+
+* Junto al monitor, el Inicio muestra cuántas reservas y personas se esperan hoy y todavía no llegaron (`GET /api/v1/admin/esperados`).
+
+
+* **Qué cuenta:** reservas pagadas y no canceladas cuya estadía incluye hoy (del ingreso al egreso, ambos incluidos) y que no tienen ningún ingreso registrado. Con el primer escaneo dejan de contarse. "Hoy" es el día de Buenos Aires.
+
+
+* **No se suma a la ocupación**, que solo cuenta a quienes ya entraron. Igual que la ocupación, un escaneo hecho sin conexión se descuenta recién cuando la PWA sincroniza.
 
 
 
