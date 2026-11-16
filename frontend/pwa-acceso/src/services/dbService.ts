@@ -1,5 +1,35 @@
-import { db } from '../db/db';
+import { db, type HistorialIngreso } from '../db/db';
 import { generarJti } from '../utils/jti';
+
+/** Cuántos ingresos guarda el historial del dispositivo. Los más viejos se borran solos. */
+export const MAX_HISTORIAL = 50;
+
+// Copia liviana del ingreso para la pantalla de Historial: sin nombre, DNI ni monto
+function filaHistorial(jti: string, payload: any, fecha: Date): HistorialIngreso {
+  // Mismo criterio que syncService: los manuales viejos de la cola no traen tipo_ingreso, pero sí dni
+  const esManual = payload?.tipo_ingreso === 'MANUAL' || payload?.dni !== undefined;
+  return {
+    jti,
+    reserva_id: esManual || payload?.reserva_id == null ? null : String(payload.reserva_id),
+    tipo: esManual ? 'MANUAL' : 'QR',
+    cantidad_personas: Number(payload?.cantidad_personas ?? 1),
+    fecha_ingreso: fecha,
+    estado: 'pendiente',
+  };
+}
+
+/**
+ * Deja solo los últimos MAX_HISTORIAL. Trabaja únicamente sobre `historial`: un ingreso que
+ * todavía no se sincronizó sigue en `ingresos_pendientes` aunque ya no aparezca en la lista.
+ * Como se llama en cada alta, en la práctica sobra a lo sumo una fila.
+ */
+async function recortarHistorial(): Promise<void> {
+  const sobrantes = (await db.historial.count()) - MAX_HISTORIAL;
+  if (sobrantes <= 0) return;
+  // Con la misma fecha, el índice desempata por id: se va siempre el que se guardó primero
+  const masViejos = await db.historial.orderBy('fecha_ingreso').limit(sobrantes).primaryKeys();
+  await db.historial.bulkDelete(masViejos);
+}
 
 export const dbService = {
   // ==========================================
@@ -34,7 +64,8 @@ export const dbService = {
   // STORES: INGRESOS PENDIENTES (OFFLINE)
   // ==========================================
   async registrarIngresoOffline(jti: string, payload: any): Promise<number> {
-    return await db.transaction('rw', db.ingresos_pendientes, db.configuracion, async () => {
+    // El ingreso y su fila del historial se guardan juntos: o quedan los dos o ninguno
+    return await db.transaction('rw', db.ingresos_pendientes, db.configuracion, db.historial, async () => {
       
       const existe = await db.ingresos_pendientes.where('jti').equals(jti).first();
       if (existe) {
@@ -54,12 +85,16 @@ export const dbService = {
       const nuevaOcupacion = ocupacionActual + nuevasPersonas;
       await db.configuracion.put({ clave: 'ocupacion_actual', valor: nuevaOcupacion.toString() });
 
+      const fechaEscaneo = new Date();
       const idGenerado = await db.ingresos_pendientes.add({
         jti,
         qr_payload: payload,
-        fecha_escaneo: new Date(),
+        fecha_escaneo: fechaEscaneo,
         sincronizado: false
       });
+
+      await db.historial.add(filaHistorial(jti, payload, fechaEscaneo));
+      await recortarHistorial();
 
       return idGenerado as number;
     });
@@ -70,7 +105,7 @@ export const dbService = {
       .filter((ingreso: any) => ingreso.sincronizado === false)
       .toArray();
 
-    // Orden FIFO por timestamp de negocio: Dexie no garantiza
+    // Orden FIFO por timestamp de negocio (Issue 8.3): Dexie no garantiza
     // que table.filter() devuelva los registros ordenados por
     // fecha_escaneo (solo respeta el orden físico de la clave primaria),
     // así que se ordena explícitamente en memoria por orden cronológico
@@ -101,11 +136,22 @@ export const dbService = {
       .count();
   },
 
+  /**
+   * El servidor confirmó estos jti: salen de la cola y en el historial pasan a "sincronizado".
+   * Va en una sola transacción. Si algo falla, la cola queda como estaba y se vuelven a enviar;
+   * el backend reconoce el mismo jti como reintento y lo vuelve a confirmar.
+   */
   async marcarComoSincronizados(jtisSincronizados: string[]) {
-    await db.ingresos_pendientes
-      .where('jti')
-      .anyOf(jtisSincronizados)
-      .delete();
+    if (jtisSincronizados.length === 0) return;
+    await db.transaction('rw', db.ingresos_pendientes, db.historial, async () => {
+      await db.ingresos_pendientes.where('jti').anyOf(jtisSincronizados).delete();
+      await db.historial.where('jti').anyOf(jtisSincronizados).modify({ estado: 'sincronizado' });
+    });
+  },
+
+  /** Historial del dispositivo, del más nuevo al más viejo. */
+  async obtenerHistorial(): Promise<HistorialIngreso[]> {
+    return await db.historial.orderBy('fecha_ingreso').reverse().toArray();
   },
 
   // ==========================================
