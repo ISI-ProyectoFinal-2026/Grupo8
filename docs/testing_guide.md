@@ -194,7 +194,7 @@ La prueba `frontend/pwa-acceso/e2e/cancellation.spec.ts` corre con el mismo coma
 
 1. Con plazo 0, el socio cancela desde la web una reserva de hoy.
 2. El guardia abre la app. La prueba comprueba que el servidor le mandó esa reserva en la lista de canceladas.
-3. El guardia pierde internet y escanea el QR. Aparece "⚠️ Reserva Cancelada / Acceso Revocado" y la capacidad disponible no cambia.
+3. El guardia pierde internet y escanea el QR. Aparece "Reserva Cancelada / Acceso Revocado" (con ícono y en rojo) y la capacidad disponible no cambia.
 4. Al volver internet no se envía ningún ingreso y la ocupación del panel no cambia.
 
 Socio, guardia y administrador usan contextos de navegador separados: cada uno tiene su propia sesión y su propio almacenamiento.
@@ -248,6 +248,14 @@ Abre cada pantalla como lo haría una persona (con el login que corresponda), co
 La prueba falla si axe encuentra problemas **graves o críticos**. Los moderados y leves no la hacen fallar, pero aparecen como anotaciones en el informe. El detalle completo de cada pantalla queda adjunto en el informe HTML (`npm run test:e2e:informe`, archivo `axe-problemas.json`).
 
 Las pantallas que todavía no están integradas (botón de arrepentimiento, 25.3; Historial de ingresos, 26.6) están marcadas con `pendiente` y Playwright las muestra como salteadas. Al integrarlas se borra esa línea.
+
+Desde la 27.2 la prueba también revisa Disponibilidad, Reservas con los errores a la vista, Iniciar sesión, Mi perfil, Beneficios, Acerca de y Contacto. Además, tiene tres pruebas de teclado de la web de reservas:
+
+* El primer Tab muestra "Saltar al contenido" y Enter lleva el foco al contenido.
+* Al enviar la reserva con errores, el foco va al primer campo con error y el campo tiene su error como descripción accesible.
+* El diálogo de cancelación se abre con Enter, Tab no saca el foco del diálogo y Esc lo cierra devolviendo el foco al botón "Cancelar".
+
+Lo que se cumple en cada app y las diferencias que quedan con WCAG 2.2 AA están en `docs/accesibilidad.md`.
 
 #### Títulos de la pestaña
 

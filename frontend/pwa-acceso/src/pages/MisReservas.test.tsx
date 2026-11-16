@@ -245,6 +245,12 @@ describe('Mis reservas', () => {
       await screen.findByText('La reserva quedó cancelada. Te devolvimos $ 7.777,00 por Mercado Pago.')
     ).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // El botón "Cancelar" ya no existe: el foco queda en el mensaje con el resultado (27.2)
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByText('La reserva quedó cancelada. Te devolvimos $ 7.777,00 por Mercado Pago.')
+      )
+    );
     // Ya no está en Próximas: está en Canceladas
     expect(screen.queryByText(/\$7\.777/)).toBeNull();
     fireEvent.mouseDown(screen.getByRole('tab', { name: /canceladas/i }), { button: 0 });
@@ -282,6 +288,40 @@ describe('Mis reservas', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.getByText(/\$7\.777/)).toBeTruthy();
+    // El foco vuelve al botón que abrió el diálogo (27.2)
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancelar' }))
+    );
+  });
+
+  it('"Verificar Pago" muestra el resultado en la pantalla, sin ventanas del navegador', async () => {
+    localStorage.setItem(TOKEN_KEY, crearToken());
+    const ventana = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/api/payments/reconcile/')
+          ? respuesta(200, { status: 'pendiente', message: 'El pago todavía no figura como aprobado.' })
+          : respuesta(200, [PENDIENTE])
+      )
+    );
+
+    mostrar();
+    fireEvent.click(await screen.findByRole('button', { name: /verificar pago/i }));
+
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'El pago todavía no figura como aprobado.'
+    );
+    expect(ventana).not.toHaveBeenCalled();
+  });
+
+  it('cada estado se distingue por su texto, no solo por el color', async () => {
+    localStorage.setItem(TOKEN_KEY, crearToken());
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta(200, [PENDIENTE])));
+
+    mostrar();
+
+    expect(await screen.findByText('PENDIENTE')).toBeTruthy();
   });
 
   it('las reservas pendientes, finalizadas y canceladas no tienen "Cancelar"', async () => {

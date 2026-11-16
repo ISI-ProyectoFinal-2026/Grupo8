@@ -56,7 +56,7 @@ export default function Disponibilidad() {
         <CardHeader>
           <CalendarDays className="w-14 h-14 text-bosque-600 mx-auto mb-4" />
           <CardTitle className="text-2xl text-tierra-900">
-            {tipo.nombre}
+            <h1>{tipo.nombre}</h1>
           </CardTitle>
           <CardDescription>
             {egreso !== fecha

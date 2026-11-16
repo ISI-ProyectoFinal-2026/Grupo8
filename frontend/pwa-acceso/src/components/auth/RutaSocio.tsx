@@ -35,7 +35,7 @@ export function RutaSocio() {
 
   if (error) {
     return (
-      <div role="alert" className="container mx-auto max-w-md space-y-3 px-4 py-16 text-center text-red-600">
+      <div role="alert" className="container mx-auto max-w-md space-y-3 px-4 py-16 text-center text-destructive">
         <p>{error}</p>
         <Button variant="outline" onClick={() => setIntento((n) => n + 1)}>
           Reintentar
@@ -46,7 +46,7 @@ export function RutaSocio() {
 
   if (!usuario) {
     return (
-      <p role="status" className="py-16 text-center text-zinc-500">
+      <p role="status" className="py-16 text-center text-muted-foreground">
         Cargando…
       </p>
     );

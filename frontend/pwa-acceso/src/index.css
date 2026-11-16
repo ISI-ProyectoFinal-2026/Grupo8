@@ -25,7 +25,7 @@
     --destructive: 4 76.5% 40%; /* #B42318 */
     --destructive-foreground: 0 0% 100%;
     --border: 33 19.3% 88.8%; /* tierra-200 */
-    --input: 32 17.5% 81%; /* tierra-300 */
+    --input: 28.7 9.1% 50.4%; /* #8C8075: borde de los campos, 3,9:1 sobre blanco (WCAG 1.4.11 pide 3:1) */
     --ring: 127 49.6% 24.1%; /* bosque-600 */
     --radius: 1rem;
   }

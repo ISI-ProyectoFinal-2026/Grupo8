@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +25,11 @@ export function FormularioLogin({ roles, claseCampo, claseBoton }: FormularioLog
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
+  // El error es de los dos campos (no se sabe cuál está mal): ambos lo tienen como descripción
+  const idError = useId();
+  const atributosDeError = error
+    ? { 'aria-invalid': true, 'aria-describedby': idError }
+    : {};
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -58,6 +63,7 @@ export function FormularioLogin({ roles, claseCampo, claseBoton }: FormularioLog
           autoComplete="username"
           placeholder="ej: emiliana@correo.com o 12345678"
           value={identificacion}
+          {...atributosDeError}
           onChange={(e) => setIdentificacion(e.target.value)}
           className={claseCampo}
         />
@@ -70,13 +76,14 @@ export function FormularioLogin({ roles, claseCampo, claseBoton }: FormularioLog
           required
           autoComplete="current-password"
           value={password}
+          {...atributosDeError}
           onChange={(e) => setPassword(e.target.value)}
           className={claseCampo}
         />
       </div>
 
       {error && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p id={idError} role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </p>
       )}

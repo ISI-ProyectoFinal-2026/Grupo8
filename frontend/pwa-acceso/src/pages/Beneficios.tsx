@@ -17,7 +17,8 @@ export default function Beneficios() {
         <Card className="bg-tierra-900 text-white border-none shadow-lg">
           <CardHeader className="pb-2">
             <QrCode className="w-10 h-10 text-bosque-400 mb-2" />
-            <CardTitle className="text-xl">Ingreso Express</CardTitle>
+            {/* CardTitle trae text-foreground (marrón oscuro): sobre la tarjeta oscura el título va en blanco */}
+            <CardTitle className="text-xl text-white">Ingreso Express</CardTitle>
           </CardHeader>
           <CardContent className="text-tierra-300">
             Olvidate de las filas en la recepción. Presentá tu código QR en la entrada y el personal validará tu acceso y el de tus acompañantes en cuestión de segundos.
@@ -26,7 +27,7 @@ export default function Beneficios() {
         <Card className="bg-tierra-900 text-white border-none shadow-lg">
           <CardHeader className="pb-2">
             <Zap className="w-10 h-10 text-bosque-400 mb-2" />
-            <CardTitle className="text-xl">Autogestión Inteligente</CardTitle>
+            <CardTitle className="text-xl text-white">Autogestión Inteligente</CardTitle>
           </CardHeader>
           <CardContent className="text-tierra-300">
             Consultá la disponibilidad en tiempo real, calculá tus tarifas dinámicas al instante y descargá tus comprobantes para llevarlos en tu celular.

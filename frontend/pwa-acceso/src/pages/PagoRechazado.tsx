@@ -14,7 +14,7 @@ export default function PagoRechazado() {
           <div className="flex justify-center mb-4">
             <XCircle className="w-16 h-16 text-red-500" />
           </div>
-          <CardTitle className="text-2xl text-red-700">Pago Rechazado</CardTitle>
+          <CardTitle className="text-2xl text-red-700"><h1>Pago Rechazado</h1></CardTitle>
           <CardDescription className="text-lg">No pudimos procesar el pago.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -29,9 +29,9 @@ export default function PagoRechazado() {
             Intentar nuevamente
           </Button>
           <div className="pt-4">
-            <Link to="/">
-              <Button variant="outline" className="w-full">Volver al inicio</Button>
-            </Link>
+            <Button asChild variant="outline" className="w-full">
+              <Link to="/">Volver al inicio</Link>
+            </Button>
           </div>
         </CardContent>
       </Card>

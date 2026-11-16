@@ -11,7 +11,9 @@ import {
 } from "@/components/ui/select";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ErrorDeCampo } from "@/components/ErrorDeCampo";
 import { CAMPING } from "@/lib/camping";
+import { atributosDeError, enfocarPrimerError } from "@/lib/errorDeCampo";
 import { sumarDias } from "@/lib/fechas";
 import {
   describirPrecio,
@@ -84,7 +86,10 @@ export default function Home() {
     if (fechas.ingreso) nuevos.fecha = fechas.ingreso;
 
     setErrores(nuevos);
-    if (Object.keys(nuevos).length > 0) return;
+    if (Object.keys(nuevos).length > 0) {
+      enfocarPrimerError();
+      return;
+    }
 
     // Viaja el tipo completo: Disponibilidad y Reservas usan su nombre, precio y forma de cobro
     navigate("/disponibilidad", { state: { fecha, fechaEgreso, personas, tipo } });
@@ -117,13 +122,10 @@ export default function Home() {
                   required
                   min={hoyISO()}
                   value={fecha}
+                  {...atributosDeError("fecha", errores.fecha)}
                   onChange={(e) => setFecha(e.target.value)}
                 />
-                {errores.fecha && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {errores.fecha}
-                  </p>
-                )}
+                <ErrorDeCampo idCampo="fecha" mensaje={errores.fecha} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="personas">
@@ -136,13 +138,10 @@ export default function Home() {
                   maxLength={3}
                   required
                   value={personas}
+                  {...atributosDeError("personas", errores.personas)}
                   onChange={(e) => setPersonas(soloDigitos(e.target.value))}
                 />
-                {errores.personas && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {errores.personas}
-                  </p>
-                )}
+                <ErrorDeCampo idCampo="personas" mensaje={errores.personas} />
               </div>
             </div>
 
@@ -165,7 +164,7 @@ export default function Home() {
                 </p>
               ) : (
                 <Select required value={tipoId} onValueChange={setTipoId}>
-                  <SelectTrigger id="tipo">
+                  <SelectTrigger id="tipo" {...atributosDeError("tipo", errores.tipo)}>
                     <SelectValue placeholder="Seleccioná una opción..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -177,11 +176,7 @@ export default function Home() {
                   </SelectContent>
                 </Select>
               )}
-              {errores.tipo && (
-                <p role="alert" className="text-sm text-destructive">
-                  {errores.tipo}
-                </p>
-              )}
+              <ErrorDeCampo idCampo="tipo" mensaje={errores.tipo} />
               {tipo && (
                 <div className="space-y-2">
                   <Label htmlFor="noches">
@@ -195,11 +190,10 @@ export default function Home() {
                     inputMode="numeric"
                     maxLength={String(MAX_NOCHES).length}
                     value={noches}
+                    {...atributosDeError("noches", errores.noches)}
                     onChange={(e) => setNoches(soloDigitos(e.target.value))}
                   />
-                  {errores.noches && (
-                    <p role="alert" className="text-sm text-destructive">{errores.noches}</p>
-                  )}
+                  <ErrorDeCampo idCampo="noches" mensaje={errores.noches} />
                 </div>
               )}
             </div>
