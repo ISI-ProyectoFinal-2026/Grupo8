@@ -72,7 +72,7 @@ El guardia puede observar este proceso a través de indicadores visuales en la i
 
 ## 3. Panel de Administración
 
-El administrador accede al panel iniciando sesión con su usuario. El menú lateral reúne las secciones de gestión: Inicio, Socios, Descuentos, Incidentes, Egresos y Alertas.
+El administrador accede al panel iniciando sesión con su usuario. El menú lateral reúne las secciones de gestión: Inicio, Gestión de reservas, Socios, Descuentos, Incidentes, Egresos, Alertas, Configuración y Tipos de reserva.
 
 ### 3.1. Monitor de Ocupación
 
@@ -90,3 +90,18 @@ El sistema no permite registrar la salida de más personas de las que hay dentro
 
 Debajo del monitor, en la pantalla de Inicio, se muestra lo cobrado en la última semana: el total en efectivo (ingresos manuales registrados por los guardias), el total por Mercado Pago (solo pagos aprobados) y el total general, con el detalle día por día.
 Se puede elegir otro período con las fechas "Desde" y "Hasta", de hasta 92 días.
+
+### 3.4. Socios
+
+La sección "Socios" muestra el padrón con el estado de cada socio: Vigente, Vencida o De baja.
+
+* **Buscar:** un solo campo, por DNI (con o sin puntos) o por nombre, sin importar acentos ni mayúsculas. La lista se actualiza sola mientras se escribe. El selector de estado filtra vigentes, vencidos o dados de baja.
+* **Editar:** corrige nombre, DNI o email.
+* **Renovar:** propone un año más desde el vencimiento actual, o desde hoy si ya venció. No acepta fechas pasadas.
+* **Dar de baja:** pide confirmación. El socio no puede iniciar sesión ni validar como socio, pero sus reservas se conservan. Se deshace con "Reactivar".
+
+### 3.5. Alertas de Clonación
+
+Si dos guardias registraron el mismo QR desde celulares distintos, la reserva queda en alerta y aparece en "Alertas" con el titular y cuándo se detectó. Las dos personas ya entraron: el sistema no expulsa a nadie, solo avisa.
+
+Después de revisar el caso, el administrador aprieta "Resolver incidente" (puede dejar una nota). La reserva vuelve al estado que tenía, o queda confirmada si el pago entró mientras estaba en alerta, y queda registrado quién la resolvió y cuándo.

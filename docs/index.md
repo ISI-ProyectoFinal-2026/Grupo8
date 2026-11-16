@@ -17,12 +17,15 @@ Arquitectura y decisiones de diseño interno:
 - **Frontend:** React, Vite y arquitecturas de interfaz con Shadcn UI; sesión y rutas por rol, y estructura del panel de administración.
 - **Seguridad Offline:** Criptografía asimétrica (ES256), IndexedDB, Dexie.js y el motor de validación local mediante la *Web Crypto API*.
 - **Comunicaciones:** Orquestación asíncrona para la generación de correos electrónicos y códigos QR en memoria RAM (Resend + Jinja2).
+- **Socios y clonación:** baja lógica y regla única de vigencia; detección de QR clonados y resolución de alertas.
+- Complementos: [Bootstrap de la PWA y lista negra](./pwa-bootstrap-y-blacklist.md) y [Manejo de zonas horarias](./zonas-horarias.md).
 
 ### 3. [Guía de Pruebas (Testing)](./testing_guide.md)
 Instrucciones para mantener la calidad del software:
 - Ejecución de suites con `pytest` (Backend) y `vitest` (Frontend).
 - Pruebas del motor criptográfico y manipulación de JWT.
 - Entornos de simulación de caídas de red y configuración de `ngrok` para testing de hardware (cámara) en móviles.
+- Pruebas de punta a punta con Playwright en un solo comando (`npm run test:e2e`).
 
 ### 4. [Referencia de la API](./api_reference.md)
 Definición estricta de contratos de datos y endpoints:
@@ -30,6 +33,7 @@ Definición estricta de contratos de datos y endpoints:
 - Motor de reglas, cálculo dinámico de tarifas y validaciones de cupos.
 - Endpoints de sincronización transaccional (`/bootstrap`, `/bulk-sync`) y webhooks financieros (Mercado Pago).
 - Endpoints del panel: ocupación, egresos y resumen de cobros.
+- Socios y membresías (padrón, renovación y baja) y alertas de clonación.
 
 ### 5. [Guía de Despliegue (Deployment)](./deployment.md)
 Cómo llevar la plataforma a entornos de producción:
