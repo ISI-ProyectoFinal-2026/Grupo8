@@ -1,77 +1,93 @@
-import { LogOut, Tent } from 'lucide-react';
+import { ExternalLink, LogOut } from 'lucide-react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
+import { LogoQamp } from '@/components/marca/LogoQamp';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
-import { adminRoutes } from '@/pages/admin/routes';
+import { adminRoutes, type AdminRoute } from '@/pages/admin/routes';
+
+const CLASE_OPCION =
+  'flex items-center gap-3 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-medium transition-colors';
+
+function OpcionMenu({ path, titulo, icono: Icono }: AdminRoute) {
+  return (
+    <NavLink
+      to={path === '' ? '/admin' : `/admin/${path}`}
+      end={path === ''}
+      className={({ isActive }) =>
+        cn(
+          CLASE_OPCION,
+          // La sección actual, en una píldora blanca como las pestañas de la web
+          isActive ? 'bg-white text-lateral' : 'text-tierra-200 hover:bg-white/10 hover:text-white'
+        )
+      }
+    >
+      <Icono className="h-4 w-4" aria-hidden="true" />
+      {titulo}
+    </NavLink>
+  );
+}
 
 /**
  * Marco del panel de administración. Es independiente del de la web de reservas:
- * tiene su propia barra superior y su menú lateral. El menú se genera desde
- * `adminRoutes`, así que sumar una pantalla no requiere tocar este archivo.
+ * barra lateral verde oscuro con el menú y una barra superior sin color, sobre el mismo
+ * fondo que el resto. El menú se genera desde `adminRoutes`, así que sumar una pantalla
+ * no requiere tocar este archivo.
  */
 export function AdminLayout() {
   const { cerrarSesion } = useAuth();
+  const principales = adminRoutes.filter((r) => !r.alPie);
+  const alPie = adminRoutes.filter((r) => r.alPie);
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-100">
-      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-900 text-white">
-        <div className="flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Tent className="h-5 w-5 text-green-500" />
-            <span className="font-bold">Qamp</span>
-            <span className="rounded bg-zinc-700 px-2 py-0.5 text-xs font-medium uppercase tracking-wide">
-              Administración
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className="text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            >
-              <Link to="/">Ver sitio de reservas</Link>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={cerrarSesion}
-              className="gap-2 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            >
-              <LogOut className="h-4 w-4" />
-              Cerrar sesión
-            </Button>
-          </div>
+    <div className="flex min-h-screen flex-col md:flex-row">
+      <aside className="relative z-10 bg-lateral text-white md:sticky md:top-0 md:flex md:h-screen md:w-64 md:shrink-0 md:flex-col">
+        <div className="px-6 pb-2 pt-5 md:pb-6 md:pt-7">
+          <LogoQamp tamanio={30} />
         </div>
-      </header>
 
-      <div className="flex flex-1 flex-col md:flex-row">
         <nav
           aria-label="Navegación del panel de administración"
-          className="flex gap-1 overflow-x-auto border-b bg-white p-2 md:w-60 md:shrink-0 md:flex-col md:border-b-0 md:border-r md:p-4"
+          className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-1 md:flex-col md:overflow-x-visible md:overflow-y-auto md:pb-6"
         >
-          {adminRoutes.map(({ path, titulo, icono: Icono }) => (
-            <NavLink
-              key={path}
-              to={path === '' ? '/admin' : `/admin/${path}`}
-              end={path === ''}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-green-600 text-white'
-                    : 'text-zinc-700 hover:bg-zinc-100'
-                )
-              }
-            >
-              <Icono className="h-4 w-4" />
-              {titulo}
-            </NavLink>
+          {principales.map((ruta) => (
+            <OpcionMenu key={ruta.path} {...ruta} />
           ))}
-        </nav>
 
-        <main className="min-w-0 flex-1 p-6">
+          {/* Configuración y la salida quedan abajo de todo, separadas del resto del menú */}
+          <div className="flex gap-1 md:mt-auto md:flex-col md:border-t md:border-white/15 md:pt-4">
+            {alPie.map((ruta) => (
+              <OpcionMenu key={ruta.path} {...ruta} />
+            ))}
+            <button
+              type="button"
+              onClick={cerrarSesion}
+              className={cn(CLASE_OPCION, 'text-tierra-200 hover:bg-white/10 hover:text-white')}
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              Cerrar sesión
+            </button>
+          </div>
+        </nav>
+      </aside>
+
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className="fondo-montanas" aria-hidden="true" />
+
+        {/* Barra superior sin color propio: se ve el mismo fondo */}
+        <header className="relative flex items-center justify-end gap-3 px-6 py-4">
+          <span className="rounded-full border border-tierra-300 bg-white/70 px-3 py-1 text-xs font-medium text-tierra-700">
+            Administración
+          </span>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/">
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+              Ver sitio de reservas
+            </Link>
+          </Button>
+        </header>
+
+        <main className="relative min-w-0 flex-1 px-6 pb-10">
           <Outlet />
         </main>
       </div>

@@ -1,6 +1,9 @@
 import type { FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { CameraOff } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface ScannerQRProps {
   onScanSuccess: (token: string) => void;
@@ -69,48 +72,32 @@ export const ScannerQR = ({ onScanSuccess }: ScannerQRProps) => {
   };
 
   return (
-    <div style={{ width: '100%', maxWidth: '400px', margin: '0 auto' }}>
+    <div className="mx-auto w-full max-w-md space-y-4">
       {permisoDenegado ? (
-        <div style={{ color: 'red', textAlign: 'center', padding: '20px' }}>
-          <p>⚠️ No se pudo acceder a la cámara (Normal en PC sin cámara).</p>
+        <div role="alert" className="flex items-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-left text-amber-900">
+          <CameraOff className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <p>No se pudo acceder a la cámara (Normal en PC sin cámara).</p>
         </div>
       ) : (
-        <div id="lector-qr" style={{ borderRadius: '12px', overflow: 'hidden', border: '2px solid #ccc' }}></div>
+        <div id="lector-qr" className="overflow-hidden rounded-3xl border-2 border-tierra-300 bg-tierra-900"></div>
       )}
 
-      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f8f9fa', border: '1px solid #ccc', borderRadius: '8px' }}>
-        <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', fontFamily: 'sans-serif' }}>
+      <div className="rounded-3xl border border-tierra-200/70 bg-white p-4 shadow-sm">
+        <h3 className="mb-3 text-center text-base font-semibold text-foreground">
           Ingresar token manualmente
-        </h4>
-        <form onSubmit={handleTokenManual} style={{ display: 'flex', gap: '8px' }}>
-          <input
+        </h3>
+        <form onSubmit={handleTokenManual} className="flex gap-2">
+          <Input
             type="text"
             aria-label="Token del QR"
-            placeholder="Pega el JWT aquí..."
+            placeholder="Pegá el código del QR"
             value={tokenManual}
             onChange={(e) => setTokenManual(e.target.value)}
-            style={{
-              flex: 1,
-              padding: '10px',
-              borderRadius: '6px',
-              border: '1px solid #ccc',
-              outline: 'none'
-            }}
+            className="h-12 flex-1 text-base"
           />
-          <button
-            type="submit"
-            style={{
-              padding: '10px 15px',
-              backgroundColor: '#0056b3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 'bold'
-            }}
-          >
+          <Button type="submit" className="h-12 px-5 text-base font-semibold">
             Validar
-          </button>
+          </Button>
         </form>
       </div>
     </div>

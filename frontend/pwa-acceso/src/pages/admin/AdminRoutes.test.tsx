@@ -102,8 +102,9 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
         '/admin/incidentes',
         '/admin/egresos',
         '/admin/alertas',
-        '/admin/configuracion',
         '/admin/tipos-reserva',
+        // Configuración va al pie de la barra lateral, justo encima de "Cerrar sesión"
+        '/admin/configuracion',
       ]);
     });
 

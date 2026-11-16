@@ -26,7 +26,7 @@ export default function PagoPendiente() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <p className="text-zinc-600">
+          <p className="text-tierra-600">
             Mercado Pago todavía no informó el resultado de la operación. Tu reserva quedará en
             espera y, cuando se confirme el pago, te enviaremos el código QR por correo electrónico.
           </p>

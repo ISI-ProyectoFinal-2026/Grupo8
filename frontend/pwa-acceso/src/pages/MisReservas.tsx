@@ -141,8 +141,8 @@ export default function MisReservas() {
   if (!token) {
     return (
       <div className="container mx-auto px-4 py-12 max-w-3xl">
-        <h1 className="text-3xl font-bold text-zinc-900 mb-6">Mis Reservas</h1>
-        <div className="text-center py-12 text-zinc-600 space-y-4">
+        <h1 className="text-3xl font-bold text-tierra-900 mb-6">Mis Reservas</h1>
+        <div className="text-center py-12 text-tierra-600 space-y-4">
           <CalendarX2 className="w-12 h-12 mx-auto opacity-20" />
           <p>Iniciá sesión para ver tus reservas.</p>
           <Button asChild>
@@ -160,7 +160,7 @@ export default function MisReservas() {
 
     if (filtradas.length === 0) {
       return (
-        <div className="text-center py-12 text-zinc-500">
+        <div className="text-center py-12 text-tierra-500">
           <CalendarX2 className="w-12 h-12 mx-auto mb-3 opacity-20" />
           No hay reservas en esta categoría.
         </div>
@@ -175,10 +175,10 @@ export default function MisReservas() {
         aria-label={`Reserva ${reserva.id.slice(0, 8)}`}
         className="mb-4"
       >
-        <CardHeader className="pb-3 flex flex-row items-center justify-between bg-zinc-50 rounded-t-xl border-b">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between bg-tierra-50 rounded-t-xl border-b">
           <div>
             <CardTitle className="text-lg">Reserva {reserva.id.slice(0, 8)}...</CardTitle>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-tierra-500">
               {formatearFecha(reserva.fecha_ingreso)}
               {reserva.fecha_egreso !== reserva.fecha_ingreso ? ` al ${formatearFecha(reserva.fecha_egreso)}` : ""}
               {" · "}
@@ -190,14 +190,14 @@ export default function MisReservas() {
           </div>
           <Badge variant={categoria === 'cancelada' ? 'destructive' : 'default'}
                  className={
-                   categoria === 'proxima' ? 'bg-green-600' :
-                   categoria === 'pendiente' ? 'bg-yellow-500 hover:bg-yellow-600' : ''
+                   categoria === 'proxima' ? 'bg-bosque-600' :
+                   categoria === 'pendiente' ? 'bg-amber-100 text-amber-900 hover:bg-amber-100' : ''
                  }>
             {reserva.estado_reserva.toUpperCase()}
           </Badge>
         </CardHeader>
         <CardContent className="pt-4 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-xl font-bold text-zinc-900">{formatearMonto(reserva.monto_total)}</div>
+          <div className="text-xl font-bold text-tierra-900">{formatearMonto(reserva.monto_total)}</div>
           <div className="flex gap-2 w-full md:w-auto">
 
             {/* Lógica para reservas PAGADAS / PRÓXIMAS */}
@@ -215,7 +215,7 @@ export default function MisReservas() {
               <Button
                 onClick={() => bajarQr(reserva.id)}
                 disabled={descargandoId === reserva.id}
-                className="flex-1 md:flex-none flex gap-2 bg-zinc-900"
+                className="flex-1 md:flex-none flex gap-2 bg-tierra-900"
               >
                 <QrCode className="w-4 h-4" />
                 {descargandoId === reserva.id ? "Descargando..." : "Descargar QR"}
@@ -227,7 +227,7 @@ export default function MisReservas() {
               <Button
                 onClick={() => verificarPago(reserva.id)}
                 disabled={reconciliandoId === reserva.id}
-                className="flex-1 md:flex-none flex gap-2 bg-yellow-500 hover:bg-yellow-600 text-white"
+                className="flex-1 md:flex-none flex gap-2 bg-amber-700 hover:bg-amber-800 text-white"
               >
                 <RefreshCw className={`w-4 h-4 ${reconciliandoId === reserva.id ? 'animate-spin' : ''}`} />
                 {reconciliandoId === reserva.id ? 'Verificando...' : 'Verificar Pago'}
@@ -245,10 +245,10 @@ export default function MisReservas() {
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">
-      <h1 className="text-3xl font-bold text-zinc-900 mb-6">Mis Reservas</h1>
+      <h1 className="text-3xl font-bold text-tierra-900 mb-6">Mis Reservas</h1>
 
       {cargando && reservas.length === 0 && (
-        <p role="status" className="text-center py-12 text-zinc-500">Cargando tus reservas…</p>
+        <p role="status" className="text-center py-12 text-tierra-500">Cargando tus reservas…</p>
       )}
 
       {error && (
@@ -263,7 +263,7 @@ export default function MisReservas() {
       )}
 
       {avisoCancelacion && (
-        <p role="status" className="mb-6 rounded-md bg-green-50 px-3 py-2 text-center text-green-800">
+        <p role="status" className="mb-6 rounded-md bg-bosque-50 px-3 py-2 text-center text-bosque-800">
           {avisoCancelacion}
         </p>
       )}

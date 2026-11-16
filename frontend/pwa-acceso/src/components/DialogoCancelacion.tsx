@@ -128,7 +128,7 @@ export default function DialogoCancelacion({
         </DialogHeader>
 
         {cargando && (
-          <p role="status" className="text-sm text-zinc-600">
+          <p role="status" className="text-sm text-tierra-600">
             Cargando condiciones…
           </p>
         )}
@@ -152,21 +152,21 @@ export default function DialogoCancelacion({
         {sePuedeConfirmar && (
           <div className="space-y-4">
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-              <dt className="text-zinc-500">Podés cancelar hasta</dt>
-              <dd className="font-medium text-zinc-900">
+              <dt className="text-tierra-500">Podés cancelar hasta</dt>
+              <dd className="font-medium text-tierra-900">
                 {formatearFecha(condiciones.fecha_limite)} (
                 {textoDelPlazo(condiciones.dias_minimos)})
               </dd>
-              <dt className="text-zinc-500">Devolución</dt>
-              <dd className="font-medium text-zinc-900">
+              <dt className="text-tierra-500">Devolución</dt>
+              <dd className="font-medium text-tierra-900">
                 {condiciones.porcentaje_devolucion} % de lo que pagaste
               </dd>
-              <dt className="text-zinc-500">Monto a devolver</dt>
-              <dd className="font-medium text-zinc-900">
+              <dt className="text-tierra-500">Monto a devolver</dt>
+              <dd className="font-medium text-tierra-900">
                 {formatearMonto(condiciones.monto_devolucion)}
               </dd>
             </dl>
-            <p className="font-medium text-zinc-900">
+            <p className="font-medium text-tierra-900">
               ¿Está seguro que desea cancelar?
             </p>
           </div>

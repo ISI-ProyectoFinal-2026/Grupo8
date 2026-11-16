@@ -72,7 +72,7 @@ test('sin conexión el guardia registra un QR y un ingreso en efectivo; al recon
   await test.step('la app abre igual sin conexión (service worker)', async () => {
     await guardia.reload();
     await expect(
-      guardia.getByRole('heading', { name: 'Sistema de Acceso - Grupo 8' })
+      guardia.getByRole('heading', { name: 'Control de acceso', level: 1 })
     ).toBeVisible();
   });
 
@@ -92,7 +92,8 @@ test('sin conexión el guardia registra un QR y un ingreso en efectivo; al recon
   });
 
   await test.step('registra un ingreso manual cobrado en efectivo', async () => {
-    await guardia.getByRole('button', { name: /Ingreso Manual/ }).click();
+    // El registro manual se abre desde la barra inferior de la app
+    await guardia.getByRole('link', { name: 'Registro manual' }).click();
     await guardia.getByLabel('DNI / Pasaporte').fill(MANUAL.dni);
     await guardia.getByLabel('Nombre completo').fill(MANUAL.nombre);
     await guardia.getByLabel('Acompañantes').fill(String(MANUAL.acompanantes));

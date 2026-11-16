@@ -27,6 +27,8 @@ export interface AdminRoute {
   titulo: string;
   icono: LucideIcon;
   element: ReactElement;
+  /** Va al pie de la barra lateral, separada del resto y justo encima de "Cerrar sesión". */
+  alPie?: boolean;
 }
 
 /**
@@ -73,6 +75,7 @@ export const adminRoutes: AdminRoute[] = [
     titulo: 'Configuración',
     icono: Settings,
     element: <Configuracion />,
+    alPie: true,
   },
   {
     path: 'tipos-reserva',
