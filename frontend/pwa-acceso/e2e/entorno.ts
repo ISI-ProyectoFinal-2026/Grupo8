@@ -44,6 +44,10 @@ export const CREDENCIALES = {
     email: 'guardia-e2e@example.com',
     password: aleatorio('E2E_GUARDIA_PASSWORD'),
   },
+  socio: {
+    email: 'socio-e2e@example.com',
+    password: aleatorio('E2E_SOCIO_PASSWORD'),
+  },
 } as const;
 
 export const SECRETO_WEBHOOK_MP = aleatorio('E2E_SECRETO_WEBHOOK_MP');
@@ -101,5 +105,7 @@ export function entornoBackend(): Record<string, string> {
     E2E_ADMIN_PASSWORD: CREDENCIALES.admin.password,
     E2E_GUARDIA_EMAIL: CREDENCIALES.guardia.email,
     E2E_GUARDIA_PASSWORD: CREDENCIALES.guardia.password,
+    E2E_SOCIO_EMAIL: CREDENCIALES.socio.email,
+    E2E_SOCIO_PASSWORD: CREDENCIALES.socio.password,
   };
 }

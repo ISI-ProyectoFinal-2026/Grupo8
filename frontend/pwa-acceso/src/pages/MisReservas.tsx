@@ -168,7 +168,13 @@ export default function MisReservas() {
     }
 
     return filtradas.map((reserva) => (
-      <Card key={reserva.id} className="mb-4">
+      <Card
+        key={reserva.id}
+        // Un lector de pantalla anuncia cada tarjeta por su reserva, como "Reserva 1a2b3c4d"
+        role="article"
+        aria-label={`Reserva ${reserva.id.slice(0, 8)}`}
+        className="mb-4"
+      >
         <CardHeader className="pb-3 flex flex-row items-center justify-between bg-zinc-50 rounded-t-xl border-b">
           <div>
             <CardTitle className="text-lg">Reserva {reserva.id.slice(0, 8)}...</CardTitle>

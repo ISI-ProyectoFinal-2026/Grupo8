@@ -181,6 +181,35 @@ Errores que encontró esta prueba y se corrigieron:
 * **Etiquetas sin asociar.** Faltaban etiquetas asociadas en el formulario de ingreso manual. Además, en el resumen de cobros cada total pasó a ser un grupo con nombre ("Efectivo", "Mercado Pago", "Total") para que un lector de pantalla lea el monto junto a su título.
 * **Login por app.** Desde la 23.1 cada app tiene su propio login (`/login`, `/acceso/login`, `/admin/login`): las pruebas entran por el login de cada actor.
 
+### 3.5. Cancelación de reservas con Playwright (Issue 24.3)
+
+La prueba `frontend/pwa-acceso/e2e/cancellation.spec.ts` corre con el mismo comando (`npm run test:e2e`). La base de pruebas incluye un socio con la membresía al día.
+
+**Bloque 1: plazo de cancelación.** Cada prueba fija el plazo en 3 días por la API del panel y prepara por API una reserva pagada a nombre del socio:
+
+* **Ingreso dentro de 3 días.** Hoy es el último día del plazo: el socio cancela desde Mis reservas, ve el mensaje con la devolución y la reserva pasa a Canceladas.
+* **Ingreso dentro de 2 días.** El plazo venció ayer: el diálogo muestra exactamente "Lo sentimos, las reservas solo se pueden cancelar hasta 3 días antes del ingreso." y no ofrece confirmar. Además, la prueba comprueba que el backend también rechaza la cancelación directa (422 con el mismo mensaje).
+
+**Bloque 2: el QR cancelado se rechaza en la puerta sin internet.**
+
+1. Con plazo 0, el socio cancela desde la web una reserva de hoy.
+2. El guardia abre la app. La prueba comprueba que el servidor le mandó esa reserva en la lista de canceladas.
+3. El guardia pierde internet y escanea el QR. Aparece "⚠️ Reserva Cancelada / Acceso Revocado" y la capacidad disponible no cambia.
+4. Al volver internet no se envía ningún ingreso y la ocupación del panel no cambia.
+
+Socio, guardia y administrador usan contextos de navegador separados: cada uno tiene su propia sesión y su propio almacenamiento.
+
+Decisiones:
+
+* **Sin manipular el reloj.** El plazo lo calcula el backend con la fecha de Argentina, así que cambiar el reloj del navegador (`page.clock`) no cambia el resultado. Se fija el plazo y se crean reservas con fechas relativas a hoy, justo en el límite (último día permitido y primer día vencido).
+* **Reserva de hoy en el Bloque 2.** Así el QR solo puede rechazarse por estar cancelado, y el mensaje que se comprueba es distinto del de "QR inválido".
+* **Cada tarjeta de Mis reservas tiene nombre accesible** ("Reserva" más los primeros 8 caracteres del id), para encontrar la reserva correcta aunque el socio tenga varias.
+
+Pendientes detectados (no se modificaron porque están fuera del alcance):
+
+* La lista de canceladas solo se descarga al abrir la app o al volver la conexión. Si el guardia tiene la app abierta desde antes de la cancelación y pierde la red sin recargar, el QR cancelado se acepta.
+* La PWA no revisa la fecha de ingreso del QR (`dat`), solo el vencimiento: el QR de una reserva futura se acepta hoy.
+
 ## 4. Entorno de Integración Continua (CI/CD)
 
 El sistema valida ambas bases de código antes de cualquier integración en la rama principal (`main` o `dev`) utilizando GitHub Actions (`.github/workflows/test.yml`).

@@ -3,7 +3,7 @@ Deja lista la base de datos de las pruebas E2E (Playwright) antes de levantar el
 
 1. Crea la base si no existe.
 2. La vacía por completo y aplica todas las migraciones (así quedan los tipos de reserva iniciales).
-3. Crea el administrador y el guardia con las credenciales que genera Playwright en cada corrida.
+3. Crea el administrador, el guardia y un socio con las credenciales que genera Playwright en cada corrida.
 
 Por seguridad solo trabaja sobre una base cuyo nombre termine en "_e2e":
 nunca puede borrar la base de desarrollo por error.
@@ -13,6 +13,7 @@ Lo ejecuta Playwright (playwright.config.ts). A mano, desde la carpeta backend:
 """
 import os
 import sys
+from datetime import timedelta
 
 from alembic import command
 from alembic.config import Config
@@ -55,6 +56,7 @@ def crear_usuarios_de_prueba() -> None:
     # Se importan acá: la sesión tiene que abrirse después de migrar
     from core.database import SessionLocal
     from models.user import RoleEnum, User
+    from schemas.reserva import hoy_argentina
     from services.auth_service import hash_password
     from services.camping_service import obtener_o_crear_camping
 
@@ -75,6 +77,16 @@ def crear_usuarios_de_prueba() -> None:
                 nombre="Guardia E2E",
                 dni="90000002",
                 rol=RoleEnum.SEGURIDAD,
+            ),
+            # Socio con la membresía al día: entra a la web de reservas y cancela desde Mis reservas
+            User(
+                email=_variable("E2E_SOCIO_EMAIL"),
+                password_hash=hash_password(_variable("E2E_SOCIO_PASSWORD")),
+                nombre="Socio E2E",
+                dni="90000003",
+                rol=RoleEnum.CLIENTE,
+                is_socio=True,
+                membresia_vence=hoy_argentina() + timedelta(days=365),
             ),
         ])
         db.commit()
