@@ -25,7 +25,7 @@ export function BannerAlertas() {
   const cantidad = alertas.length;
   return (
     <div role="alert" style={{ padding: 16, background: '#fff3cd', border: '1px solid #f0ad4e', borderRadius: 8 }}>
-      <strong>{`⚠️ ${cantidad} incidente${cantidad === 1 ? '' : 's'} de acceso sin resolver`}</strong>
+      <strong>{`${cantidad} incidente${cantidad === 1 ? '' : 's'} de acceso sin resolver`}</strong>
       <p style={{ margin: '8px 0' }}>
         {`Intento de múltiple ingreso detectado para el titular ${alertas[0].titular}`}
         {cantidad > 1 ? ` y ${cantidad - 1} más.` : ''}

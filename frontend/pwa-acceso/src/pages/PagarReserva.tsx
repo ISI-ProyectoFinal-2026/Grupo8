@@ -84,7 +84,7 @@ export default function PagarReserva() {
             <CardDescription className="text-lg">Se terminó el tiempo para pagar.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <p className="text-zinc-600">
+            <p className="text-tierra-600">
               Liberamos los lugares que tenías guardados. Si todavía querés ir, hacé una reserva nueva.
             </p>
             <Button onClick={empezarDeNuevo} className="w-full bg-red-600 hover:bg-red-700 h-12 text-md">
@@ -98,24 +98,24 @@ export default function PagarReserva() {
 
   return (
     <div className="container mx-auto px-4 py-16 max-w-md flex flex-col items-center justify-center min-h-[80vh]">
-      <Card className="w-full shadow-lg border-green-200 text-center">
+      <Card className="w-full shadow-lg border-bosque-200 text-center">
         <CardHeader>
           <div className="flex justify-center mb-4">
-            <Clock className="w-16 h-16 text-green-600" />
+            <Clock className="w-16 h-16 text-bosque-600" />
           </div>
-          <CardTitle className="text-2xl text-green-700">Tu reserva está guardada</CardTitle>
+          <CardTitle className="text-2xl text-bosque-700">Tu reserva está guardada</CardTitle>
           <CardDescription className="text-lg">{reserva.titulo}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div>
-            <p className="text-zinc-600">Tenés este tiempo para pagar:</p>
+            <p className="text-tierra-600">Tenés este tiempo para pagar:</p>
             <CuentaRegresiva
               vencimiento={reserva.vencimiento}
               onVencido={() => setVencida(true)}
-              className="block text-5xl font-bold tabular-nums text-zinc-900 mt-2"
+              className="block text-5xl font-bold tabular-nums text-tierra-900 mt-2"
             />
           </div>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-tierra-500">
             Pasado ese tiempo la reserva se cancela y los lugares quedan libres para otras personas.
           </p>
           {error && (
@@ -126,7 +126,7 @@ export default function PagarReserva() {
           <Button
             onClick={irAPagar}
             disabled={enviando}
-            className="w-full bg-green-600 hover:bg-green-700 h-12 text-md"
+            className="w-full bg-bosque-600 hover:bg-bosque-700 h-12 text-md"
           >
             {enviando ? 'Conectando con Mercado Pago…' : 'Ir a pagar'}
           </Button>

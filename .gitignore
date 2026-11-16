@@ -8,6 +8,8 @@ __pycache__/
 .env
 .env.local
 .env.*
+# Los ejemplos sí se versionan: no tienen claves reales
+!.env.example
 *.pem
 *.key
 

@@ -17,46 +17,46 @@ export default function Contacto() {
         
         {/* Info Directa */}
         <div>
-          <h1 className="text-3xl font-bold text-zinc-900 mb-6">Comunicate con nosotros</h1>
-          <p className="text-zinc-600 mb-8">
+          <h1 className="text-3xl font-bold text-tierra-900 mb-6">Comunicate con nosotros</h1>
+          <p className="text-tierra-600 mb-8">
             Si tenés alguna duda escribinos y te responderemos lo más rápido posible.
           </p>
           
           <div className="space-y-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-700">
+              <div className="w-12 h-12 bg-bosque-100 rounded-full flex items-center justify-center text-bosque-700">
                 <Phone className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-zinc-900">Teléfono / WhatsApp</p>
-                <p className="text-zinc-600">+54 9 260 412-3456</p>
+                <p className="text-sm font-semibold text-tierra-900">Teléfono / WhatsApp</p>
+                <p className="text-tierra-600">+54 9 260 412-3456</p>
               </div>
             </div>
             
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-700">
+              <div className="w-12 h-12 bg-bosque-100 rounded-full flex items-center justify-center text-bosque-700">
                 <Mail className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-zinc-900">Correo Electrónico</p>
-                <p className="text-zinc-600">somosqamp@gmail.com</p>
+                <p className="text-sm font-semibold text-tierra-900">Correo Electrónico</p>
+                <p className="text-tierra-600">somosqamp@gmail.com</p>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-700">
+              <div className="w-12 h-12 bg-bosque-100 rounded-full flex items-center justify-center text-bosque-700">
                 <MapPin className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-zinc-900">Ubicación</p>
-                <p className="text-zinc-600">San Rafael, Mendoza</p>
+                <p className="text-sm font-semibold text-tierra-900">Ubicación</p>
+                <p className="text-tierra-600">San Rafael, Mendoza</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Formulario */}
-        <Card className="shadow-lg border-zinc-200">
+        <Card className="shadow-lg border-tierra-200">
           <CardHeader>
             <CardTitle>Envianos un mensaje</CardTitle>
             <CardDescription>Completá el formulario y te contactaremos por email.</CardDescription>
@@ -80,7 +80,7 @@ export default function Contacto() {
                   className="min-h-[120px]"
                 />
               </div>
-              <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 h-11 text-md mt-4">
+              <Button type="submit" className="w-full bg-bosque-600 hover:bg-bosque-700 h-11 text-md mt-4">
                 Enviar mensaje
               </Button>
             </form>

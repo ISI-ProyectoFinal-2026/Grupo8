@@ -79,10 +79,10 @@ const EstadoDni = ({ verificacion }: { verificacion?: Verificacion }) => {
   if (!verificacion) return null;
   switch (verificacion.estado) {
     case "verificando":
-      return <p role="status" className="mt-2 text-sm text-zinc-500">Verificando DNI…</p>;
+      return <p role="status" className="mt-2 text-sm text-tierra-500">Verificando DNI…</p>;
     case "ok":
       return (
-        <p role="status" className="mt-2 text-sm text-green-700">
+        <p role="status" className="mt-2 text-sm text-bosque-700">
           Socio verificado{verificacion.nombre ? `: ${verificacion.nombre}` : ""}.
         </p>
       );
@@ -396,7 +396,7 @@ export default function Reservas() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <h1 className="text-3xl font-bold text-zinc-900 mb-8">Completá tu Reserva</h1>
+      <h1 className="text-3xl font-bold text-tierra-900 mb-8">Completá tu Reserva</h1>
 
       {/* noValidate: desactiva los mensajes nativos del navegador (en inglés)
           y usamos los nuestros, en español */}
@@ -440,10 +440,10 @@ export default function Reservas() {
           </Card>
 
           {porUnidad && (
-            <Card className="border-zinc-200">
-              <CardHeader className="bg-zinc-50 border-b border-zinc-100 pb-4">
+            <Card className="border-tierra-200">
+              <CardHeader className="bg-tierra-50 border-b border-tierra-100 pb-4">
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Users className="w-5 h-5 text-zinc-500" />
+                  <Users className="w-5 h-5 text-tierra-500" />
                   Titular de la reserva
                 </CardTitle>
                 <CardDescription>
@@ -490,20 +490,20 @@ export default function Reservas() {
                 : undefined;
 
             return (
-              <Card key={index} className="border-zinc-200">
-                <CardHeader className="bg-zinc-50 border-b border-zinc-100 pb-4">
+              <Card key={index} className="border-tierra-200">
+                <CardHeader className="bg-tierra-50 border-b border-tierra-100 pb-4">
                   <CardTitle className="text-lg flex items-center gap-2">
-                    <Users className="w-5 h-5 text-zinc-500" />
+                    <Users className="w-5 h-5 text-tierra-500" />
                     Visitante {index + 1}
-                    {precargado && <span className="text-sm font-normal text-zinc-500">(titular)</span>}
+                    {precargado && <span className="text-sm font-normal text-tierra-500">(titular)</span>}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                   {precargado ? (
                     // Datos de la cuenta: se muestran, no se vuelven a pedir
                     <div className="space-y-1 md:col-span-2">
-                      <p className="font-medium text-zinc-900">{visitante.nombre}</p>
-                      <p className="text-sm text-zinc-600">
+                      <p className="font-medium text-tierra-900">{visitante.nombre}</p>
+                      <p className="text-sm text-tierra-600">
                         {visitante.condicion === "socio"
                           ? `Socio del Camping · DNI ${visitante.dni}`
                           : "Visitante General"}
@@ -587,28 +587,28 @@ export default function Reservas() {
 
         {/* COLUMNA DERECHA: Resumen y Pago */}
         <div>
-          <Card className="sticky top-6 shadow-md border-green-100">
-            <CardHeader className="bg-zinc-50 rounded-t-lg">
+          <Card className="sticky top-6 shadow-md border-bosque-100">
+            <CardHeader className="bg-tierra-50 rounded-t-lg">
               <CardTitle>Resumen de Compra</CardTitle>
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
-              <div className="flex justify-between text-zinc-600">
+              <div className="flex justify-between text-tierra-600">
                 <span className="flex items-center gap-2"><CalendarDays className="w-4 h-4"/> Fecha</span>
-                <span className="font-medium text-zinc-900">
+                <span className="font-medium text-tierra-900">
                   {fecha ? formatearFecha(fecha) : ''}
                   {fechaEgreso && fechaEgreso !== fecha ? ` al ${formatearFecha(fechaEgreso)}` : ''}
                 </span>
               </div>
-              <div className="flex justify-between text-zinc-600">
+              <div className="flex justify-between text-tierra-600">
                 <span>Tipo de reserva</span>
-                <span className="font-medium text-zinc-900">
+                <span className="font-medium text-tierra-900">
                   {tipo.nombre}
                 </span>
               </div>
 
               <Separator />
 
-              <div className="flex justify-between text-zinc-600">
+              <div className="flex justify-between text-tierra-600">
                 <span>
                   {porUnidad
                     ? cotizacion?.noches
@@ -621,7 +621,7 @@ export default function Reservas() {
               {!porUnidad && <MensajeError texto={errores.cantidad} />}
 
               {cotizacion && cotizacion.descuento_total > 0 && (
-                <div className="flex justify-between text-green-600 font-medium">
+                <div className="flex justify-between text-bosque-600 font-medium">
                   <span>Descuentos</span>
                   <span>-{formatearMonto(cotizacion.descuento_total)}</span>
                 </div>
@@ -630,13 +630,13 @@ export default function Reservas() {
               <Separator />
 
               <div className="flex justify-between items-center">
-                <span className="text-lg font-bold text-zinc-900">Total a pagar</span>
-                <span className="text-2xl font-black text-green-700">
+                <span className="text-lg font-bold text-tierra-900">Total a pagar</span>
+                <span className="text-2xl font-black text-bosque-700">
                   {cotizacion ? formatearMonto(cotizacion.total) : "—"}
                 </span>
               </div>
               {!cotizacion && (
-                <p role="status" className="text-sm text-zinc-500">
+                <p role="status" className="text-sm text-tierra-500">
                   {errorCotizacion
                     ? errorCotizacion
                     : pedidoCotizacion

@@ -11,6 +11,7 @@ import Contacto from "./pages/Contacto";
 import ControlAcceso from "./pages/ControlAcceso"; 
 import Disponibilidad from "./pages/Disponibilidad";
 import Home from "./pages/Home";
+import HistorialAcceso from "./pages/HistorialAcceso";
 import Login from "./pages/Login";
 import LoginAcceso from "./pages/LoginAcceso";
 import MisReservas from "./pages/MisReservas";
@@ -47,6 +48,10 @@ function App() {
         <Route element={<RutaProtegida roles={["SEGURIDAD"]} rutaLogin={LOGIN_POR_ROL.SEGURIDAD} />}>
           <Route element={<LayoutAcceso />}>
             <Route path="/acceso" element={<ControlAcceso />} />
+            {/* Registro manual desde la barra inferior. La 26.4 lo pasa a su propia pantalla */}
+            <Route path="/acceso/manual" element={<ControlAcceso modo="manual" />} />
+            {/* Pantalla vacía por ahora: la 26.2 le carga los últimos ingresos del dispositivo */}
+            <Route path="/acceso/historial" element={<HistorialAcceso />} />
           </Route>
         </Route>
 

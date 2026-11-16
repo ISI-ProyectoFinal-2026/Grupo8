@@ -18,7 +18,7 @@ export default function PagoRechazado() {
           <CardDescription className="text-lg">No pudimos procesar el pago.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <p className="text-zinc-600">
+          <p className="text-tierra-600">
             Hubo un problema con la transacción o la pasarela de pagos. Tu reserva no ha sido confirmada.
           </p>
           <Button 

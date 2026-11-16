@@ -2,49 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Estilo común de las tres apps (24.5): neutros cálidos, verde de acción y tipografía Poppins.
+ * Los valores y su contraste están en docs/ux-ui/estilo.md. Para cambiar un color, se cambia acá.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --background: 40 15.8% 96.3%; /* #F7F6F4 */
+    --foreground: 28 13.5% 21.8%; /* tierra-800 #3F3730 */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 28 13.5% 21.8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
-    --radius: 0.5rem;
-  }
-  .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --popover-foreground: 28 13.5% 21.8%;
+    --primary: 127 49.6% 24.1%; /* bosque-600 #1F5C26 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 33 19.3% 88.8%; /* tierra-200 #E8E3DD: botones grises */
+    --secondary-foreground: 28 13.5% 21.8%;
+    --muted: 34 22.6% 93.9%; /* tierra-100 #F3F0EC */
+    --muted-foreground: 28 10.4% 35.9%; /* tierra-500 #655B52 */
+    --accent: 34 22.6% 93.9%;
+    --accent-foreground: 28 13.5% 21.8%;
+    --destructive: 4 76.5% 40%; /* #B42318 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 33 19.3% 88.8%; /* tierra-200 */
+    --input: 32 17.5% 81%; /* tierra-300 */
+    --ring: 127 49.6% 24.1%; /* bosque-600 */
+    --radius: 1rem;
   }
 }
 
@@ -52,7 +35,49 @@
   * {
     @apply border-border;
   }
+
+  /* En pantallas de computadora todo se ve un 10 % más chico, para que los formularios entren
+     sin desplazarse. En el celular (la app del guardia) se mantiene el tamaño completo. */
+  @media (min-width: 1024px) {
+    html {
+      font-size: 90%;
+    }
+  }
+
+  /* Fondo degradado del alto de la pantalla: beige arriba, casi blanco abajo. Queda fijo, así
+     se nota sin desplazarse. Los encabezados no tienen color propio y se ve continuidad. */
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground antialiased;
+    background-color: hsl(var(--background));
+    background-image: linear-gradient(180deg, #e4ddd5 0%, #efebe6 45%, #f7f6f4 100%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply tracking-tight;
+  }
+
+  /* Foco visible en todo lo que se puede usar con el teclado */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Montañas dibujadas al pie de la pantalla, siempre a la vista: quedan fijas detrás del contenido.
+     El contenido que va encima necesita position: relative (las tarjetas blancas las tapan). */
+  .fondo-montanas {
+    position: fixed;
+    inset: auto 0 0 0;
+    height: min(420px, 45vh);
+    background-image: url("/fondo-montanas.svg");
+    background-repeat: no-repeat;
+    background-position: bottom center;
+    background-size: cover;
+    pointer-events: none;
   }
 }

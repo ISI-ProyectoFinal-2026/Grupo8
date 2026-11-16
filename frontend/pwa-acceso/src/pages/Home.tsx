@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { CAMPING } from "@/lib/camping";
 import { sumarDias } from "@/lib/fechas";
 import {
   describirPrecio,
@@ -90,23 +91,23 @@ export default function Home() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-2xl">
-      <div className="text-center mb-10">
-        <h1 className="text-4xl font-extrabold text-zinc-900 tracking-tight mb-4">
-          ¡Bienvenidos a Qamp!
+    <div className="container mx-auto px-4 pt-4 pb-10 max-w-3xl">
+      <div className="text-center mb-8">
+        <h1 className="text-4xl sm:text-5xl font-semibold text-foreground mb-3">
+          Bienvenidos a {CAMPING.nombre}
         </h1>
-        <p className="text-lg text-zinc-600">
+        <p className="text-lg text-muted-foreground">
           Encontrá tu lugar ideal. Reservá tu estadía hoy mismo.
         </p>
       </div>
 
-      <Card className="shadow-lg border-zinc-200">
+      <Card className="mx-auto max-w-2xl">
         <CardHeader>
-          <CardTitle>Buscador de Disponibilidad</CardTitle>
+          <CardTitle className="text-2xl">Reservá tu lugar</CardTitle>
           <CardDescription>Ingresá los datos de tu viaje para ver el precio</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} noValidate className="space-y-6">
+          <form onSubmit={handleSubmit} noValidate className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="fecha">Fecha de ingreso</Label>
@@ -119,7 +120,7 @@ export default function Home() {
                   onChange={(e) => setFecha(e.target.value)}
                 />
                 {errores.fecha && (
-                  <p role="alert" className="text-sm text-red-600">
+                  <p role="alert" className="text-sm text-destructive">
                     {errores.fecha}
                   </p>
                 )}
@@ -138,7 +139,7 @@ export default function Home() {
                   onChange={(e) => setPersonas(soloDigitos(e.target.value))}
                 />
                 {errores.personas && (
-                  <p role="alert" className="text-sm text-red-600">
+                  <p role="alert" className="text-sm text-destructive">
                     {errores.personas}
                   </p>
                 )}
@@ -148,10 +149,10 @@ export default function Home() {
             <div className="space-y-2">
               <Label htmlFor="tipo">Tipo de reserva</Label>
               {cargandoTipos ? (
-                <p role="status" className="text-sm text-zinc-500">Cargando tipos de reserva…</p>
+                <p role="status" className="text-sm text-muted-foreground">Cargando tipos de reserva…</p>
               ) : errorTipos ? (
                 <div className="space-y-2">
-                  <p role="alert" className="text-sm text-red-600">
+                  <p role="alert" className="text-sm text-destructive">
                     No pudimos cargar los tipos de reserva. Revisá tu conexión.
                   </p>
                   <Button type="button" variant="outline" onClick={() => cargarTipos()}>
@@ -159,7 +160,7 @@ export default function Home() {
                   </Button>
                 </div>
               ) : sinTipos ? (
-                <p role="status" className="text-sm text-zinc-600">
+                <p role="status" className="text-sm text-muted-foreground">
                   No hay tipos de reserva disponibles por el momento.
                 </p>
               ) : (
@@ -177,7 +178,7 @@ export default function Home() {
                 </Select>
               )}
               {errores.tipo && (
-                <p role="alert" className="text-sm text-red-600">
+                <p role="alert" className="text-sm text-destructive">
                   {errores.tipo}
                 </p>
               )}
@@ -197,7 +198,7 @@ export default function Home() {
                     onChange={(e) => setNoches(soloDigitos(e.target.value))}
                   />
                   {errores.noches && (
-                    <p role="alert" className="text-sm text-red-600">{errores.noches}</p>
+                    <p role="alert" className="text-sm text-destructive">{errores.noches}</p>
                   )}
                 </div>
               )}
@@ -205,7 +206,8 @@ export default function Home() {
             <Button
               type="submit"
               disabled={cargandoTipos || errorTipos || sinTipos}
-              className="w-full bg-green-600 hover:bg-green-700 text-md h-12"
+              size="lg"
+              className="w-full"
             >
               Continuar
             </Button>

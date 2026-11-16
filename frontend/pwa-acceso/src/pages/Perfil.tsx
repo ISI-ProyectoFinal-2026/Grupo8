@@ -24,12 +24,12 @@ export default function Perfil() {
     <div className="container mx-auto px-4 py-12 max-w-2xl">
       <div className="flex justify-between items-end mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-zinc-900">Mi Perfil</h1>
-          <p className="text-zinc-600 mt-1">Tu información personal y el estado de tu membresía</p>
+          <h1 className="text-3xl font-bold text-tierra-900">Mi Perfil</h1>
+          <p className="text-tierra-600 mt-1">Tu información personal y el estado de tu membresía</p>
         </div>
         <Button
           onClick={() => navigate("/mis-reservas")}
-          className="bg-zinc-900 hover:bg-zinc-800 flex gap-2"
+          className="bg-tierra-900 hover:bg-tierra-800 flex gap-2"
         >
           <CalendarDays className="w-4 h-4" />
           Ver mis reservas
@@ -37,16 +37,16 @@ export default function Perfil() {
       </div>
 
       <Card>
-        <CardHeader className="bg-zinc-50 border-b pb-6 flex flex-row items-center gap-4">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-700">
+        <CardHeader className="bg-tierra-50 border-b pb-6 flex flex-row items-center gap-4">
+          <div className="w-16 h-16 bg-bosque-100 rounded-full flex items-center justify-center text-bosque-700">
             <User className="w-8 h-8" />
           </div>
           <div>
             <CardTitle className="text-xl">{usuario.nombre}</CardTitle>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-tierra-500">
               <Badge
                 variant={usuario.membresia_vigente ? "default" : "destructive"}
-                className={usuario.membresia_vigente ? "bg-green-600" : ""}
+                className={usuario.membresia_vigente ? "bg-bosque-600" : ""}
               >
                 {usuario.membresia_vigente ? "Membresía vigente" : "Membresía vencida"}
               </Badge>
