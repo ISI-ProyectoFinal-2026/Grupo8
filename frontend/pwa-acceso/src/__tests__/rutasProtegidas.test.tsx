@@ -128,7 +128,7 @@ describe('Rutas protegidas por rol', () => {
     expect(screen.getByRole('link', { name: /ir a mi pantalla/i }).getAttribute('href')).toBe('/admin');
   });
 
-  // Token del guardia vencido (Issue 13.5)
+  // Token del guardia vencido
   const AYER = () => Math.floor(Date.now() / 1000) - 86400;
 
   it('con conexión, un token vencido del guardia se descarta y pide iniciar sesión', () => {

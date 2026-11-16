@@ -170,7 +170,7 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     const ordenEnviado = bodyEnviado.ingresos.map((i) => i.dni);
 
     // Orden FIFO real (A 10:00 -> C 10:02 -> B 10:05), heredado de la
-    // corrección de dbService.obtenerPendientesSincronizacion (Issue 8.3).
+    // corrección de dbService.obtenerPendientesSincronizacion.
     expect(ordenEnviado).toEqual(['10000000', '30000000', '20000000']); // A -> C -> B
 
     // 8. Tras una sincronización exitosa, la cola local queda vacía.
@@ -278,7 +278,7 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     expect(ingresos[0].dispositivo_id).toMatch(/^dispositivo-[0-9a-f-]{36}$/);
     expect(ingresos[1].dispositivo_id).toBe(ingresos[0].dispositivo_id);
   });
-  // ---------- Autenticación de bulk-sync (Issue 13.5) ----------
+  // ---------- Autenticación de bulk-sync ----------
 
   function responder(status: number) {
     globalThis.fetch = vi.fn().mockResolvedValue({

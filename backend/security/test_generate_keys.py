@@ -1,8 +1,8 @@
-# test_generate_keys.py
+import logging
+
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-# Importamos nuestro script
 import security.generate_keys as generate_keys
 
 def test_generacion_e_integridad_es256(tmp_path, monkeypatch):
@@ -11,7 +11,7 @@ def test_generacion_e_integridad_es256(tmp_path, monkeypatch):
     las claves resultantes sean criptográficamente válidas.
     """
     # 1. Aislamiento: Redirigimos el archivo .env a una carpeta temporal
-    # para que la prueba no ensucie ni sobreescriba tu entorno real.
+    # para que la prueba no ensucie ni sobreescriba el entorno real.
     temp_env = tmp_path / ".env"
     monkeypatch.setattr(generate_keys, "ENV_PATH", temp_env)
     
@@ -37,7 +37,7 @@ def test_generacion_e_integridad_es256(tmp_path, monkeypatch):
     public_key = serialization.load_pem_public_key(public_str.encode('utf-8'))
     assert isinstance(public_key, ec.EllipticCurvePublicKey)
 
-def test_generacion_es_idempotente_no_sobrescribe_claves_existentes(tmp_path, monkeypatch, capsys):
+def test_generacion_es_idempotente_no_sobrescribe_claves_existentes(tmp_path, monkeypatch, caplog):
     """
     Verifica la rama de idempotencia del script: si el .env ya contiene
     las claves, debe abortar sin sobrescribirlas.
@@ -49,9 +49,9 @@ def test_generacion_es_idempotente_no_sobrescribe_claves_existentes(tmp_path, mo
     contenido_original = temp_env.read_text(encoding="utf-8")
 
     # Segunda ejecución: debe detectar que las claves ya existen y abortar
-    generate_keys.generate_es256_keys()
+    with caplog.at_level(logging.WARNING, logger="security.generate_keys"):
+        generate_keys.generate_es256_keys()
     contenido_despues = temp_env.read_text(encoding="utf-8")
 
-    salida = capsys.readouterr().out
-    assert "ya existen" in salida
+    assert "ya existen" in caplog.text
     assert contenido_original == contenido_despues

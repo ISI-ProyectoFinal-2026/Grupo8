@@ -24,14 +24,12 @@ class EmailService:
         Diseñada para ejecutarse en segundo plano (BackgroundTasks).
         """
         try:
-            # 1. Generamos el QR en memoria RAM (Issue 11.2)
+            # El QR se genera en memoria: no se escribe ningún archivo en el servidor
             qr_bytes = qr_service.generar_qr_desde_jwt(jwt_token)
 
-            # 2. Renderizamos la plantilla con los datos dinámicos (Issue 11.3)
             template = template_env.get_template("confirmacion_reserva.html")
             html_content = template.render(**datos_reserva)
 
-            # 3. Armamos el paquete para Resend
             params: resend.Emails.SendParams = {
                 "from": "Qamp Accesos <onboarding@resend.dev>",
                 "to": [destinatario],

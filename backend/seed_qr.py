@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 import uuid
@@ -5,6 +6,7 @@ from datetime import datetime, timedelta
 import qrcode
 
 from core.database import SessionLocal
+from core.logger import configurar_logging
 from models.user import User, RoleEnum
 from models.reserva import Reserva, CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum
 from services.camping_service import obtener_o_crear_camping
@@ -17,18 +19,18 @@ from security.schemas import JWTPayloadSchema
 from security.config import settings
 from models.ingreso_fisico import IngresoFisico
 
-# Creamos la sesión
+logger = logging.getLogger(__name__)
 db = SessionLocal()
 
 def run_seed_con_qrs():
-    print("--- Iniciando Seeding y Generación de QRs ---")
-    
-    # 1. Limpiar la BD (IMPORTANTE: El orden estricto es de hijo a padre)
-    db.query(IngresoFisico).delete() # <- NUEVA LÍNEA: Borramos los hijos primero
-    db.query(Reserva).delete()       # <- Luego borramos los padres de los ingresos
-    db.query(User).delete()          # <- Luego borramos los padres de las reservas
+    logger.info("--- Iniciando Seeding y Generación de QRs ---")
+
+    # 1. Limpiar la BD de hijo a padre: ingresos, después reservas y al final usuarios
+    db.query(IngresoFisico).delete()
+    db.query(Reserva).delete()
+    db.query(User).delete()
     db.commit()
-    print("Base de datos limpia.")
+    logger.info("Base de datos limpia.")
 
     # 2. Crear Admin y Guardia
     # Contraseñas de desarrollo: se guardan hasheadas, nunca en texto plano
@@ -37,7 +39,7 @@ def run_seed_con_qrs():
     guardia = User(email="guardia@camping.com", password_hash=password_base, nombre="Guardia", dni="222", rol=RoleEnum.SEGURIDAD)
     db.add_all([admin, guardia])
     db.commit()
-    print("Usuarios base creados.")
+    logger.info("Usuarios base creados.")
 
     # 3. Crear 5 usuarios (2 socios, 3 visitantes)
     # Solo los socios inician sesión en la web de reservas. Los visitantes existen
@@ -84,18 +86,17 @@ def run_seed_con_qrs():
     
     db.add_all(reservas)
     db.commit()
-    print("Seeding de base de datos finalizado con éxito.")
+    logger.info("Seeding de base de datos finalizado con éxito.")
 
     # 5. Generar carpeta y QRs para las reservas creadas
     output_dir = "qrs_generados"
     os.makedirs(output_dir, exist_ok=True)
-    print(f"\nGenerando QRs en la carpeta '{output_dir}'...")
+    logger.info(f"Generando QRs en la carpeta '{output_dir}'...")
 
-    # Seleccionamos 5 reservas (por ejemplo, las últimas 5 que son futuras)
     reservas_guardadas = db.query(Reserva).limit(5).all()
 
     if not settings.jwt_private_key:
-        print("❌ ERROR: No se encontró JWT_PRIVATE_KEY en las variables de entorno. No se pudieron generar los QRs.")
+        logger.error("No se encontró JWT_PRIVATE_KEY en las variables de entorno. No se pudieron generar los QRs.")
         db.close()
         return
 
@@ -105,21 +106,19 @@ def run_seed_con_qrs():
     for index, reserva in enumerate(reservas_guardadas, start=1):
         datos_reserva = {
             "jti": str(uuid.uuid4()), 
-            "reserva_id": str(reserva.id), # UUID real obtenido de la BD
+            "reserva_id": str(reserva.id),
             "camping_id": reserva.camping_id, 
             "iat": fecha_actual,
             "cantidad_personas": reserva.cantidad_personas,
             "typ": "visitante",
-            "exp": fecha_actual + (60 * 60 * 24), # Expira en 24 horas
+            "exp": fecha_actual + (60 * 60 * 24),  # vence en 24 horas
             "dat": reserva.fecha_ingreso.strftime("%Y-%m-%d") 
         }
         
         try:
-            # Validamos y generamos el token JWT
             payload = JWTPayloadSchema(**datos_reserva)
             token = service.generate_offline_qr_token(payload)
             
-            # Creamos la imagen del QR
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -131,17 +130,17 @@ def run_seed_con_qrs():
             
             img = qr.make_image(fill_color="black", back_color="white")
             
-            # Guardamos la imagen en la carpeta
             nombre_archivo = os.path.join(output_dir, f"qr_reserva_{index}.png")
             img.save(nombre_archivo)
             
-            print(f"✅ QR {index} generado para Reserva ID: {reserva.id} -> Guardado en '{nombre_archivo}'")
-            
-        except Exception as e:
-            print(f"❌ ERROR al generar el QR {index}: {e}")
+            logger.info(f"QR {index} generado para la reserva {reserva.id} en '{nombre_archivo}'")
+
+        except Exception:
+            logger.exception(f"Error al generar el QR {index}")
 
     db.close()
-    print("\n🎉 ¡Proceso completo finalizado con éxito!")
+    logger.info("Proceso completo finalizado con éxito.")
 
 if __name__ == "__main__":
+    configurar_logging(formato="script")
     run_seed_con_qrs()

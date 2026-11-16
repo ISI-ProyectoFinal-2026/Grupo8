@@ -64,8 +64,9 @@ Se usa Neon y no la base gratuita de Render porque esta vence a los 30 días de 
 | Variable | Valor |
 |---|---|
 | `PYTHON_VERSION` | `3.13` (la que pide el `Pipfile`) |
-| `PYTHONUNBUFFERED` | `1`, para que los `print` aparezcan en los logs al momento |
+| `PYTHONUNBUFFERED` | `1`, para que los registros aparezcan en los logs al momento |
 | `ENVIRONMENT` | `production` (deshabilita los endpoints de prueba) |
+| `LOG_LEVEL` | Opcional, `INFO` por defecto. `DEBUG` para investigar un problema, `WARNING` para ver solo avisos y errores |
 | `DATABASE_URL` | Cadena de conexión de Neon |
 | `AUTH_SECRET_KEY` | Texto aleatorio largo, distinto del de desarrollo |
 | `JWT_PRIVATE_KEY` / `VITE_PUBLIC_KEY` | Par de claves ES256 en una sola línea con `\n`, sin comillas |

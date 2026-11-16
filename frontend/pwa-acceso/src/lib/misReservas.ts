@@ -143,7 +143,7 @@ export function guardarArchivo(archivo: Blob, nombre: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
-// ---------- Cancelación (Issue 22) ----------
+// ---------- Cancelación ----------
 
 /** Condiciones para cancelar una reserva, tal como las devuelve GET /reservas/{id}/cancelacion. */
 export interface CondicionesCancelacion {

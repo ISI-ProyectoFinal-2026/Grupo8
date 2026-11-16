@@ -1,16 +1,16 @@
 import logging
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware # Importamos el compresor (DoD 7.2)
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import text
 
 from core.database import SessionLocal
 from core.config import settings
+from core.logger import configurar_logging
 
-# Importamos los routers
 from api.reservas import router as reservas_router
 from api.ingresos import router as ingresos_router
-from api.sincronizacion import router as sincronizacion_router # Importamos el router que vamos a crear
+from api.sincronizacion import router as sincronizacion_router
 from api.payments import router as payments_router
 from api.usuarios import router as usuarios_router
 from api.descuentos import router as descuentos_router
@@ -26,18 +26,14 @@ from api.admin_configuracion import router as admin_configuracion_router
 from api.tipos_reserva import admin_router as admin_tipos_reserva_router
 from api.tipos_reserva import router as tipos_reserva_router
 
-# Configuración básica del logger
-logging.basicConfig(level=logging.INFO)
+configurar_logging(settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-# Inicializamos la aplicación inyectando el título desde la configuración
 app = FastAPI(title=settings.PROJECT_NAME)
 
-# (Issue 7.2): Middleware de Compresión GZip
 # Comprime respuestas mayores a 1000 bytes para no saturar la red móvil del guardia
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Configuración de CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -46,10 +42,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Conectamos los routers a la aplicación
 app.include_router(reservas_router)
 app.include_router(ingresos_router)
-app.include_router(sincronizacion_router) # Conectamos endpoint a la app
+app.include_router(sincronizacion_router)
 app.include_router(payments_router)
 app.include_router(usuarios_router)
 app.include_router(descuentos_router)
@@ -65,26 +60,23 @@ app.include_router(admin_configuracion_router)
 app.include_router(tipos_reserva_router)
 app.include_router(admin_tipos_reserva_router)
 
-# Middleware para loggeo de errores (Requisito del DoD)
 @app.middleware("http")
 async def log_errors_middleware(request: Request, call_next):
+    """Registra con su traza cualquier error que no manejó ninguna ruta y lo deja seguir."""
     try:
-        response = await call_next(request)
-        return response
-    except Exception as e:
-        logger.error(f"Error no manejado en la ruta {request.url.path}: {str(e)}")
-        raise e
+        return await call_next(request)
+    except Exception:
+        logger.exception(f"Error no manejado en la ruta {request.url.path}")
+        raise
 
-# Endpoint de bienvenida
 @app.get("/")
 def root():
     return {"message": "Bienvenido a la API del Sistema de Accesos - Grupo 8"}
 
-# Endpoint de prueba que verifica la base de datos
 @app.get("/health")
 async def health_check():
+    """Comprueba que la API responde y que llega a PostgreSQL."""
     try:
-        # Intentamos ejecutar una consulta a PostgreSQL
         db = SessionLocal()
         db.execute(text("SELECT 1"))
         db.close()

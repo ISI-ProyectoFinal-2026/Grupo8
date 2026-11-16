@@ -92,7 +92,6 @@ def _cliente_http_mercado_pago() -> HttpClient | None:
 
 class PaymentService:
     def __init__(self):
-        # Inicializamos el SDK con el Access Token de las variables de entorno
         self.mp = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN, http_client=_cliente_http_mercado_pago())
 
 

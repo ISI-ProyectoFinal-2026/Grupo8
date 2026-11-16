@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy import text
 from fastapi import APIRouter, HTTPException, Request, Depends, BackgroundTasks
 from pydantic import BaseModel
@@ -20,6 +22,8 @@ from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
 from models.user import RoleEnum, User
 import uuid
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/api/payments",
     tags=["Pagos"]
@@ -33,14 +37,14 @@ def _registrar_pagos(db: Session, pagos_mp: list) -> None:
             if isinstance(datos, dict):
                 registrar_pago(db, datos)
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"Error registrando el pago en la tabla pagos: {e}")
+        logger.exception("Error registrando el pago en la tabla pagos")
 
 
 class PaymentRequest(BaseModel):
     title: str
-    reserva_id: uuid.UUID # id reserva
+    reserva_id: uuid.UUID
 
 @router.post("/create", summary="Crear preferencia de pago")
 async def create_payment_preference(request: PaymentRequest, db: Session = Depends(get_db)):
@@ -126,15 +130,15 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
 
     try:
         body = await request.json()
-        print("====== AVISO DE MERCADO PAGO RECIBIDO ======")
-        
+        logger.info(f"Aviso de Mercado Pago recibido (tipo: {body.get('type') or body.get('topic')})")
+
         if body.get("type") == "payment" or body.get("topic") == "payment":
             # El id del cuerpo solo se usa si no vino en la URL; en ese caso la firma
             # se validó sin id, algo que Mercado Pago no envía para avisos de pago reales
             payment_id = id_url or body.get("data", {}).get("id")
             
             if payment_id:
-                # SEGURIDAD: Consultamos el estado real a Mercado Pago
+                # No se confía en el aviso: el estado real se le pregunta a Mercado Pago
                 payment_info = payment_service.mp.payment().get(payment_id)
                 
                 if payment_info["status"] == 200:
@@ -144,12 +148,10 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                     _registrar_pagos(db, [datos_pago])
 
                     estado_pago = datos_pago["status"]
-                    
-                    # Recuperamos el ID de la reserva que mandamos en /create
+                    # external_reference es el id de la reserva que se mandó en /create
                     reserva_id = datos_pago.get("external_reference")
-                    
-                    print(f"El pago {payment_id} es real y su estado es: {estado_pago}")
-                    
+                    logger.info(f"Pago {payment_id} verificado en Mercado Pago, estado: {estado_pago}")
+
                     if estado_pago == "approved" and reserva_id:
                         resultado = confirmar_pago(
                             db, reserva_id, background_tasks,
@@ -157,26 +159,31 @@ async def payment_webhook(request: Request, background_tasks: BackgroundTasks, d
                             mp_payment_id=datos_pago.get("id"),
                         )
                         if resultado == ResultadoConfirmacion.CONFIRMADA:
-                            print(f"Reserva {reserva_id} actualizada a PAGADO. Correo con el QR en camino.")
+                            logger.info(f"Reserva {reserva_id} actualizada a PAGADO. Correo con el QR en camino.")
                         elif resultado == ResultadoConfirmacion.IMPORTE_DISTINTO:
-                            print(f"Reserva {reserva_id} sin confirmar: el importe cobrado no coincide.")
+                            logger.warning(f"Reserva {reserva_id} sin confirmar: el importe cobrado no coincide.")
                         elif resultado == ResultadoConfirmacion.REEMBOLSADA:
-                            print(f"Reserva {reserva_id} vencida y sin cupo: se reembolsó el pago {payment_id}.")
+                            logger.warning(f"Reserva {reserva_id} vencida y sin cupo: se reembolsó el pago {payment_id}.")
                         elif resultado == ResultadoConfirmacion.REEMBOLSO_PENDIENTE:
-                            print(f"Reserva {reserva_id} vencida y sin cupo: falló el reembolso del pago {payment_id}.")
+                            logger.error(
+                                f"Reserva {reserva_id} vencida y sin cupo: falló el reembolso del pago {payment_id}."
+                            )
                         else:
-                            print(f"La reserva {reserva_id} ya figuraba como pagada o no existe. Aviso ignorado.")
+                            logger.info(f"La reserva {reserva_id} ya figuraba como pagada o no existe. Aviso ignorado.")
 
                     elif estado_pago == "rejected":
                         # La reserva sigue pendiente: se puede reintentar con otro medio de pago
                         # mientras dure el plazo de pago
-                        print(f"Pago {payment_id} rechazado ({datos_pago.get('status_detail')}). La reserva {reserva_id} sigue pendiente.")
+                        logger.info(
+                            f"Pago {payment_id} rechazado ({datos_pago.get('status_detail')}). "
+                            f"La reserva {reserva_id} sigue pendiente."
+                        )
 
-        # SIEMPRE responder 200 OK
+        # Siempre 200: con cualquier otra respuesta Mercado Pago reintenta el mismo aviso
         return {"status": "ok"}
-        
-    except Exception as e:
-        print(f"Error procesando webhook: {e}")
+
+    except Exception:
+        logger.exception("Error procesando el aviso de Mercado Pago")
         return {"status": "ok"}
 
 @router.get("/test-user", summary="Obtener un ID de usuario temporal")
@@ -187,7 +194,6 @@ def get_test_user(db: Session = Depends(get_db)):
     return {"user_id": str(resultado[0]) if resultado else "No hay usuarios"}
 
 
-# Subissue 10.5 :) 
 @router.get("/reconcile/{reserva_id}", summary="Reconciliar operación huérfana manual")
 def reconciliar_pago(
     reserva_id: str,
@@ -195,7 +201,12 @@ def reconciliar_pago(
     db: Session = Depends(get_db),
     usuario: User = Depends(get_current_user),
 ):
-    # 1. Buscamos la reserva en tu base de datos local
+    """Confirma una reserva cuyo aviso de Mercado Pago nunca llegó.
+
+    Busca en Mercado Pago los pagos asociados a la reserva y, si hay uno aprobado, sigue el mismo
+    camino que el webhook. Lo usa la verificación de pago de Mis reservas; un administrador
+    también puede llamarlo para cualquier reserva.
+    """
     reserva = db.query(Reserva).filter(Reserva.id == reserva_id).first()
     
     if not reserva:
@@ -214,19 +225,12 @@ def reconciliar_pago(
         return {"status": "ok", "message": f"La reserva ya se encuentra en estado: {reserva.estado_pago.value}"}
 
     try:
-        # 2. Le preguntamos a Mercado Pago si existe algún cobro para este ID de reserva
-        filtros_busqueda = {
-            "external_reference": str(reserva_id)
-        }
-        
-        # El SDK busca todos los intentos de pago asociados a ese external_reference
-        respuesta_mp = payment_service.mp.payment().search(filtros_busqueda)
+        respuesta_mp = payment_service.mp.payment().search({"external_reference": str(reserva_id)})
         pagos_encontrados = respuesta_mp.get("response", {}).get("results", [])
 
         # Se registran todos los intentos que informa Mercado Pago, no solo el aprobado
         _registrar_pagos(db, pagos_encontrados)
 
-        # 3. Filtramos a ver si al menos uno de esos intentos fue exitoso
         pago_aprobado = next((pago for pago in pagos_encontrados if pago.get("status") == "approved"), None)
 
         if pago_aprobado:
@@ -261,7 +265,6 @@ def reconciliar_pago(
                 "message": "El plazo para pagar la reserva venció y no hay pagos aprobados en Mercado Pago.",
             }
         else:
-            # MP no registra pagos exitosos para esta reserva
             return {
                 "status": "pendiente",
                 "message": "No se encontraron pagos aprobados en Mercado Pago para esta reserva."

@@ -91,7 +91,7 @@ class ReservaCreate(BaseModel):
     # No lleva user_id: la reserva queda a nombre de quien tiene la sesión iniciada (si hay una)
     fecha_ingreso: date
     fecha_egreso: date
-    # Opcional mientras la web no lo envíe: sin tipo, la reserva funciona como antes de la Issue 19
+    # Opcional mientras la web no lo envíe: sin tipo, la reserva funciona como antes de existir los tipos de reserva
     tipo_reserva_id: Optional[UUID] = None
     # Reserva por persona (o sin tipo): la primera persona es el titular y la cantidad de
     # personas sale del largo de la lista
@@ -190,7 +190,7 @@ class ReservaResponse(BaseModel):
     estado_reserva: EstadoReservaEnum
     estado_pago: EstadoPagoEnum
     jwt_jti: Optional[str] = None
-    # Nulos en las reservas anteriores a la Issue 19
+    # Nulos en las reservas creadas antes de los tipos de reserva
     tipo_reserva_id: Optional[UUID] = None
     precio_tipo: Optional[float] = None
     # Vacío en las reservas por unidad, que solo guardan el titular
@@ -217,7 +217,7 @@ class ReservaDetalle(ReservaResponse):
 
 
 
-# --- Gestión de reservas en el panel (Issue 23.3) ---
+# --- Gestión de reservas en el panel ---
 
 class TipoClienteEnum(str, enum.Enum):
     socio = "socio"
@@ -267,7 +267,7 @@ class PagoAdmin(BaseModel):
 class ReservaAdminDetalle(ReservaAdmin):
     """Respuesta de GET /reservas/{id}: la reserva con su tipo, sus pagos y si ya ingresó."""
 
-    # Nulo en las reservas anteriores a la Issue 19
+    # Nulo en las reservas creadas antes de los tipos de reserva
     tipo_reserva_nombre: Optional[str] = None
     pagos: List[PagoAdmin] = []
     ya_ingreso: bool

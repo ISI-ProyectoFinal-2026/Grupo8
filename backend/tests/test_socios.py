@@ -136,7 +136,7 @@ def test_el_endpoint_es_publico(crear_usuario):
     assert client.get("/socios/validar/99999999").status_code == 200
 
 
-# --- El servicio se puede usar sin la API (Issue 14) ---
+# --- El servicio se puede usar sin la API ---
 
 def test_validar_socio_como_servicio(crear_usuario):
     usuario = crear_usuario(vence=hoy_argentina())

@@ -1,4 +1,7 @@
+import logging
+
 from core.database import SessionLocal
+from core.logger import configurar_logging
 from models.user import User, RoleEnum
 from models.reserva import Reserva, CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum
 from models.ingreso_fisico import IngresoFisico  # noqa: F401 (SQLAlchemy lo necesita registrado para resolver Reserva.ingresos)
@@ -9,17 +12,17 @@ from services.usuario_prueba_service import PASSWORD_HASH_NO_UTILIZABLE
 from schemas.reserva import hoy_argentina
 from datetime import datetime, timedelta
 
-# Creamos la sesión
+logger = logging.getLogger(__name__)
 db = SessionLocal()
 
 def run_seed():
-    print("--- Iniciando Seeding ---")
-    
-    # 1. Limpiar la BD (IMPORTANTE: primero reservas porque dependen de usuarios)
+    logger.info("--- Iniciando Seeding ---")
+
+    # 1. Limpiar la BD: primero las reservas, que dependen de los usuarios
     db.query(Reserva).delete()
     db.query(User).delete()
     db.commit()
-    print("Base de datos limpia.")
+    logger.info("Base de datos limpia.")
 
     # 2. Crear Admin y Guardia
     # Contraseñas de desarrollo: se guardan hasheadas, nunca en texto plano
@@ -28,7 +31,7 @@ def run_seed():
     guardia = User(email="guardia@camping.com", password_hash=password_base, nombre="Guardia", dni="222", rol=RoleEnum.SEGURIDAD)
     db.add_all([admin, guardia])
     db.commit()
-    print("Usuarios base creados.")
+    logger.info("Usuarios base creados.")
 
     # 3. Crear 5 usuarios (2 socios, 3 visitantes)
     # Solo los socios inician sesión en la web de reservas. Los visitantes existen
@@ -75,7 +78,8 @@ def run_seed():
     
     db.add_all(reservas)
     db.commit()
-    print("Seeding finalizado con éxito.")
+    logger.info("Seeding finalizado con éxito.")
 
 if __name__ == "__main__":
+    configurar_logging(formato="script")
     run_seed()

@@ -25,7 +25,7 @@ export default function PagoExito() {
           <p className="text-zinc-600">
             Ya estamos preparando tu código QR. También lo recibirás por correo electrónico.
           </p>
-          {/* Este botón tendrá funcionalidad real en la Issue 11/12 */}
+          {/* Pendiente: todavía no descarga nada. El QR se descarga desde Mis reservas y llega por correo */}
           <Button className="w-full bg-green-600 hover:bg-green-700 h-12 text-md flex gap-2">
             <QrCode className="w-5 h-5" />
             Descargar QR

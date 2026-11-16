@@ -14,7 +14,7 @@ export default function Acerca() {
   return (
     <div className="container mx-auto px-4 py-12 max-w-5xl">
       
-      {/* SECCIÓN 1: SOBRE EL SISTEMA QAMP */}
+      {/* Sobre el sistema Qamp */}
       <div className="mb-16 text-center">
         <h1 className="text-4xl font-extrabold text-zinc-900 mb-6">Sobre el Sistema Qamp</h1>
         <p className="text-lg text-zinc-600 max-w-3xl mx-auto leading-relaxed mb-8">
@@ -34,7 +34,7 @@ export default function Acerca() {
 
       <hr className="border-zinc-200 mb-16" />
 
-      {/* SECCIÓN 2: SOBRE EL CAMPING SELECCIONADO (Cumple DoD 8) */}
+      {/* Sobre el camping seleccionado */}
       <h2 className="text-3xl font-bold text-zinc-900 mb-8 text-center">Acerca de {campingSeleccionado.nombre}</h2>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">

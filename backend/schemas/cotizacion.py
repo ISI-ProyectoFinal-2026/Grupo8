@@ -18,7 +18,7 @@ class PersonaCotizar(BaseModel):
 
 
 class CotizarRequest(BaseModel):
-    # Opcional mientras la web no lo envíe: sin tipo se cotiza como antes de la Issue 19
+    # Opcional mientras la web no lo envíe: sin tipo se cotiza solo por persona, como antes de existir los tipos de reserva
     tipo_reserva_id: Optional[UUID] = None
     # Por persona (o sin tipo)
     personas: Optional[List[PersonaCotizar]] = None

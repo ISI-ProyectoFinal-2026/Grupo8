@@ -36,7 +36,7 @@ export default function Beneficios() {
 
       <hr className="border-zinc-200 mb-12" />
 
-      {/* BENEFICIOS DEL CAMPING (Cumple DoD 7) */}
+      {/* Beneficios del camping */}
       <div className="text-center mb-10">
         <h2 className="text-3xl font-bold text-zinc-900 mb-2">Beneficios en el Predio</h2>
         <p className="text-zinc-600">Conocé las comodidades que ofrece el camping según tu tipo de ingreso.</p>

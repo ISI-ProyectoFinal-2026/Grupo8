@@ -63,7 +63,7 @@ def test_buffer_en_personas_redondea_hacia_arriba(capacidad, porcentaje, buffer)
     assert cupo_online(capacidad, porcentaje) == capacidad - buffer
 
 
-# --- Lugares ocupados: canceladas y pendientes abandonadas no cuentan (Issue 13.6) ---
+# --- Lugares ocupados: canceladas y pendientes abandonadas no cuentan ---
 
 # Fechas lejanas para no mezclarse con reservas reales de la base, y una "hora actual" fija
 FECHA = date(2098, 6, 15)
