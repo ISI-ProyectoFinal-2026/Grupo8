@@ -64,7 +64,7 @@ Todo está definido en `frontend/pwa-acceso/src/index.css` (variables) y `tailwi
 **App del guardia (aplicado en `LayoutAcceso.tsx` y `ControlAcceso.tsx`):**
 - Misma estética que el panel: barra superior en `bg-lateral` y el fondo común.
 - Barra superior: menú ☰ (con el estado de sincronización y "Cerrar sesión"), título de la pantalla e indicador "Online"/"Offline" con ícono y texto.
-- Barra inferior blanca con Registro manual (`/acceso/manual`), Escáner (`/acceso`) e Historial (`/acceso/historial`, vacía hasta la 26.2); la 26.4 suma Estado de sincronización. El registro manual se abre solo desde la barra.
+- Barra inferior blanca con Historial (`/acceso/historial`, vacía hasta la 26.2), Escáner (`/acceso`, al medio) y Registro manual (`/acceso/manual`); la 26.4 suma Estado de sincronización. El registro manual se abre solo desde la barra.
 - Botones secundarios en el gris de botones (`variant="secondary"`); la pestaña activa de la barra inferior (26.4) también.
 - Botones de al menos 56 px de alto y alto contraste. Sin emojis: íconos de `lucide-react` con `aria-hidden`.
 - El resultado del escaneo combina color, ícono y texto, y se anuncia con `role="alert"`.

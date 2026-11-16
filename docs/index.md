@@ -9,12 +9,12 @@ Manual operativo del software. Cubre:
 - El ciclo de vida de una reserva y la emisión del código QR.
 - Cómo los guardias deben operar la aplicación móvil (PWA) sin conexión a internet.
 - Navegación del cliente en el buscador, pasarela de pagos y autogestión de perfil.
-- Uso del panel de administración: monitor de ocupación, egresos y resumen de cobros.
+- Uso del panel de administración: monitor de ocupación, personas esperadas, gestión de reservas, egresos y resumen de cobros.
 
 ### 2. [Documentación Técnica](./technical_documentation.md)
 Arquitectura y decisiones de diseño interno:
 - **Backend:** FastAPI, PostgreSQL, SQLAlchemy y migraciones con Alembic.
-- **Frontend:** React, Vite y arquitecturas de interfaz con Shadcn UI; sesión y rutas por rol, y estructura del panel de administración.
+- **Frontend:** React, Vite y arquitecturas de interfaz con Shadcn UI; un inicio de sesión por app, rutas por rol, estructura del panel de administración y estilo común de las tres apps.
 - **Seguridad Offline:** Criptografía asimétrica (ES256), IndexedDB, Dexie.js y el motor de validación local mediante la *Web Crypto API*.
 - **Comunicaciones:** Orquestación asíncrona para la generación de correos electrónicos y códigos QR en memoria RAM (Resend + Jinja2).
 - **Socios y clonación:** baja lógica y regla única de vigencia; detección de QR clonados y resolución de alertas.
@@ -32,7 +32,7 @@ Definición estricta de contratos de datos y endpoints:
 - Modelos principales (Usuarios, Reservas, Configuraciones).
 - Motor de reglas, cálculo dinámico de tarifas y validaciones de cupos.
 - Endpoints de sincronización transaccional (`/bootstrap`, `/bulk-sync`) y webhooks financieros (Mercado Pago).
-- Endpoints del panel: ocupación, egresos y resumen de cobros.
+- Endpoints del panel: ocupación, personas esperadas, gestión de reservas, egresos y resumen de cobros.
 - Socios y membresías (padrón, renovación y baja) y alertas de clonación.
 
 ### 5. [Guía de Despliegue (Deployment)](./deployment.md)
@@ -43,5 +43,5 @@ Cómo llevar la plataforma a entornos de producción:
 - Gestión estricta de secretos y variables de entorno (`.env`).
 
 ### 6. [Diseño UX/UI](./ux-ui/)
-Diseño de la experiencia de usuario del MVP.
+Diseño de la experiencia de usuario del MVP y [estilo común](./ux-ui/estilo.md) vigente (colores, tipografía y contraste).
 - Definición de un sistema de diseño consistente y los wireframes para los tres módulos principales.

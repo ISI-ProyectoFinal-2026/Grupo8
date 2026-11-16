@@ -23,7 +23,8 @@ Finalizado el proceso, el usuario será redirigido a una vista específica (éxi
 
 ### 1.3. Autogestión y Panel de Usuario
 
-Los clientes pueden iniciar sesión en el portal utilizando su DNI o correo electrónico. Al ingresar, cada usuario va directamente a su sección: los clientes a "Perfil", los guardias a la aplicación de control de accesos y los administradores al panel. El menú superior muestra solo las opciones de cada rol.
+Los clientes pueden iniciar sesión en el portal utilizando su DNI o correo electrónico; al ingresar van directamente a "Mis Reservas". Este inicio de sesión es solo para clientes y socios: los guardias y los administradores tienen el suyo, en su propia app (ver secciones 2.2 y 3).
+La web muestra el nombre, los horarios y los datos de contacto del camping. El pie de página incluye el enlace "Botón de arrepentimiento".
 Las secciones "Perfil" y "Mis Reservas" son exclusivas para socios. Se puede reservar sin iniciar sesión, pero esas reservas no aparecen en ningún listado personal.
 Dentro del apartado "Perfil", los usuarios pueden visualizar el estado de su cuenta, identificado con etiquetas como "Activo" o "Inactivo".
 En la sección "Mis Reservas", el sistema ofrece un historial clasificado en pestañas para reservas "Próximas", "Finalizadas" y "Canceladas".
@@ -47,9 +48,15 @@ Si la aplicación no refleja los últimos cambios visuales (debido al guardado e
 
 ### 2.2. Preparación del Turno (Modo Online)
 
-Antes de comenzar a operar en la barrera de entrada, el guardia debe iniciar sesión con su usuario estando conectado a internet; al hacerlo, el sistema lo lleva directamente a la pantalla de control de accesos.
+Antes de comenzar a operar en la barrera de entrada, el guardia debe iniciar sesión en `/acceso/login` con su usuario estando conectado a internet; al hacerlo, el sistema lo lleva directamente al escáner. Ese inicio de sesión es solo para guardias: con un usuario de otro rol se muestra "Acceso denegado".
 Si su sesión vence mientras no hay conexión, puede seguir escaneando; al volver la red, el sistema le pedirá iniciar sesión nuevamente para enviar los ingresos pendientes.
 En esta carga inicial, la aplicación descargará en la base de datos local del dispositivo la configuración de capacidad máxima, la clave criptográfica para leer los QR y una lista negra con las reservas que fueron canceladas.
+
+Para moverse dentro de la app:
+
+* **Barra inferior:** Historial, Escáner y Registro manual.
+* **Barra superior:** el título de la pantalla y el indicador "Online" u "Offline".
+* **Menú ☰:** cuántos ingresos faltan sincronizar y el botón "Cerrar sesión".
 
 ### 2.3. Escaneo y Validación (Modo Offline)
 
@@ -61,7 +68,7 @@ Si el código es válido, se aprueba el acceso mostrando una pantalla verde; de 
 ### 2.4. Ingresos Manuales y Control de Aforo
 
 La PWA incluye un tablero que muestra en tiempo real cuántas personas han ingresado.
-El guardia posee una interfaz para registrar manualmente ingresos espontáneos (personas sin reserva previa) o gestionar contingencias.
+Desde "Registro manual", en la barra inferior, el guardia registra ingresos espontáneos (personas sin reserva previa) o gestionar contingencias.
 El sistema evalúa la capacidad máxima localmente y, si el camping se llena, desactiva automáticamente el botón de escaneo para evitar la sobreventa de lugares.
 
 ### 2.5. Sincronización Automática
@@ -72,7 +79,9 @@ El guardia puede observar este proceso a través de indicadores visuales en la i
 
 ## 3. Panel de Administración
 
-El administrador accede al panel iniciando sesión con su usuario. El menú lateral reúne las secciones de gestión: Inicio, Gestión de reservas, Socios, Descuentos, Incidentes, Egresos, Alertas, Configuración y Tipos de reserva.
+El administrador accede al panel desde `/admin/login`. Ese inicio de sesión es solo para administradores: con un usuario de otro rol se muestra "Acceso denegado". El menú lateral reúne las secciones de gestión: Inicio, Gestión de reservas, Socios, Descuentos, Incidentes, Egresos, Alertas y Tipos de reserva; Configuración queda al final, encima de "Cerrar sesión".
+
+El panel se puede instalar como una app aparte ("Qamp Admin"): con el panel abierto, desde el ícono de instalación de la barra de direcciones o el menú del navegador. Se abre directamente en el panel, separada de la app del guardia.
 
 ### 3.1. Monitor de Ocupación
 
@@ -80,6 +89,8 @@ La pantalla de Inicio muestra cuántas personas hay dentro del camping sobre la 
 La barra cambia de color según el nivel: verde (ocupación normal, menos del 70 %), amarillo (alta, desde el 70 %) y rojo (crítica, desde el 90 %).
 El tramo rayado al final de la barra indica el buffer offline: los lugares que no se venden online y quedan para los ingresos en la puerta.
 El monitor se actualiza solo cada 30 segundos. Los ingresos que los guardias registran sin conexión se suman recién cuando sincronizan, por lo que el valor puede ir levemente atrasado.
+
+Al lado del monitor se muestran las **personas esperadas**: cuántas reservas pagadas tienen estadía hoy y todavía no llegaron, y cuántas personas suman. Una reserva deja de contarse en cuanto el guardia escanea su QR. Estas personas no se suman a la ocupación hasta que entran.
 
 ### 3.2. Registro de Egresos
 
@@ -91,7 +102,17 @@ El sistema no permite registrar la salida de más personas de las que hay dentro
 Debajo del monitor, en la pantalla de Inicio, se muestra lo cobrado en la última semana: el total en efectivo (ingresos manuales registrados por los guardias), el total por Mercado Pago (solo pagos aprobados) y el total general, con el detalle día por día.
 Se puede elegir otro período con las fechas "Desde" y "Hasta", de hasta 92 días.
 
-### 3.4. Socios
+### 3.4. Gestión de Reservas
+
+La sección "Gestión de reservas" muestra todas las reservas, las más nuevas primero, de a 20 por página.
+
+* **Buscar:** por nombre del titular, email o número de reserva, sin importar acentos ni mayúsculas.
+* **Filtrar:** por estado de pago, estado de la reserva, fechas de ingreso y socio o visitante. Los filtros se pueden combinar.
+* **Ver detalle:** abre una ventana con las personas de la reserva, el tipo de reserva, los pagos de Mercado Pago (con la devolución, si la hubo) y si ya ingresó al camping.
+
+La pantalla es solo de consulta: desde ahí no se modifica ninguna reserva.
+
+### 3.5. Socios
 
 La sección "Socios" muestra el padrón con el estado de cada socio: Vigente, Vencida o De baja.
 
@@ -100,7 +121,7 @@ La sección "Socios" muestra el padrón con el estado de cada socio: Vigente, Ve
 * **Renovar:** propone un año más desde el vencimiento actual, o desde hoy si ya venció. No acepta fechas pasadas.
 * **Dar de baja:** pide confirmación. El socio no puede iniciar sesión ni validar como socio, pero sus reservas se conservan. Se deshace con "Reactivar".
 
-### 3.5. Alertas de Clonación
+### 3.6. Alertas de Clonación
 
 Si dos guardias registraron el mismo QR desde celulares distintos, la reserva queda en alerta y aparece en "Alertas" con el titular y cuándo se detectó. Las dos personas ya entraron: el sistema no expulsa a nadie, solo avisa.
 
