@@ -12,7 +12,7 @@ interface DetallesSync {
   mensaje?: string;
 }
 
-// Función para emitir señales que nuestra pantalla de React va a escuchar (DoD 7.4)
+// Avisa a la pantalla del guardia cómo va la sincronización (evento "sync-status")
 const notificarUI = (estado: EstadoSync, detalles?: DetallesSync) => {
   window.dispatchEvent(new CustomEvent('sync-status', { detail: { estado, detalles } }));
 };

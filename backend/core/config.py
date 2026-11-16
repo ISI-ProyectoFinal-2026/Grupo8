@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     # "development" (default) | "production". En producción se deshabilitan
     # los endpoints auxiliares de desarrollo (ej: GET /usuarios/prueba).
     ENVIRONMENT: str = "development"
+    # Nivel mínimo de los registros: DEBUG, INFO, WARNING, ERROR o CRITICAL
+    LOG_LEVEL: str = "INFO"
     
     # --- Autenticación Web (Login) ---
     AUTH_SECRET_KEY: str

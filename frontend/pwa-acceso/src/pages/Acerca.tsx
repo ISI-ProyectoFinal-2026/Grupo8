@@ -14,7 +14,7 @@ export default function Acerca() {
   return (
     <div className="container mx-auto px-4 py-12 max-w-5xl">
       
-      {/* SECCIÓN 1: SOBRE EL SISTEMA QAMP */}
+      {/* Sobre el sistema Qamp */}
       <div className="mb-16 text-center">
         <h1 className="text-4xl font-extrabold text-tierra-900 mb-6">Sobre el Sistema Qamp</h1>
         <p className="text-lg text-tierra-600 max-w-3xl mx-auto leading-relaxed mb-8">

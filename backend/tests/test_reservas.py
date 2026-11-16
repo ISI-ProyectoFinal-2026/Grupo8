@@ -9,14 +9,11 @@ from models.user import User
 # Le decimos a SQLAlchemy que cree todas las tablas antes de probar (crea la tabla solo si no existe)
 Base.metadata.create_all(bind=engine)
 
-# Creamos un cliente de prueba basado en tu aplicación
 client = TestClient(app)
 
 def test_obtener_reservas(como_admin):
-    # Simulamos una petición GET al endpoint con paginación por defecto
     response = client.get("/reservas/?skip=0&limit=10")
     
-    # Verificamos que la respuesta sea exitosa
     assert response.status_code == 200
     
     # El listado viene paginado: el total y la página pedida

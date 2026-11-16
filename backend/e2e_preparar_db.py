@@ -11,6 +11,7 @@ nunca puede borrar la base de desarrollo por error.
 Lo ejecuta Playwright (playwright.config.ts). A mano, desde la carpeta backend:
     DATABASE_URL=... POSTGRES_DB=..._e2e E2E_ADMIN_EMAIL=... python e2e_preparar_db.py
 """
+import logging
 import os
 import sys
 from datetime import timedelta
@@ -21,6 +22,9 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
 from core.config import settings
+from core.logger import configurar_logging
+
+logger = logging.getLogger(__name__)
 
 
 def _variable(nombre: str) -> str:
@@ -39,7 +43,7 @@ def crear_base_si_no_existe(url) -> None:
         ).scalar()
         if not existe:
             conexion.execute(text(f'CREATE DATABASE "{url.database}"'))
-            print(f"Base {url.database} creada.")
+            logger.info(f"Base {url.database} creada.")
     motor.dispose()
 
 
@@ -50,6 +54,8 @@ def vaciar_y_migrar(url) -> None:
         conexion.execute(text("CREATE SCHEMA public"))
     motor.dispose()
     command.upgrade(Config("alembic.ini"), "head")
+    # Alembic aplica su propio formato de logging al migrar: se vuelve al de los scripts
+    configurar_logging(formato="script")
 
 
 def crear_usuarios_de_prueba() -> None:
@@ -102,8 +108,9 @@ def main() -> None:
     crear_base_si_no_existe(url)
     vaciar_y_migrar(url)
     crear_usuarios_de_prueba()
-    print(f"Base {url.database} lista para las pruebas E2E.")
+    logger.info(f"Base {url.database} lista para las pruebas E2E.")
 
 
 if __name__ == "__main__":
+    configurar_logging(formato="script")
     main()

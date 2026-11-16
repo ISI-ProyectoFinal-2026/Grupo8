@@ -2,7 +2,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-// Creamos un componente súper simple acá mismo para la prueba
 const ComponentePrueba = () => <h1>¡Frontend funcionando!</h1>;
 
 describe('Test Base de React', () => {

@@ -70,7 +70,7 @@ export const dbService = {
       .filter((ingreso: any) => ingreso.sincronizado === false)
       .toArray();
 
-    // Orden FIFO por timestamp de negocio (Issue 8.3): Dexie no garantiza
+    // Orden FIFO por timestamp de negocio: Dexie no garantiza
     // que table.filter() devuelva los registros ordenados por
     // fecha_escaneo (solo respeta el orden físico de la clave primaria),
     // así que se ordena explícitamente en memoria por orden cronológico

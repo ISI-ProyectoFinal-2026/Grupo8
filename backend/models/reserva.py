@@ -39,7 +39,7 @@ class Reserva(Base):
     # Nulo cuando el visitante reservó sin iniciar sesión
     user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
     camping_id = Column(String, ForeignKey("configuracion_camping.camping_id"), nullable=False)
-    # Tipo elegido (carpa, cabaña...). Las reservas anteriores a la Issue 19 no lo tienen.
+    # Tipo elegido (carpa, cabaña...). Las reservas creadas antes de los tipos de reserva no lo tienen.
     # RESTRICT: un tipo con reservas no se puede borrar, solo desactivar
     tipo_reserva_id = Column(
         UUID(as_uuid=True),
@@ -78,7 +78,7 @@ class Reserva(Base):
         CheckConstraint("fecha_egreso >= fecha_ingreso", name="ck_reservas_egreso_desde_ingreso"),
     )
     
-    # NUEVO: Relación bidireccional que fuerza el borrado en cascada a nivel de SQLAlchemy
+    # Borrar una reserva borra también sus ingresos (cascada desde SQLAlchemy)
     ingresos = relationship("IngresoFisico", back_populates="reserva", cascade="all, delete-orphan")
 
     # Todas las personas de la reserva, en el orden en que se cargaron (la primera es el titular)

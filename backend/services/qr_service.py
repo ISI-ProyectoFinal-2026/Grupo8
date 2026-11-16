@@ -33,7 +33,6 @@ class QRService:
             
             logger.info("Imagen QR generada exitosamente en memoria RAM.")
             
-            # Retornamos el archivo convertido a bytes
             return img_buffer.getvalue()
             
         except Exception as e:

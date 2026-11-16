@@ -18,7 +18,7 @@ class ConfiguracionCamping(Base):
     dias_cancelacion = Column(Integer, nullable=False, server_default="1")
     porcentaje_devolucion = Column(Integer, nullable=False, server_default="100")
 
-    # Acá está la restricción (Constraint/Unique) que pide el DoD
+    # Una sola configuración por camping
     __table_args__ = (
         UniqueConstraint('camping_id', name='uq_unica_config_por_camping'),
     )

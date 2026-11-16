@@ -4,20 +4,18 @@ from datetime import datetime
 from sqlalchemy import Column, String, Boolean, Date, DateTime, Enum, true
 from sqlalchemy.dialects.postgresql import UUID
 
-# Importamos la clase Base que creaste en la Sub-issue 1.2
 from core.database import Base
 
-# 1. Definimos los roles exactos mediante un Enum
+
 class RoleEnum(enum.Enum):
     ADMIN = "Admin"
     SEGURIDAD = "Seguridad"
     CLIENTE = "Cliente"
 
-# 2. Creamos el modelo principal
+
 class User(Base):
     __tablename__ = "usuarios"
 
-    # Campos básicos
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
@@ -35,6 +33,5 @@ class User(Base):
     # Un usuario inactivo no puede iniciar sesión ni valida como socio
     activo = Column(Boolean, default=True, server_default=true(), nullable=False)
 
-    # Atributos de auditoría estándar
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
