@@ -1,39 +1,52 @@
 import Dexie, { type EntityTable } from 'dexie';
 
+// 1. Definimos las interfaces de TypeScript (Modelos de datos)
 export interface Configuracion {
   clave: string;
   valor: any;
 }
 
 export interface IngresoPendiente {
-  id?: number;
+  id?: number;          // Autoincremental
   jti: string;          // Identificador único del QR (evita dobles escaneos offline)
   qr_payload: any;      // Los datos decodificados del visitante
   fecha_escaneo: Date;
   sincronizado: boolean; // Bandera para saber qué mandar a FastAPI luego
 }
 
+export type EstadoHistorial = 'pendiente' | 'sincronizado';
+
+/**
+ * Lo que ve el guardia en "Historial": una copia liviana de cada ingreso aceptado.
+ * No se envía al servidor; la cola de envío es `ingresos_pendientes`.
+ */
 export interface HistorialIngreso {
   id?: number;
-  reserva_id: number;
+  jti: string;                // El mismo jti del ingreso en la cola, para marcarlo cuando el servidor lo confirma
+  reserva_id: string | null;  // UUID de la reserva; null en los ingresos manuales
+  tipo: 'QR' | 'MANUAL';
+  cantidad_personas: number;
   fecha_ingreso: Date;
-  estado: string;
+  estado: EstadoHistorial;
 }
 
-// Reservas canceladas que la app del guardia rechaza sin conexión
+// Interfaz para la Blacklist (DoD Issue 7.1)
 export interface BlacklistEntry {
   id: string;             // ID de la reserva o usuario revocado
   fechaCancelacion: string; // Fecha en la que se bloqueó
 }
 
+// 2. Extendemos la clase de Dexie
 class SgicDatabase extends Dexie {
   configuracion!: EntityTable<Configuracion, 'clave'>;
   ingresos_pendientes!: EntityTable<IngresoPendiente, 'id'>;
   historial!: EntityTable<HistorialIngreso, 'id'>;
   
+  // NUEVO: Declaramos la tabla blacklist a Dexie
   blacklist!: EntityTable<BlacklistEntry, 'id'>;
 
   constructor() {
+    // Nombre de la base de datos local
     super('SgicOfflineDB');
     
     // v3: la app guardaba una capacidad fija de 500 en cada arranque. Ese valor era inventado:
@@ -46,8 +59,24 @@ class SgicDatabase extends Dexie {
         blacklist: 'id'
       })
       .upgrade((tx) => tx.table('configuracion').delete('capacidad_maxima'));
+
+    // v4: el historial empieza a usarse. Solo se declara la tabla que cambia: Dexie deja las
+    // demás (y sus datos) como estaban en la v3, así la cola de ingresos pendientes no se toca.
+    this.version(4)
+      .stores({
+        historial: '++id, reserva_id, fecha_ingreso, jti',
+      })
+      .upgrade((tx) =>
+        // Si quedó alguna fila de antes, con el id de reserva como número, se pasa a texto
+        tx
+          .table('historial')
+          .toCollection()
+          .modify((fila: { reserva_id?: unknown }) => {
+            if (typeof fila.reserva_id === 'number') fila.reserva_id = String(fila.reserva_id);
+          })
+      );
   }
 }
 
-// Una sola instancia para toda la app
+// Exportamos una única instancia (Patrón Singleton)
 export const db = new SgicDatabase();

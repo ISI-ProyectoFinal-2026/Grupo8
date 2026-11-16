@@ -4,7 +4,7 @@ import 'fake-indexeddb/auto';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
-import { dbService } from './dbService';
+import { dbService, MAX_HISTORIAL } from './dbService';
 
 /* Encolamiento de ingresos en IndexedDB (store `ingresos_pendientes`).
  *
@@ -149,5 +149,93 @@ describe('dbService — capacidad máxima (Issue 16.5)', () => {
       dbService.registrarIngresoManual('30111222', 'Grupo Grande', 10, 'Espontaneo') // 11 personas
     ).rejects.toThrow('CAPACIDAD_EXCEDIDA');
     expect(await db.ingresos_pendientes.count()).toBe(0);
+  });
+});
+describe('dbService — Historial del dispositivo (26.2)', () => {
+  const qr = (personas = 2) => ({
+    reserva_id: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+    cantidad_personas: personas,
+    typ: 'socio',
+  });
+
+  beforeEach(async () => {
+    await db.ingresos_pendientes.clear();
+    await db.configuracion.clear();
+    await db.historial.clear();
+  });
+
+  afterEach(async () => {
+    await db.ingresos_pendientes.clear();
+    await db.configuracion.clear();
+    await db.historial.clear();
+  });
+
+  it('un QR aceptado entra al historial como pendiente, con el mismo jti y el id de reserva como texto', async () => {
+    await dbService.registrarIngresoOffline('qr-1', qr(3));
+
+    const [fila] = await db.historial.toArray();
+    expect(fila).toMatchObject({
+      jti: 'qr-1',
+      tipo: 'QR',
+      reserva_id: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+      cantidad_personas: 3,
+      estado: 'pendiente',
+    });
+    const [pendiente] = await db.ingresos_pendientes.toArray();
+    expect(fila.fecha_ingreso.getTime()).toBe(pendiente.fecha_escaneo.getTime());
+  });
+
+  it('un ingreso manual entra como "MANUAL", sin reserva y sin los datos del visitante', async () => {
+    await dbService.registrarIngresoManual('30111222', 'Juan Perez', 1, 'Espontaneo', 1500);
+
+    const [fila] = await db.historial.toArray();
+    expect(fila).toMatchObject({ tipo: 'MANUAL', reserva_id: null, cantidad_personas: 2, estado: 'pendiente' });
+    expect(JSON.stringify(fila)).not.toContain('30111222');
+    expect(JSON.stringify(fila)).not.toContain('Juan Perez');
+  });
+
+  it('un ingreso rechazado (QR duplicado) no deja fila en el historial', async () => {
+    await dbService.registrarIngresoOffline('qr-1', qr());
+    await expect(dbService.registrarIngresoOffline('qr-1', qr())).rejects.toThrow('QR_DUPLICADO');
+
+    expect(await db.historial.count()).toBe(1);
+  });
+
+  it(`con ${MAX_HISTORIAL + 1} ingresos borra el más viejo del historial, pero la cola conserva los ${MAX_HISTORIAL + 1}`, async () => {
+    for (let i = 1; i <= MAX_HISTORIAL + 1; i++) {
+      await dbService.registrarIngresoOffline(`qr-${i}`, qr(1));
+    }
+
+    const historial = await db.historial.toArray();
+    expect(historial).toHaveLength(MAX_HISTORIAL);
+    expect(historial.some((fila) => fila.jti === 'qr-1')).toBe(false);
+    expect(historial.some((fila) => fila.jti === `qr-${MAX_HISTORIAL + 1}`)).toBe(true);
+
+    // El recorte es solo visual: el ingreso más viejo sigue esperando para enviarse
+    const cola = await dbService.obtenerPendientesSincronizacion();
+    expect(cola).toHaveLength(MAX_HISTORIAL + 1);
+    expect(cola[0].jti).toBe('qr-1');
+  });
+
+  it('marcarComoSincronizados saca de la cola solo los confirmados y los marca en el historial', async () => {
+    await dbService.registrarIngresoOffline('qr-1', qr());
+    await dbService.registrarIngresoOffline('qr-2', qr());
+
+    await dbService.marcarComoSincronizados(['qr-1']);
+
+    const estados = Object.fromEntries((await db.historial.toArray()).map((f) => [f.jti, f.estado]));
+    expect(estados).toEqual({ 'qr-1': 'sincronizado', 'qr-2': 'pendiente' });
+    expect((await db.ingresos_pendientes.toArray()).map((p) => p.jti)).toEqual(['qr-2']);
+  });
+
+  it('obtenerHistorial devuelve del más nuevo al más viejo', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-16T10:00:00Z'));
+    await dbService.registrarIngresoOffline('qr-viejo', qr());
+    vi.setSystemTime(new Date('2026-11-16T11:00:00Z'));
+    await dbService.registrarIngresoOffline('qr-nuevo', qr());
+    vi.useRealTimers();
+
+    expect((await dbService.obtenerHistorial()).map((f) => f.jti)).toEqual(['qr-nuevo', 'qr-viejo']);
   });
 });

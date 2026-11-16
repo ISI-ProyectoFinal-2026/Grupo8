@@ -5,7 +5,7 @@ import 'fake-indexeddb/auto';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AUTH_EXPIRED_EVENT, TOKEN_KEY } from '@/context/AuthContext';
 import { db } from '../db/db';
-import { dbService } from './dbService';
+import { dbService, MAX_HISTORIAL } from './dbService';
 import { syncService } from './syncService';
 
 /**
@@ -170,7 +170,7 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     const ordenEnviado = bodyEnviado.ingresos.map((i) => i.dni);
 
     // Orden FIFO real (A 10:00 -> C 10:02 -> B 10:05), heredado de la
-    // corrección de dbService.obtenerPendientesSincronizacion.
+    // corrección de dbService.obtenerPendientesSincronizacion (Issue 8.3).
     expect(ordenEnviado).toEqual(['10000000', '30000000', '20000000']); // A -> C -> B
 
     // 8. Tras una sincronización exitosa, la cola local queda vacía.
@@ -248,6 +248,53 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     expect(restantes[0].qr_payload.dni).toBe('22222222');
   });
 
+  it('Test 7b — éxito parcial en el historial: el confirmado pasa a sincronizado y el rechazado sigue pendiente (26.2)', async () => {
+    await db.historial.clear();
+    await dbService.registrarIngresoManual('11111111', 'Uno', 0, 'Espontaneo', 100);
+    await dbService.registrarIngresoManual('22222222', 'Dos', 1, 'Espontaneo', 100);
+    const [primero, segundo] = (await dbService.obtenerPendientesSincronizacion()).map((p) => p.jti);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        procesados: 1,
+        conflictos: 0,
+        sincronizados_jti: [primero],
+        errores: [{ indice: 1, jti: segundo, motivo: 'dni: inválido' }],
+      }),
+    }) as unknown as typeof fetch;
+
+    await syncService.sincronizarIngresosPendientes();
+
+    const estados = Object.fromEntries((await db.historial.toArray()).map((f) => [f.jti, f.estado]));
+    expect(estados).toEqual({ [primero]: 'sincronizado', [segundo]: 'pendiente' });
+    await db.historial.clear();
+  });
+
+  it('Test 7c — un ingreso que ya salió del historial por el recorte se sigue enviando (26.2)', async () => {
+    await db.historial.clear();
+    for (let i = 0; i <= MAX_HISTORIAL; i++) {
+      await dbService.registrarIngresoManual(String(10000000 + i), `Visitante ${i}`, 0, 'Espontaneo');
+    }
+    const masViejo = (await dbService.obtenerPendientesSincronizacion())[0].jti;
+    expect(await db.historial.where('jti').equals(masViejo).count()).toBe(0);
+
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, options: RequestInit) => {
+      const { ingresos } = JSON.parse(options.body as string) as { ingresos: Array<{ jti: string }> };
+      return { ok: true, json: async () => ({ sincronizados_jti: ingresos.map((i) => i.jti), errores: [] }) };
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await syncService.sincronizarIngresosPendientes();
+
+    const enviados = JSON.parse(fetchMock.mock.calls[0][1].body as string).ingresos.map((i: { jti: string }) => i.jti);
+    expect(enviados).toHaveLength(MAX_HISTORIAL + 1);
+    expect(enviados[0]).toBe(masViejo);
+    expect(await db.ingresos_pendientes.count()).toBe(0);
+    expect(await db.historial.filter((f) => f.estado === 'pendiente').count()).toBe(0);
+    await db.historial.clear();
+  });
+
   it('Test 8 — un reintento reenvía el mismo jti (no se genera uno nuevo)', async () => {
     await dbService.registrarIngresoManual('33333333', 'Reintento', 0, 'Espontaneo', 50);
 
@@ -278,7 +325,7 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     expect(ingresos[0].dispositivo_id).toMatch(/^dispositivo-[0-9a-f-]{36}$/);
     expect(ingresos[1].dispositivo_id).toBe(ingresos[0].dispositivo_id);
   });
-  // ---------- Autenticación de bulk-sync ----------
+  // ---------- Autenticación de bulk-sync (Issue 13.5) ----------
 
   function responder(status: number) {
     globalThis.fetch = vi.fn().mockResolvedValue({
