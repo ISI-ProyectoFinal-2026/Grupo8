@@ -396,6 +396,7 @@ def _condiciones_out(condiciones: CondicionesCancelacion) -> CancelacionCondicio
         porcentaje_devolucion=condiciones.porcentaje_devolucion,
         monto_devolucion=float(condiciones.monto_a_devolver),
         mensaje=condiciones.motivo,
+        arrepentimiento=condiciones.arrepentimiento,
     )
 
 
@@ -426,11 +427,13 @@ def cancelar(
 ):
     """
     Cancela la reserva pagada del socio, dentro del plazo, y le devuelve por Mercado Pago el
-    porcentaje configurado. Responde la reserva ya cancelada y el monto devuelto.
+    porcentaje configurado, o el total si está dentro del plazo de arrepentimiento.
+    Responde la reserva ya cancelada y el monto devuelto.
     Fuera del plazo, o si la reserva no se puede cancelar, responde 422.
     """
     try:
-        resultado = cancelar_reserva(db, reserva_id, usuario.id, background_tasks)
+        reserva = reserva_del_usuario(db, reserva_id, usuario.id)
+        resultado = cancelar_reserva(db, reserva, background_tasks)
     except ReservaNoEncontradaError:
         raise _NO_ENCONTRADA
     except CancelacionNoPermitidaError as e:

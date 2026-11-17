@@ -157,11 +157,19 @@ export default function DialogoCancelacion({
         {/* Si la confirmación falló (por ejemplo, venció el plazo) solo queda el motivo y "Volver" */}
         {sePuedeConfirmar && (
           <div className="space-y-4">
+            {condiciones.arrepentimiento && (
+              <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+                Estás dentro del plazo de arrepentimiento: se te devuelve el
+                total.
+              </p>
+            )}
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               <dt className="text-tierra-500">Podés cancelar hasta</dt>
               <dd className="font-medium text-tierra-900">
-                {formatearFecha(condiciones.fecha_limite)} (
-                {textoDelPlazo(condiciones.dias_minimos)})
+                {/* En el arrepentimiento la fecha no sale de los días configurados */}
+                {condiciones.arrepentimiento
+                  ? formatearFecha(condiciones.fecha_limite)
+                  : `${formatearFecha(condiciones.fecha_limite)} (${textoDelPlazo(condiciones.dias_minimos)})`}
               </dd>
               <dt className="text-tierra-500">Devolución</dt>
               <dd className="font-medium text-tierra-900">

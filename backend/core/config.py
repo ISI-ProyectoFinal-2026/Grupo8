@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # Se puede cancelar hasta N días antes del ingreso (0 = hasta el mismo día) y se devuelve ese porcentaje
     CAMPING_DIAS_CANCELACION: int = 1
     CAMPING_PORCENTAJE_DEVOLUCION: int = 100
+    # Derecho de arrepentimiento (art. 34 Ley 24.240): días corridos desde que se hizo la reserva en los que
+    # se puede cancelar con devolución total, hasta el día anterior al ingreso, sin importar las reglas del camping
+    ARREPENTIMIENTO_DIAS: int = 10
 
     # --- Tarifas ---
     PRECIO_BASE_POR_PERSONA: float = 5000.0

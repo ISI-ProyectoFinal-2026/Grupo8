@@ -33,6 +33,7 @@ const DENTRO_DEL_PLAZO: CondicionesCancelacion = {
   porcentaje_devolucion: 50,
   monto_devolucion: 7500,
   mensaje: null,
+  arrepentimiento: false,
 };
 
 const FUERA_DEL_PLAZO: CondicionesCancelacion = {
@@ -150,6 +151,41 @@ describe('Diálogo de cancelación (Issue 22.3)', () => {
     mostrar();
 
     expect(await screen.findByText(texto)).toBeTruthy();
+  });
+
+  it('dentro del arrepentimiento explica que se devuelve el total', async () => {
+    simularApi({
+      ...DENTRO_DEL_PLAZO,
+      arrepentimiento: true,
+      dias_minimos: 7,
+      fecha_limite: '2099-01-09',
+      porcentaje_devolucion: 100,
+      monto_devolucion: 15000,
+    });
+
+    mostrar();
+
+    expect(
+      await screen.findByText(
+        'Estás dentro del plazo de arrepentimiento: se te devuelve el total.'
+      )
+    ).toBeTruthy();
+    // La fecha es la del arrepentimiento, no la que sale de los 7 días del camping
+    expect(screen.getByText('09/01/2099')).toBeTruthy();
+    expect(screen.queryByText(/7 días antes del ingreso/)).toBeNull();
+    expect(screen.getByText('100 % de lo que pagaste')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Confirmar cancelación' })
+    ).toBeTruthy();
+  });
+
+  it('fuera del arrepentimiento no lo menciona', async () => {
+    simularApi(DENTRO_DEL_PLAZO);
+
+    mostrar();
+
+    await screen.findByText('¿Está seguro que desea cancelar?');
+    expect(screen.queryByText(/plazo de arrepentimiento/)).toBeNull();
   });
 
   it('fuera del plazo muestra el mensaje con N de la configuración y solo "Volver"', async () => {

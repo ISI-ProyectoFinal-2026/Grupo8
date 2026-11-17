@@ -185,10 +185,12 @@ Errores que encontró esta prueba y se corrigieron:
 
 La prueba `frontend/pwa-acceso/e2e/cancellation.spec.ts` corre con el mismo comando (`npm run test:e2e`). La base de pruebas incluye un socio con la membresía al día.
 
-**Bloque 1: plazo de cancelación.** Cada prueba fija el plazo en 3 días por la API del panel y prepara por API una reserva pagada a nombre del socio:
+**Bloque 1: plazo de cancelación.** Cada prueba fija el plazo en 3 días y el 50 % por la API del panel y prepara por API una reserva pagada a nombre del socio. Como esas reservas son de hoy, están dentro del plazo de arrepentimiento (25.1), que vale hasta el día anterior al ingreso:
 
-* **Ingreso dentro de 3 días.** Hoy es el último día del plazo: el socio cancela desde Mis reservas, ve el mensaje con la devolución y la reserva pasa a Canceladas.
-* **Ingreso dentro de 2 días.** El plazo venció ayer: el diálogo muestra exactamente "Lo sentimos, las reservas solo se pueden cancelar hasta 3 días antes del ingreso." y no ofrece confirmar. Además, la prueba comprueba que el backend también rechaza la cancelación directa (422 con el mismo mensaje).
+* **Ingreso mañana.** Último día del arrepentimiento. Por las reglas del camping ya estaría fuera de plazo, pero rige el arrepentimiento: el diálogo dice "Estás dentro del plazo de arrepentimiento: se te devuelve el total." y "100 % de lo que pagaste", el socio cancela, ve el mensaje con la devolución y la reserva pasa a Canceladas.
+* **Ingreso hoy.** El arrepentimiento ya no rige y por el plazo de 3 días está vencido: el diálogo muestra exactamente "Lo sentimos, las reservas solo se pueden cancelar hasta 3 días antes del ingreso." y no ofrece confirmar. Además, la prueba comprueba que el backend también rechaza la cancelación directa (422 con el mismo mensaje).
+
+El porcentaje del camping fuera del arrepentimiento (reservas hechas hace más de 10 días) se prueba en `backend/tests/test_cancelacion_reservas.py`: por API no se puede crear una reserva con fecha de hace días.
 
 **Bloque 2: el QR cancelado se rechaza en la puerta sin internet.**
 
@@ -201,7 +203,7 @@ Socio, guardia y administrador usan contextos de navegador separados: cada uno t
 
 Decisiones:
 
-* **Sin manipular el reloj.** El plazo lo calcula el backend con la fecha de Argentina, así que cambiar el reloj del navegador (`page.clock`) no cambia el resultado. Se fija el plazo y se crean reservas con fechas relativas a hoy, justo en el límite (último día permitido y primer día vencido).
+* **Sin manipular el reloj.** El plazo lo calcula el backend con la fecha de Argentina, así que cambiar el reloj del navegador (`page.clock`) no cambia el resultado. Se fija el plazo y se crean reservas con fechas relativas a hoy, justo en el límite del arrepentimiento (día anterior al ingreso y mismo día).
 * **Reserva de hoy en el Bloque 2.** Así el QR solo puede rechazarse por estar cancelado, y el mensaje que se comprueba es distinto del de "QR inválido".
 * **Cada tarjeta de Mis reservas tiene nombre accesible** ("Reserva" más los primeros 8 caracteres del id), para encontrar la reserva correcta aunque el socio tenga varias.
 

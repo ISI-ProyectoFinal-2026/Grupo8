@@ -1,11 +1,15 @@
-"""Cancelación de reservas por parte del socio (Issue 22.2).
+"""Cancelación de reservas (Issues 22.2 y 25.1).
 
-El socio puede cancelar una reserva pagada hasta N días antes del ingreso, y se le devuelve
-por Mercado Pago el porcentaje que define el administrador (configuracion_camping).
+Una reserva pagada se puede cancelar hasta N días antes del ingreso, y se devuelve por Mercado Pago
+el porcentaje que define el administrador (configuracion_camping).
+
+Por encima de esa regla está el derecho de arrepentimiento: dentro de los primeros días corridos desde
+que se hizo la reserva (ARREPENTIMIENTO_DIAS) y hasta el día anterior al ingreso, se puede cancelar
+siempre y se devuelve el total.
 """
 import logging
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from typing import Optional
 from uuid import UUID
@@ -13,7 +17,8 @@ from uuid import UUID
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
-from core.tiempo import ahora_utc
+from core.config import settings
+from core.tiempo import a_zona_negocio, ahora_utc
 from models.ingreso_fisico import IngresoFisico
 from models.pago import DEVOLUCION_PENDIENTE_REVISION, DEVOLUCION_REALIZADA, Pago
 from models.reserva import EstadoPagoEnum, EstadoReservaEnum, Reserva
@@ -25,6 +30,8 @@ from services.payment_service import reembolsar
 logger = logging.getLogger(__name__)
 
 CENTAVOS = Decimal("0.01")
+
+MOTIVO_MIS_RESERVAS = "Cancelaste la reserva desde Mis reservas."
 
 
 class ReservaNoEncontradaError(Exception):
@@ -42,12 +49,14 @@ class CondicionesCancelacion:
     puede_cancelar: bool
     # Por qué no se puede cancelar; None si se puede
     motivo: Optional[str]
-    # Último día (hora de Argentina) en que se puede cancelar
+    # Último día (hora de Argentina) en que se puede cancelar con estas condiciones
     fecha_limite: date
     dias_cancelacion: int
     porcentaje_devolucion: int
     monto_pagado: Decimal
     monto_a_devolver: Decimal
+    # True si rige el arrepentimiento en lugar de las reglas del camping
+    arrepentimiento: bool
 
 
 @dataclass(frozen=True)
@@ -62,6 +71,15 @@ def fecha_limite_cancelacion(fecha_ingreso: date, dias_cancelacion: int) -> date
     """Con 1 día y el ingreso el 20/11, se puede cancelar hasta el 19/11 inclusive.
     Con 0 días, hasta el mismo día del ingreso."""
     return fecha_ingreso - timedelta(days=dias_cancelacion)
+
+
+def fin_arrepentimiento(fecha_reserva: datetime, fecha_ingreso: date) -> date:
+    """Último día en que se puede cancelar por arrepentimiento: el día N contado desde la reserva o el
+    día anterior al ingreso, lo que llegue primero. El día de la reserva no cuenta (art. 6 del CCyC):
+    con 10 días, una reserva del 1/11 se puede cancelar hasta el 11/11 inclusive."""
+    # fecha_reserva se guarda en UTC sin zona: una reserva de las 22 h en Argentina ya es del día siguiente en UTC
+    dia_reserva = a_zona_negocio(fecha_reserva).date()
+    return min(dia_reserva + timedelta(days=settings.ARREPENTIMIENTO_DIAS), fecha_ingreso - timedelta(days=1))
 
 
 def calcular_monto_a_devolver(monto_pagado: Decimal, porcentaje: int) -> Decimal:
@@ -101,11 +119,18 @@ def _motivo_para_no_cancelar(db: Session, reserva: Reserva, fecha_limite: date, 
 def evaluar_cancelacion(db: Session, reserva: Reserva, hoy: Optional[date] = None) -> CondicionesCancelacion:
     """Si se puede cancelar la reserva, hasta cuándo y cuánto se devuelve, con la configuración actual."""
     camping = obtener_o_crear_camping(db)
+    hoy = hoy or hoy_argentina()
     dias = camping.dias_cancelacion
-    porcentaje = camping.porcentaje_devolucion
-    fecha_limite = fecha_limite_cancelacion(reserva.fecha_ingreso, dias)
+    limite_arrepentimiento = fin_arrepentimiento(reserva.fecha_reserva, reserva.fecha_ingreso)
+    arrepentimiento = hoy <= limite_arrepentimiento
+    if arrepentimiento:
+        porcentaje = 100
+        fecha_limite = limite_arrepentimiento
+    else:
+        porcentaje = camping.porcentaje_devolucion
+        fecha_limite = fecha_limite_cancelacion(reserva.fecha_ingreso, dias)
     monto_pagado = Decimal(str(reserva.monto_total)).quantize(CENTAVOS)
-    motivo = _motivo_para_no_cancelar(db, reserva, fecha_limite, dias, hoy or hoy_argentina())
+    motivo = _motivo_para_no_cancelar(db, reserva, fecha_limite, dias, hoy)
     return CondicionesCancelacion(
         puede_cancelar=motivo is None,
         motivo=motivo,
@@ -114,15 +139,13 @@ def evaluar_cancelacion(db: Session, reserva: Reserva, hoy: Optional[date] = Non
         porcentaje_devolucion=porcentaje,
         monto_pagado=monto_pagado,
         monto_a_devolver=calcular_monto_a_devolver(monto_pagado, porcentaje),
+        arrepentimiento=arrepentimiento,
     )
 
 
-def reserva_del_usuario(db: Session, reserva_id: UUID, usuario_id: UUID, bloquear: bool = False) -> Reserva:
-    consulta = db.query(Reserva).filter(Reserva.id == reserva_id, Reserva.user_id == usuario_id)
-    if bloquear:
-        # Dos pedidos de cancelación a la vez no pueden devolver el dinero dos veces
-        consulta = consulta.populate_existing().with_for_update()
-    reserva = consulta.first()
+def reserva_del_usuario(db: Session, reserva_id: UUID, usuario_id: UUID) -> Reserva:
+    """La reserva del socio, para cancelarla desde Mis reservas."""
+    reserva = db.query(Reserva).filter(Reserva.id == reserva_id, Reserva.user_id == usuario_id).first()
     if reserva is None:
         raise ReservaNoEncontradaError()
     return reserva
@@ -162,14 +185,18 @@ def _devolver(db: Session, reserva: Reserva, condiciones: CondicionesCancelacion
 
     if not realizada:
         logger.error(
-            f"Reserva {reserva.id} cancelada por el socio: no se pudo devolver {monto}. "
+            f"Reserva {reserva.id} cancelada: no se pudo devolver {monto}. "
             "Hay que devolverlo a mano desde Mercado Pago."
         )
     return realizada
 
 
 def _programar_correo(
-    reserva: Reserva, condiciones: CondicionesCancelacion, realizada: bool, background_tasks: BackgroundTasks
+    reserva: Reserva,
+    condiciones: CondicionesCancelacion,
+    realizada: bool,
+    motivo: str,
+    background_tasks: BackgroundTasks,
 ) -> None:
     monto = formatear_pesos(condiciones.monto_a_devolver)
     if condiciones.monto_a_devolver == 0:
@@ -184,13 +211,15 @@ def _programar_correo(
             f"Estamos procesando la devolución de {monto} ({condiciones.porcentaje_devolucion} % de lo que pagaste) "
             "por Mercado Pago. Si tenés alguna duda, comunicate con la administración del camping."
         )
+    if condiciones.arrepentimiento:
+        detalle = "Cancelaste dentro del plazo de arrepentimiento, por eso se te devuelve el total. " + detalle
     background_tasks.add_task(
         email_service.enviar_cancelacion_sync,
         destinatario=reserva.email,
         datos_reserva={
             "nombre_cliente": reserva.titular,
             "reserva_id": str(reserva.id),
-            "motivo_cancelacion": "Cancelaste la reserva desde Mis reservas.",
+            "motivo_cancelacion": motivo,
             "detalle_devolucion": detalle,
         },
     )
@@ -198,19 +227,21 @@ def _programar_correo(
 
 def cancelar_reserva(
     db: Session,
-    reserva_id: UUID,
-    usuario_id: UUID,
+    reserva: Reserva,
     background_tasks: BackgroundTasks,
+    motivo: str = MOTIVO_MIS_RESERVAS,
     hoy: Optional[date] = None,
 ) -> ResultadoCancelacion:
     """
-    Cancela la reserva del socio y le devuelve el porcentaje que corresponde.
+    Cancela una reserva ya encontrada (por su dueño en Mis reservas, o por el enlace del botón de
+    arrepentimiento) y devuelve el porcentaje que corresponde. `motivo` es el que figura en el correo.
 
     La reserva pasa a CANCELADA (libera el cupo y su QR entra en la lista de canceladas de la PWA)
     aunque falle la devolución: en ese caso el pago queda marcado para revisión. El estado del
     pago sigue en PAGADO, así un aviso posterior de Mercado Pago no vuelve a confirmarla.
     """
-    reserva = reserva_del_usuario(db, reserva_id, usuario_id, bloquear=True)
+    # Bloquea la fila y la vuelve a leer: dos pedidos a la vez no pueden devolver el dinero dos veces
+    db.refresh(reserva, with_for_update=True)
     condiciones = evaluar_cancelacion(db, reserva, hoy)
     if not condiciones.puede_cancelar:
         db.rollback()  # libera el bloqueo
@@ -220,5 +251,5 @@ def cancelar_reserva(
     realizada = _devolver(db, reserva, condiciones)
     db.commit()
 
-    _programar_correo(reserva, condiciones, realizada, background_tasks)
+    _programar_correo(reserva, condiciones, realizada, motivo, background_tasks)
     return ResultadoCancelacion(reserva=reserva, condiciones=condiciones, devolucion_realizada=realizada)

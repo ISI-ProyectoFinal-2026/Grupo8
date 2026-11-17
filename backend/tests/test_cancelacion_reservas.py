@@ -1,7 +1,8 @@
-"""Cancelación de reservas por el socio: GET /reservas/{id}/cancelacion y POST /reservas/{id}/cancelar (Issue 22.2)."""
+"""Cancelación de reservas por el socio: GET /reservas/{id}/cancelacion y POST /reservas/{id}/cancelar
+(Issue 22.2) y plazo de arrepentimiento por encima de las reglas del camping (Issue 25.1)."""
 import random
 import uuid
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import jwt
@@ -12,6 +13,7 @@ from fastapi.testclient import TestClient
 from core.config import settings
 from core.database import Base, SessionLocal, engine
 from core.dependencies import get_current_user
+from core.tiempo import ahora_utc
 from main import app
 from models.ingreso_fisico import IngresoFisico, TipoIngresoEnum
 from models.pago import Pago
@@ -21,6 +23,7 @@ from schemas.reserva import hoy_argentina
 from services.cancelacion_service import (
     calcular_monto_a_devolver,
     fecha_limite_cancelacion,
+    fin_arrepentimiento,
     formatear_pesos,
     mensaje_fuera_de_plazo,
 )
@@ -36,6 +39,7 @@ pytestmark = pytest.mark.usefixtures("camping_de_prueba")
 
 MONTO = 15000.0
 PERSONAS = 3
+DIAS_ARREPENTIMIENTO = 10
 
 
 # ---------- Dobles de prueba ----------
@@ -74,6 +78,12 @@ def sin_override_de_autenticacion():
     yield
     if previo is not None:
         app.dependency_overrides[get_current_user] = previo
+
+
+@pytest.fixture(autouse=True)
+def plazo_de_arrepentimiento(monkeypatch):
+    """Los tests no dependen del valor que tenga cada .env."""
+    monkeypatch.setattr(settings, "ARREPENTIMIENTO_DIAS", DIAS_ARREPENTIMIENTO)
 
 
 @pytest.fixture
@@ -132,13 +142,19 @@ def datos():
         estado_reserva=EstadoReservaEnum.CONFIRMADA,
         estado_pago=EstadoPagoEnum.PAGADO,
         con_pago=True,
+        dias_desde_reserva=30,
     ):
-        """Reserva pagada (por defecto) con su pago aprobado en la tabla pagos."""
+        """Reserva pagada (por defecto) con su pago aprobado en la tabla pagos.
+
+        Por defecto la reserva se hizo hace 30 días, fuera del plazo de arrepentimiento, así rigen
+        las reglas del camping. Los tests de arrepentimiento pasan dias_desde_reserva."""
         ingreso = hoy_argentina() + timedelta(days=dias_hasta_ingreso)
         db = SessionLocal()
         try:
             reserva = Reserva(
                 user_id=user_id,
+                # Como la guarda el modelo: UTC sin zona
+                fecha_reserva=ahora_utc().replace(tzinfo=None) - timedelta(days=dias_desde_reserva),
                 camping_id=settings.CAMPING_ID,
                 fecha_ingreso=ingreso,
                 fecha_egreso=ingreso + timedelta(days=2),
@@ -262,6 +278,7 @@ def test_consulta_dentro_del_plazo_informa_condiciones_y_monto(datos, reglas):
         "porcentaje_devolucion": 50,
         "monto_devolucion": 7500.0,
         "mensaje": None,
+        "arrepentimiento": False,
     }
 
 
@@ -566,3 +583,193 @@ def test_un_aviso_posterior_de_mercado_pago_no_vuelve_a_confirmarla(datos, regla
     assert resultado == ResultadoConfirmacion.YA_PAGADA
     assert _reserva(reserva_id).estado_reserva == EstadoReservaEnum.CANCELADA
     assert len(mp.reembolsos) == 1
+
+
+# ---------- Plazo de arrepentimiento (Issue 25.1) ----------
+
+def test_el_arrepentimiento_dura_10_dias_corridos_desde_la_reserva():
+    reserva = datetime(2026, 11, 1, 15, 0)
+    # El día de la reserva no cuenta: del 1/11 se puede cancelar hasta el 11/11 inclusive
+    assert fin_arrepentimiento(reserva, date(2026, 12, 20)) == date(2026, 11, 11)
+
+
+def test_el_arrepentimiento_termina_el_dia_anterior_al_ingreso():
+    assert fin_arrepentimiento(datetime(2026, 11, 1, 15, 0), date(2026, 11, 5)) == date(2026, 11, 4)
+
+
+def test_la_fecha_de_la_reserva_se_toma_en_hora_de_argentina():
+    # 02/11 01:30 en UTC es el 01/11 a las 22:30 en Argentina: la reserva es del 1/11
+    assert fin_arrepentimiento(datetime(2026, 11, 2, 1, 30), date(2026, 12, 20)) == date(2026, 11, 11)
+
+
+def test_dentro_del_arrepentimiento_devuelve_el_total_aunque_el_camping_diga_7_dias_y_0(datos, reglas, mp, correo):
+    crear_usuario, crear_reserva = datos
+    reglas(dias=7, porcentaje=0)
+    socio = crear_usuario()
+    # Con las reglas del camping ya estaría fuera de plazo (ingreso en 3 días) y sin devolución
+    reserva_id, payment_id = crear_reserva(socio, dias_hasta_ingreso=3, dias_desde_reserva=0)
+
+    consulta = _consultar(reserva_id, socio).json()
+    assert consulta["puede_cancelar"] is True
+    assert consulta["arrepentimiento"] is True
+    assert (consulta["porcentaje_devolucion"], consulta["monto_devolucion"]) == (100, MONTO)
+    # Hasta el día anterior al ingreso, que llega antes que los 10 días
+    assert consulta["fecha_limite"] == (hoy_argentina() + timedelta(days=2)).isoformat()
+    assert consulta["dias_minimos"] == 7
+    assert consulta["mensaje"] is None
+
+    response = _cancelar(reserva_id, socio)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["monto_devuelto"] == MONTO
+    assert mp.reembolsos == [(payment_id, None)]
+    assert _pago(payment_id).estado == "refunded"
+
+
+@pytest.mark.parametrize("dias_desde_reserva, arrepentimiento", [(10, True), (11, False)])
+def test_el_arrepentimiento_vence_a_los_10_dias(datos, reglas, mp, correo, dias_desde_reserva, arrepentimiento):
+    crear_usuario, crear_reserva = datos
+    reglas(dias=7, porcentaje=0)
+    socio = crear_usuario()
+    reserva_id, _ = crear_reserva(socio, dias_hasta_ingreso=3, dias_desde_reserva=dias_desde_reserva)
+
+    data = _consultar(reserva_id, socio).json()
+
+    assert (data["puede_cancelar"], data["arrepentimiento"]) == (arrepentimiento, arrepentimiento)
+
+
+def test_reserva_hecha_hace_11_dias_sigue_las_reglas_del_camping(datos, reglas, mp, correo):
+    crear_usuario, crear_reserva = datos
+    reglas(dias=7, porcentaje=0)
+    socio = crear_usuario()
+    reserva_id, payment_id = crear_reserva(socio, dias_hasta_ingreso=3, dias_desde_reserva=11)
+
+    response = _cancelar(reserva_id, socio)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Lo sentimos, las reservas solo se pueden cancelar hasta 7 días antes del ingreso."
+    assert _reserva(reserva_id).estado_reserva == EstadoReservaEnum.CONFIRMADA
+    assert mp.reembolsos == []
+
+
+def test_reserva_hecha_hace_11_dias_dentro_del_plazo_del_camping_devuelve_su_porcentaje(datos, reglas, mp, correo):
+    crear_usuario, crear_reserva = datos
+    reglas(dias=2, porcentaje=50)
+    socio = crear_usuario()
+    reserva_id, payment_id = crear_reserva(socio, dias_hasta_ingreso=10, dias_desde_reserva=11)
+
+    data = _consultar(reserva_id, socio).json()
+    assert (data["arrepentimiento"], data["porcentaje_devolucion"]) == (False, 50)
+
+    assert _cancelar(reserva_id, socio).json()["monto_devuelto"] == 7500.0
+    assert mp.reembolsos == [(payment_id, {"amount": 7500.0})]
+
+
+def test_el_dia_anterior_al_ingreso_todavia_rige_el_arrepentimiento(datos, reglas, mp, correo):
+    crear_usuario, crear_reserva = datos
+    reglas(dias=7, porcentaje=0)
+    socio = crear_usuario()
+    reserva_id, _ = crear_reserva(socio, dias_hasta_ingreso=1, dias_desde_reserva=0)
+
+    data = _consultar(reserva_id, socio).json()
+
+    assert (data["puede_cancelar"], data["arrepentimiento"], data["porcentaje_devolucion"]) == (True, True, 100)
+    assert data["fecha_limite"] == hoy_argentina().isoformat()
+    assert _cancelar(reserva_id, socio).status_code == 200
+
+
+def test_el_mismo_dia_del_ingreso_ya_no_rige_el_arrepentimiento(datos, reglas, mp, correo):
+    crear_usuario, crear_reserva = datos
+    reglas(dias=7, porcentaje=0)
+    socio = crear_usuario()
+    reserva_id, _ = crear_reserva(socio, dias_hasta_ingreso=0, dias_desde_reserva=0)
+
+    data = _consultar(reserva_id, socio).json()
+    assert (data["puede_cancelar"], data["arrepentimiento"]) == (False, False)
+
+    response = _cancelar(reserva_id, socio)
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Lo sentimos, las reservas solo se pueden cancelar hasta 7 días antes del ingreso."
+    assert mp.reembolsos == []
+
+
+def test_el_mismo_dia_del_ingreso_con_plazo_0_rige_el_porcentaje_del_camping(datos, reglas, mp, correo):
+    crear_usuario, crear_reserva = datos
+    reglas(dias=0, porcentaje=50)
+    socio = crear_usuario()
+    reserva_id, _ = crear_reserva(socio, dias_hasta_ingreso=0, dias_desde_reserva=0)
+
+    data = _consultar(reserva_id, socio).json()
+
+    assert (data["puede_cancelar"], data["arrepentimiento"], data["porcentaje_devolucion"]) == (True, False, 50)
+
+
+def test_el_socio_cancela_desde_mis_reservas_por_arrepentimiento_y_el_correo_lo_dice(datos, reglas, mp, correo):
+    crear_usuario, crear_reserva = datos
+    reglas(dias=7, porcentaje=0)
+    socio = crear_usuario()
+    reserva_id, payment_id = crear_reserva(socio, dias_hasta_ingreso=3, dias_desde_reserva=2)
+
+    response = _cancelar(reserva_id, socio)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["mensaje"] == "La reserva quedó cancelada. Te devolvimos $ 15.000,00 por Mercado Pago."
+    assert _reserva(reserva_id).estado_reserva == EstadoReservaEnum.CANCELADA
+    enviado = correo.cancelaciones[0]
+    assert enviado["motivo_cancelacion"] == "Cancelaste la reserva desde Mis reservas."
+    assert enviado["detalle_devolucion"].startswith("Cancelaste dentro del plazo de arrepentimiento")
+    assert "Te devolvimos $ 15.000,00 (100 % de lo que pagaste)" in enviado["detalle_devolucion"]
+
+
+def test_fuera_del_arrepentimiento_el_correo_no_lo_menciona(datos, reglas, mp, correo):
+    crear_usuario, crear_reserva = datos
+    socio = crear_usuario()
+    reserva_id, _ = crear_reserva(socio)
+
+    _cancelar(reserva_id, socio)
+
+    assert "arrepentimiento" not in correo.cancelaciones[0]["detalle_devolucion"]
+
+
+@pytest.mark.parametrize("estado_reserva, estado_pago, con_pago, mensaje", [
+    (EstadoReservaEnum.ALERTA_CLONACION, EstadoPagoEnum.PAGADO, True, "en revisión"),
+    (EstadoReservaEnum.PENDIENTE, EstadoPagoEnum.PENDIENTE, False, "Solo se pueden cancelar reservas pagadas."),
+    (EstadoReservaEnum.CANCELADA, EstadoPagoEnum.PAGADO, True, "La reserva ya está cancelada."),
+])
+def test_el_arrepentimiento_no_habilita_reservas_que_no_se_pueden_cancelar(
+    datos, reglas, mp, correo, estado_reserva, estado_pago, con_pago, mensaje
+):
+    crear_usuario, crear_reserva = datos
+    socio = crear_usuario()
+    reserva_id, _ = crear_reserva(
+        socio, estado_reserva=estado_reserva, estado_pago=estado_pago, con_pago=con_pago, dias_desde_reserva=0
+    )
+
+    response = _cancelar(reserva_id, socio)
+
+    assert response.status_code == 422
+    assert mensaje in response.json()["detail"]
+    assert _reserva(reserva_id).estado_reserva == estado_reserva
+    assert mp.reembolsos == []
+
+
+def test_el_arrepentimiento_no_habilita_una_reserva_con_ingreso_registrado(datos, reglas, mp, correo):
+    crear_usuario, crear_reserva = datos
+    socio = crear_usuario()
+    reserva_id, _ = crear_reserva(socio, dias_hasta_ingreso=1, dias_desde_reserva=0)
+    db = SessionLocal()
+    try:
+        db.add(IngresoFisico(
+            reserva_id=reserva_id,
+            tipo_ingreso=TipoIngresoEnum.WEB,
+            jti=f"jti-{uuid.uuid4()}",
+            cantidad_personas=PERSONAS,
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    response = _cancelar(reserva_id, socio)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "No se puede cancelar una reserva que ya registró un ingreso al camping."
