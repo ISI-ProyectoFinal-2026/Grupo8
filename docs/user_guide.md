@@ -19,6 +19,8 @@ Si quien reserva es un socio con la sesión iniciada, sus datos ya aparecen carg
 El correo electrónico se escribe dos veces para evitar errores, ya que es la dirección a la que llega el código QR.
 El panel lateral muestra el subtotal, los descuentos (por ejemplo, el de socios o por edad) y el total, calculados por el sistema cada vez que cambian los datos de las personas.
 El pago se procesa de forma segura a través de la integración con Mercado Pago.
+Después de tocar "Pagar", la reserva queda guardada y hay 10 minutos para pagarla: la pantalla muestra la cuenta regresiva y el botón "Ir a pagar". Si el tiempo se termina, la reserva vence, los lugares quedan libres y se puede empezar de nuevo. El pago en efectivo (Pago Fácil, Rapipago) no está disponible, porque se acredita días después.
+Si Mercado Pago rechaza el pago, "Intentar nuevamente" vuelve a la pantalla de pago con el tiempo que queda.
 Finalizado el proceso, el usuario será redirigido a una vista específica (éxito, rechazo o pendiente) para conocer el resultado visual de su transacción. Si el pago se aprueba, Mercado Pago vuelve solo a la web, en hasta 40 segundos; también se puede tocar "Volver al sitio".
 
 ### 1.3. Autogestión y Panel de Usuario
@@ -29,7 +31,7 @@ Las secciones "Perfil" y "Mis Reservas" son exclusivas para socios. Se puede res
 Dentro del apartado "Perfil", los usuarios pueden visualizar el estado de su cuenta, identificado con etiquetas como "Activo" o "Inactivo".
 En la sección "Mis Reservas", el sistema ofrece un historial clasificado en pestañas para reservas "Próximas", "Finalizadas" y "Canceladas".
 En las reservas "Próximas", el botón "Descargar QR" baja el mismo código QR de acceso que llegó por correo, por si el cliente no encuentra el mensaje. También se puede descargar apenas se paga, desde la pantalla "¡Reserva Realizada!", con o sin cuenta. El botón "Cancelar" muestra hasta cuándo se puede cancelar y cuánto se devuelve, y pide confirmación ("¿Está seguro que desea cancelar?").
-Adicionalmente, existe una pestaña de "Pendientes" con un botón de "Verificar Pago", el cual permite auditar manualmente transacciones que hayan quedado demoradas por intermitencias de red.
+Adicionalmente, existe una pestaña de "Pendientes" con un botón de "Verificar Pago", el cual permite auditar manualmente transacciones que hayan quedado demoradas por intermitencias de red. Si el pago se confirma así, el código QR llega por correo igual que con la confirmación automática.
 
 ### 1.3.1. Botón de Arrepentimiento (cancelar sin cuenta)
 
