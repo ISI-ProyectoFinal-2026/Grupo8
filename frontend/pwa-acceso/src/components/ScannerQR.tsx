@@ -4,6 +4,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { CameraOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface ScannerQRProps {
   onScanSuccess: (token: string) => void;
@@ -86,18 +87,24 @@ export const ScannerQR = ({ onScanSuccess }: ScannerQRProps) => {
         <h3 className="mb-3 text-center text-base font-semibold text-foreground">
           Ingresar token manualmente
         </h3>
-        <form onSubmit={handleTokenManual} className="flex gap-2">
-          <Input
-            type="text"
-            aria-label="Token del QR"
-            placeholder="Pegá el código del QR"
-            value={tokenManual}
-            onChange={(e) => setTokenManual(e.target.value)}
-            className="h-12 flex-1 text-base"
-          />
-          <Button type="submit" className="h-12 px-5 text-base font-semibold">
-            Validar
-          </Button>
+        <form onSubmit={handleTokenManual} className="space-y-2">
+          {/* Etiqueta visible: el texto de ejemplo desaparece al escribir (27.4) */}
+          <Label htmlFor="token-qr" className="text-base">
+            Token del QR
+          </Label>
+          <div className="flex gap-2">
+            <Input
+              id="token-qr"
+              type="text"
+              placeholder="Pegá el código del QR"
+              value={tokenManual}
+              onChange={(e) => setTokenManual(e.target.value)}
+              className="h-12 flex-1 text-base"
+            />
+            <Button type="submit" className="h-12 px-5 text-base font-semibold">
+              Validar
+            </Button>
+          </div>
         </form>
       </div>
     </div>

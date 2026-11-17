@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Ban, CheckCircle2, Loader2, ScanLine, XCircle } from 'lucide-react';
 import { ScannerQR } from '../components/ScannerQR';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,25 @@ export default function ControlAcceso() {
   const [resultadoValidacion, setResultadoValidacion] = useState<ResultadoValidacion | null>(null);
 
   const [syncStatus, setSyncStatus] = useState<{ estado: string; mensaje: string } | null>(null);
+
+  // Foco al abrir y cerrar el escáner (27.4). "Escanear QR" desaparece al abrirlo y el lector
+  // desaparece al leer un código: sin esto el foco se pierde. Al abrir va al título y no al
+  // campo del token, para que en el celular no aparezca el teclado tapando la cámara
+  const refTituloEscaneo = useRef<HTMLHeadingElement>(null);
+  const refBotonEscanear = useRef<HTMLButtonElement>(null);
+  const escaneoAbierto = useRef(false);
+
+  useEffect(() => {
+    if (escaneando) {
+      escaneoAbierto.current = true;
+      refTituloEscaneo.current?.focus();
+    } else if (escaneoAbierto.current) {
+      // Vuelve a "Escanear QR", listo para el próximo visitante. El resultado se anuncia
+      // solo (role="alert")
+      escaneoAbierto.current = false;
+      refBotonEscanear.current?.focus();
+    }
+  }, [escaneando]);
 
   useEffect(() => {
     const inicializarDB = async () => {
@@ -101,11 +120,12 @@ export default function ControlAcceso() {
 
       {syncStatus && avisoSync && (
         <div
-          role="status"
+          // "Sincronizando…" ya lo anuncia la barra superior (26.1): acá solo se anuncia el resultado
+          role={syncStatus.estado === 'warning' ? undefined : 'status'}
           className={cn('flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center font-semibold', avisoSync.clase)}
         >
           <avisoSync.Icono
-            className={cn('h-5 w-5 shrink-0', syncStatus.estado === 'warning' && 'animate-spin')}
+            className={cn('h-5 w-5 shrink-0', syncStatus.estado === 'warning' && 'motion-safe:animate-spin')}
             aria-hidden="true"
           />
           {syncStatus.mensaje}
@@ -143,6 +163,7 @@ export default function ControlAcceso() {
       {!escaneando ? (
         <div className="flex flex-col gap-3">
           <Button
+            ref={refBotonEscanear}
             onClick={() => { setResultadoValidacion(null); setEscaneando(true); }}
             disabled={campingLleno}
             className="h-16 w-full text-lg font-semibold"
@@ -153,7 +174,9 @@ export default function ControlAcceso() {
         </div>
       ) : (
         <div className="space-y-4 text-center">
-          <h2 className="text-lg font-semibold text-foreground">Apunte al código del visitante</h2>
+          <h2 ref={refTituloEscaneo} tabIndex={-1} className="text-lg font-semibold text-foreground focus:outline-none">
+            Apunte al código del visitante
+          </h2>
           <ScannerQR onScanSuccess={procesarQR} />
           <Button variant="outline" onClick={() => setEscaneando(false)} className="h-12 w-full text-base">
             Cancelar

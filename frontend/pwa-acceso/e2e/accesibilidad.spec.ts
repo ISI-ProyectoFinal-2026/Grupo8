@@ -272,6 +272,32 @@ const PANTALLAS: Pantalla[] = [
     },
   },
   {
+    // Sin cámara en la prueba: se ve el aviso de cámara y el campo para el token
+    nombre: 'Escáner abierto',
+    actor: 'guardia',
+    titulo: 'Escáner | Qamp Acceso',
+    abrir: async (page) => {
+      await page.goto('/acceso');
+      await expect(page.getByText('Capacidad Disponible')).toBeVisible();
+      await page.getByRole('button', { name: 'Escanear QR' }).click();
+      await expect(page.getByLabel('Token del QR')).toBeVisible();
+    },
+  },
+  {
+    // El resultado tiene que cumplir contraste con su color de fondo y borde
+    nombre: 'Escáner con resultado',
+    actor: 'guardia',
+    titulo: 'Escáner | Qamp Acceso',
+    abrir: async (page) => {
+      await page.goto('/acceso');
+      await expect(page.getByText('Capacidad Disponible')).toBeVisible();
+      await page.getByRole('button', { name: 'Escanear QR' }).click();
+      await page.getByLabel('Token del QR').fill('token-que-no-es-un-qr');
+      await page.getByRole('button', { name: 'Validar' }).click();
+      await expect(page.getByRole('alert')).toContainText('Acceso Denegado');
+    },
+  },
+  {
     nombre: 'Historial de la PWA',
     actor: 'guardia',
     titulo: 'Historial | Qamp Acceso',
@@ -280,6 +306,39 @@ const PANTALLAS: Pantalla[] = [
       await expect(
         page.getByRole('heading', { name: 'Historial', level: 1 })
       ).toBeVisible();
+    },
+  },
+  {
+    nombre: 'Registro manual',
+    actor: 'guardia',
+    titulo: 'Registro manual | Qamp Acceso',
+    abrir: async (page) => {
+      await page.goto('/acceso/manual');
+      await expect(
+        page.getByRole('heading', { name: 'Registro manual', level: 1 })
+      ).toBeVisible();
+    },
+  },
+  {
+    nombre: 'Estado de sincronización',
+    actor: 'guardia',
+    titulo: 'Estado de sincronización | Qamp Acceso',
+    abrir: async (page) => {
+      await page.goto('/acceso/sincronizacion');
+      await expect(
+        page.getByRole('heading', {
+          name: 'Estado de sincronización',
+          level: 1,
+        })
+      ).toBeVisible();
+    },
+  },
+  {
+    nombre: 'Ingreso del guardia',
+    titulo: 'Ingreso del guardia | Qamp Acceso',
+    abrir: async (page) => {
+      await page.goto('/acceso/login');
+      await expect(page.getByLabel('DNI o Email')).toBeVisible();
     },
   },
 ];
@@ -440,5 +499,72 @@ test.describe('Teclado en el panel', () => {
 
     await page.getByRole('button', { name: 'Cancelar' }).click();
     await expect(editar).toBeFocused();
+  });
+});
+
+// =========================================================================================
+// Sub-issue 27.4: la PWA del guardia se usa solo con teclado
+// =========================================================================================
+test.describe('Teclado en la PWA del guardia', () => {
+  test.beforeEach(async ({ page }) => {
+    await iniciarSesion(page, LOGIN.guardia, CREDENCIALES.guardia);
+    await page.goto('/acceso');
+    await expect(page.getByText('Capacidad Disponible')).toBeVisible();
+  });
+
+  test('se valida un QR a mano y el foco queda listo para el próximo visitante', async ({
+    page,
+  }) => {
+    const escanear = page.getByRole('button', { name: 'Escanear QR' });
+    await escanear.focus();
+    await page.keyboard.press('Enter');
+
+    // El foco va a la indicación, no al campo: en el celular no se abre el teclado
+    await expect(
+      page.getByRole('heading', { name: 'Apunte al código del visitante' })
+    ).toBeFocused();
+
+    // Con Tab se llega al campo del token (con un tope, por si el orden se rompe)
+    const token = page.getByLabel('Token del QR');
+    const tieneElFoco = () =>
+      token.evaluate((nodo) => nodo === document.activeElement);
+    for (let i = 0; i < 10 && !(await tieneElFoco()); i++) {
+      await page.keyboard.press('Tab');
+    }
+    await expect(token).toBeFocused();
+    await page.keyboard.type('token-que-no-es-un-qr');
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByRole('alert')).toContainText('Acceso Denegado');
+    await expect(escanear).toBeFocused();
+  });
+
+  test('la barra inferior se recorre con Tab y lleva el foco a la pantalla elegida', async ({
+    page,
+  }) => {
+    const historial = page.getByRole('link', { name: 'Historial' });
+    await historial.focus();
+    await page.keyboard.press('Enter');
+
+    await expect(
+      page.getByRole('heading', { name: 'Historial', level: 1 })
+    ).toBeVisible();
+    await expect(page.getByRole('main')).toBeFocused();
+    await expect(historial).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('las opciones de la barra inferior miden al menos 24 × 24 px', async ({
+    page,
+  }) => {
+    const opciones = page
+      .getByRole('navigation', { name: 'Navegación de la app del guardia' })
+      .locator('a, button');
+    await expect(opciones).toHaveCount(5);
+
+    for (const opcion of await opciones.all()) {
+      const caja = await opcion.boundingBox();
+      expect(caja?.width ?? 0).toBeGreaterThanOrEqual(24);
+      expect(caja?.height ?? 0).toBeGreaterThanOrEqual(24);
+    }
   });
 });

@@ -4,6 +4,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { LogoQamp } from '@/components/marca/LogoQamp';
 import { useAuth } from '@/context/AuthContext';
 import { useConexion } from '@/hooks/useConexion';
+import { useFocoAlCambiarDePantalla } from '@/hooks/useFocoAlCambiarDePantalla';
 import { cn } from '@/lib/utils';
 import { syncService } from '@/services/syncService';
 import { BarraNavegacionInferior, SECCIONES_ACCESO } from './BarraNavegacionInferior';
@@ -26,6 +27,8 @@ export function LayoutAcceso() {
   const { cerrarSesion } = useAuth();
   const { pathname } = useLocation();
   const { enLinea, pendientes, sincronizando } = useConexion();
+  // Al tocar una opción de la barra inferior el foco pasa a la pantalla nueva (27.4)
+  const contenido = useFocoAlCambiarDePantalla<HTMLElement>();
 
   // La sincronización automática vive en el marco y no en una pantalla: así sigue andando
   // aunque el guardia esté en Historial o en Registro manual cuando vuelve la red
@@ -68,7 +71,9 @@ export function LayoutAcceso() {
         </p>
       </header>
 
-      <main className="relative flex-1 pb-28">
+      {/* tabIndex={-1}: recibe el foco al cambiar de pantalla. No hace falta "Saltar al
+          contenido": la barra superior no tiene nada que se use con Tab */}
+      <main ref={contenido} tabIndex={-1} className="relative flex-1 pb-28 focus:outline-none">
         <div className="fondo-montanas" aria-hidden="true" />
         <div className="relative">
           <Outlet />

@@ -21,6 +21,15 @@ describe('ScannerQR — ingreso manual del token (Issue 16.5)', () => {
     expect(screen.getByRole('button', { name: 'Validar' })).toBeTruthy();
   });
 
+  it('el campo tiene una etiqueta visible, no solo el texto de ejemplo (27.4)', () => {
+    render(<ScannerQR onScanSuccess={vi.fn()} />);
+
+    expect(screen.getByText('Token del QR').tagName).toBe('LABEL');
+    expect(screen.getByLabelText('Token del QR')).toBe(
+      screen.getByPlaceholderText('Pegá el código del QR')
+    );
+  });
+
   it('envía el token sin espacios y limpia el campo', () => {
     const alEscanear = vi.fn();
     render(<ScannerQR onScanSuccess={alEscanear} />);
