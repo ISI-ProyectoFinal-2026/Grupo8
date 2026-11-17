@@ -74,8 +74,8 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
       ['/admin/reservas', 'Gestión de reservas'],
       ['/admin/socios', 'Socios'],
       ['/admin/descuentos', 'Descuentos'],
-      ['/admin/incidentes', 'Incidentes'],
       ['/admin/egresos', 'Egresos'],
+      ['/admin/alertas', 'Alertas de acceso'],
       ['/admin/configuracion', 'Configuración del camping'],
       ['/admin/tipos-reserva', 'Tipos de reserva'],
     ])('renderiza %s con su página inicial', (ruta, titulo) => {
@@ -99,13 +99,32 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
         '/admin/reservas',
         '/admin/socios',
         '/admin/descuentos',
-        '/admin/incidentes',
         '/admin/egresos',
         '/admin/alertas',
         '/admin/tipos-reserva',
         // Configuración va al pie de la barra lateral, justo encima de "Cerrar sesión"
         '/admin/configuracion',
       ]);
+    });
+
+    it('los incidentes de acceso tienen una sola entrada en el menú: "Alertas" (26.5)', () => {
+      renderizarEn('/admin');
+
+      const nav = screen.getByRole('navigation', { name: NOMBRE_NAV });
+      expect(
+        within(nav).getAllByRole('link', { name: /alertas/i })
+      ).toHaveLength(1);
+      expect(
+        within(nav).queryByRole('link', { name: /incidentes/i })
+      ).toBeNull();
+    });
+
+    it('la ruta vieja /admin/incidentes ya no existe y lleva al inicio del panel (26.5)', () => {
+      renderizarEn('/admin/incidentes');
+
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'Inicio' })
+      ).toBeTruthy();
     });
 
     it('marca como activa solo la sección actual', () => {
@@ -143,7 +162,7 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
       (rol) => {
         localStorage.setItem(TOKEN_KEY, crearToken(rol));
 
-        renderizarEn('/admin/incidentes');
+        renderizarEn('/admin/alertas');
 
         expect(
           screen.getByRole('heading', { level: 1, name: /acceso denegado/i })
