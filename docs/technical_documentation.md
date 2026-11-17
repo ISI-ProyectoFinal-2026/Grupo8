@@ -214,7 +214,7 @@ Orquesta el proceso inmediato desde la validación del pago hasta el envío del 
 * Implementado como un patrón Singleton (`services/email_service.py`), se integra con Resend (`RESEND_API_KEY`).
 
 
-* Utiliza plantillas `Jinja2` modulares (`confirmacion_reserva.html`, `recibo_pago.html`, `cancelacion_reserva.html`) inyectando estilos CSS integrados (*inline*).
+* Utiliza plantillas `Jinja2` modulares (`confirmacion_reserva.html`, `recibo_pago.html`, `cancelacion_reserva.html`, `arrepentimiento_enlaces.html`) inyectando estilos CSS integrados (*inline*).
 
 
 * La credencial se inserta directamente en el HTML referenciándola mediante un identificador de contenido (CID) como `cid:qr_code`.
@@ -406,11 +406,62 @@ Permite al administrador saber cuántas personas hay dentro del camping y cuánt
 * El texto viaja como parámetro (nunca pegado al SQL), con `%` y `_` escapados y un máximo de 100 caracteres. El filtrado lo hace la base.
 * En el panel, la búsqueda espera 300 ms desde la última tecla (*debounce*) y descarta respuestas viejas que lleguen tarde.
 
-## 11. Calidad de Software (QA), Pruebas y Cobertura
+## 11. Cancelaciones y Botón de Arrepentimiento (Issues 22 y 25)
+
+Una reserva pagada se cancela de dos formas: el socio, desde Mis reservas (con sesión), o cualquier persona, con o sin cuenta, desde el "Botón de arrepentimiento" (con el email de la reserva). Las dos usan las mismas reglas y la misma función de cancelación (`services/cancelacion_service.py`).
+
+### 11.1. Reglas de Cancelación
+
+Primero se mira el plazo de arrepentimiento; si no rige, se aplican las reglas que configura el administrador en el panel (Configuración → Cancelaciones: días de anticipación y porcentaje de devolución).
+
+| Situación | ¿Se puede cancelar? | Devolución |
+|---|---|---|
+| Dentro de los `ARREPENTIMIENTO_DIAS` (10) corridos desde la reserva **y** antes del día de ingreso | Siempre | 100 % |
+| Fuera de esa ventana, hasta N días antes del ingreso (N configurado; 0 = hasta el mismo día) | Sí | El porcentaje configurado (el monto se redondea hacia abajo, al centavo) |
+| Fuera de esa ventana y después del plazo del camping | No (422 "Lo sentimos, las reservas solo se pueden cancelar hasta N días antes del ingreso.") | — |
+
+* **Base legal del arrepentimiento:** el art. 34 de la Ley 24.240 da 10 días corridos para revocar una compra a distancia sin costo, y la Disposición 954/2025 obliga a ofrecer un "Botón de arrepentimiento" visible y usable sin registrarse. Para servicios turísticos con fecha determinada, hay que avisar al menos 24 horas antes del inicio; el sistema lo aplica como "hasta el día anterior al ingreso". El arrepentimiento está por encima de la configuración del camping.
+* **Cómputo de días:** el día de la reserva no cuenta. Una reserva del 1/11 se puede cancelar por arrepentimiento hasta el 11/11 inclusive (si el ingreso es después del 12/11).
+* **Zona horaria:** `fecha_reserva` se guarda en UTC sin zona. Antes de comparar se pasa a la fecha de Buenos Aires con `a_zona_negocio()` (ver [Manejo de zonas horarias](./zonas-horarias.md)): una reserva hecha a las 22 h en Argentina ya es del día siguiente en UTC.
+* **Lo que el arrepentimiento no habilita:** siguen sin poder cancelarse las reservas ya canceladas, en alerta de clonación, sin pagar o con un ingreso registrado.
+* **Respuesta:** `GET /reservas/{id}/cancelacion` informa `arrepentimiento: true` cuando rige; en ese caso `fecha_limite` es el último día del arrepentimiento y la pantalla lo explica ("Estás dentro del plazo de arrepentimiento: se te devuelve el total.").
+
+### 11.2. Cancelación y Devolución
+
+* **Búsqueda separada de la cancelación:** `cancelar_reserva()` recibe la reserva ya encontrada. Mis reservas la busca por dueño (`reserva_del_usuario`) y el botón de arrepentimiento por el enlace del correo. Así hay una sola implementación de la regla, del reembolso y del correo.
+* **Sin devoluciones dobles:** `cancelar_reserva()` bloquea la fila (`SELECT … FOR UPDATE`) y la vuelve a leer antes de evaluar. Si llegan dos pedidos a la vez, o se usa dos veces el mismo enlace, el segundo encuentra la reserva cancelada y responde 422 "La reserva ya está cancelada.".
+* **Efectos:** la reserva pasa a `CANCELADA` (libera el cupo y su id entra en la lista negra que la PWA usa para rechazar el QR sin internet); el pago sigue `PAGADO` y la devolución se registra en `pagos` (`monto_devuelto`, `fecha_devolucion`, `devolucion_estado`). Si Mercado Pago rechaza el reembolso, la reserva igual queda cancelada y el pago queda en `pendiente_revision`.
+* **Correo:** el de cancelación indica el motivo (Mis reservas o botón de arrepentimiento), si se aplicó el arrepentimiento y un **código de gestión**, que es el id de la reserva.
+
+### 11.3. Enlaces del Botón de Arrepentimiento (sin cuenta)
+
+* **Solo el email:** `POST /arrepentimiento/solicitud` busca las reservas pagadas, confirmadas y con ingreso de hoy en adelante de ese email (sin distinguir mayúsculas) y manda **un correo con un enlace por reserva**. Así quien tiene varias elige cuál cancelar, y cada una tiene su propia confirmación.
+* **No revela datos:** responde siempre 202 con el mismo mensaje, haya o no reservas; el correo sale en segundo plano.
+* **Token del enlace:** JWT HS256 firmado con `ARREPENTIMIENTO_SECRET_KEY` (distinta de la de sesión), con `sub` (id de una sola reserva), `email`, `purpose = "arrepentimiento"` y vencimiento (`ARREPENTIMIENTO_TOKEN_MINUTOS`, 60). Al usarlo se verifican firma, vencimiento y propósito, y que la reserva exista y tenga ese email.
+* **Por qué un enlace por correo:** sabiendo solo el email de otra persona no se puede cancelar su reserva, porque el enlace llega únicamente a su casilla. Cambiar el id dentro del token invalida la firma.
+* **Errores:** enlace vencido → 401 "El enlace venció. Pedí uno nuevo desde el botón de arrepentimiento."; alterado, de otro propósito o de otra reserva → 401 "El enlace no es válido. Pedí uno nuevo desde el botón de arrepentimiento.".
+* **Correo del QR:** incluye el enlace a `/arrepentimiento`, armado con `FRONTEND_URL`.
+
+### 11.4. Pantallas (Web de Reservas)
+
+* El enlace "Botón de arrepentimiento" está en el pie de `LayoutPublico`, así que aparece en todas las pantallas de la web, con o sin sesión.
+* `/arrepentimiento` (`pages/Arrepentimiento.tsx`) pide solo el email y luego muestra "Si hay reservas con ese email, te enviamos un correo con un enlace para cada una.".
+* `/cancelar-reserva?token=` (`pages/CancelarReserva.tsx`) muestra las condiciones y confirma, con estados de carga, enlace vencido o no válido, fuera de plazo, éxito (con el código de gestión) y error. Las condiciones se dibujan con `DetalleCondiciones`, el mismo componente del diálogo de Mis reservas.
+* Las llamadas están en `lib/arrepentimiento.ts` y no reutilizan las de Mis reservas: ahí un 401 cierra la sesión, y acá significa "enlace vencido".
+
+### 11.5. Fuentes
+
+* Ley 24.240 de Defensa del Consumidor, art. 34 (revocación de la aceptación en 10 días corridos).
+* Disposición 954/2025 de la Subsecretaría de Defensa del Consumidor y Lealtad Comercial (Botón de Arrepentimiento; servicios turísticos con fecha determinada: aviso 24 horas antes). Boletín Oficial: https://www.boletinoficial.gob.ar/detalleAviso/primera/330827/20250904
+* Código Civil y Comercial de la Nación, art. 6 (los plazos de días se cuentan desde el día siguiente). Citado sin consultar el texto oficial: conviene verificarlo.
+
+> La regla se implementó a partir de estas normas, pero no es asesoramiento legal: conviene que la valide alguien con formación jurídica.
+
+## 12. Calidad de Software (QA), Pruebas y Cobertura
 
 Se consolidó un esfuerzo masivo de aserción elevando la calidad técnica de las bases estructurales.
 
-### 11.1. Pruebas de Backend (`pytest`)
+### 12.1. Pruebas de Backend (`pytest`)
 
 * Se desarrollaron tests asíncronos configurando `AnyIO` y evadiendo errores de integridad referencial inyectando usuarios efímeros pre-reservas en GitHub Actions.
 
@@ -422,7 +473,7 @@ Se consolidó un esfuerzo masivo de aserción elevando la calidad técnica de la
 
 
 
-### 11.2. Pruebas de Frontend (`vitest`)
+### 12.2. Pruebas de Frontend (`vitest`)
 
 * Se utilizó la dependencia de desarrollo `fake-indexeddb` para someter a prueba a Dexie fuera del navegador.
 
@@ -436,7 +487,7 @@ Se consolidó un esfuerzo masivo de aserción elevando la calidad técnica de la
 * Se simularon caídas de `navigator.onLine`, validando intercepciones transparentes mediante `try/catch` sin generar cierres de aplicación inesperados.
 
 
-### 11.3. Pruebas de punta a punta (Playwright)
+### 12.3. Pruebas de punta a punta (Playwright)
 
 * `npm run test:e2e` levanta una base `_e2e` limpia, el backend, el build de la PWA y un Mercado Pago y un Resend falsos, y recorre el sistema con varios navegadores a la vez (cliente o socio, guardia y administrador).
-* Cubren el recorrido feliz, el trabajo del guardia sin conexión y la cancelación hasta el rechazo del QR en la puerta. Las decisiones y la forma de correrlas están en la [Guía de Pruebas](./testing_guide.md), secciones 3.3 a 3.5.
+* Cubren el recorrido feliz, el trabajo del guardia sin conexión, la cancelación hasta el rechazo del QR en la puerta y un visitante sin cuenta que cancela una de sus dos reservas con el botón de arrepentimiento. Las decisiones y la forma de correrlas están en la [Guía de Pruebas](./testing_guide.md), secciones 3.3 a 3.5.1.

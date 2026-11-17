@@ -75,6 +75,9 @@ Se usa Neon y no la base gratuita de Render porque esta vence a los 30 días de 
 | `RESEND_API_KEY` | Clave de Resend |
 | `FRONTEND_URL` | Dirección de Vercel, por ejemplo `https://qamp.vercel.app` |
 | `BACKEND_PUBLIC_URL` | Dirección de Render, por ejemplo `https://qamp-api.onrender.com` |
+| `ARREPENTIMIENTO_SECRET_KEY` | Obligatoria. Texto aleatorio largo, distinto de `AUTH_SECRET_KEY`: firma los enlaces del botón de arrepentimiento. Sin ella el backend no arranca |
+| `ARREPENTIMIENTO_TOKEN_MINUTOS` | Opcional, `60` por defecto: validez de cada enlace |
+| `ARREPENTIMIENTO_DIAS` | Opcional, `10` por defecto: días corridos del plazo de arrepentimiento (art. 34 de la Ley 24.240) |
 
 El resto de las variables de `.env.example` tienen valores por defecto en `core/config.py`.
 

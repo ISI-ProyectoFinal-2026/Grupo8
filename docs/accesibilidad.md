@@ -43,7 +43,7 @@ Este documento anota qué se hizo en cada app y las diferencias con WCAG 2.2 AA 
 |---|---|---|
 | Contacto | El formulario no envía nada (muestra un `alert()`) y usa la validación del navegador | Es una pantalla de demostración. Cuando se conecte a un servicio real, debe usar `ErrorDeCampo` como las demás |
 | Mis reservas | "Ver detalle" de las finalizadas no hace nada | Pantalla de detalle no definida |
-| Botón de arrepentimiento | Se revisa cuando se integre la 25.3 | La prueba de axe ya la incluye como pendiente |
+| Cancelar reserva (`/cancelar-reserva`) | La prueba de axe no la recorre | Necesita un enlace válido del correo. La recorre la prueba E2E del botón de arrepentimiento (25.3); `/arrepentimiento` sí está en la prueba de axe |
 | Selector de fecha | El calendario lo dibuja el navegador | Su accesibilidad depende del navegador (WCAG lo permite para controles nativos) |
 
 ## Panel de administración (27.3)

@@ -9,6 +9,7 @@ Manual operativo del software. Cubre:
 - El ciclo de vida de una reserva y la emisión del código QR.
 - Cómo los guardias deben operar la aplicación móvil (PWA) sin conexión a internet.
 - Navegación del cliente en el buscador, pasarela de pagos y autogestión de perfil.
+- Cancelación desde Mis reservas y "Botón de arrepentimiento" sin cuenta.
 - Uso del panel de administración: monitor de ocupación, personas esperadas, gestión de reservas, egresos y resumen de cobros.
 
 ### 2. [Documentación Técnica](./technical_documentation.md)
@@ -18,6 +19,7 @@ Arquitectura y decisiones de diseño interno:
 - **Seguridad Offline:** Criptografía asimétrica (ES256), IndexedDB, Dexie.js y el motor de validación local mediante la *Web Crypto API*.
 - **Comunicaciones:** Orquestación asíncrona para la generación de correos electrónicos y códigos QR en memoria RAM (Resend + Jinja2).
 - **Socios y clonación:** baja lógica y regla única de vigencia; detección de QR clonados y resolución de alertas.
+- **Cancelaciones:** reglas del camping, plazo de arrepentimiento (Ley 24.240 y Disposición 954/2025) y enlaces firmados por correo para cancelar sin cuenta.
 - Complementos: [Bootstrap de la PWA y lista negra](./pwa-bootstrap-y-blacklist.md) y [Manejo de zonas horarias](./zonas-horarias.md).
 
 ### 3. [Guía de Pruebas (Testing)](./testing_guide.md)
@@ -34,6 +36,7 @@ Definición estricta de contratos de datos y endpoints:
 - Endpoints de sincronización transaccional (`/bootstrap`, `/bulk-sync`) y webhooks financieros (Mercado Pago).
 - Endpoints del panel: ocupación, personas esperadas, gestión de reservas, egresos y resumen de cobros.
 - Socios y membresías (padrón, renovación y baja) y alertas de clonación.
+- Cancelación de reservas y botón de arrepentimiento.
 
 ### 5. [Guía de Despliegue (Deployment)](./deployment.md)
 Cómo llevar la plataforma a entornos de producción:

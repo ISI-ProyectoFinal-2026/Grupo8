@@ -361,3 +361,40 @@ Las dos rutas exigen rol `ADMIN`.
 
 * **`GET /api/v1/admin/alertas`:** reservas en `ALERTA_CLONACION`, con `reserva_id`, `titular`, `fecha_ingreso` y `fecha_alerta_clonacion`.
 * **`POST /api/v1/admin/alertas/{reserva_id}/resolver`:** body opcional `{"nota": "..."}` (hasta 500 caracteres). Devuelve la reserva al estado que tenía antes de la alerta, ajustado al pago actual: si estaba pendiente y el pago entró mientras tanto, queda `CONFIRMADA`. Guarda en `resoluciones_alerta` quién resolvió, cuándo y la nota. Responde 404 si la reserva no existe y 409 si ya no está en alerta (por ejemplo, porque otro administrador la resolvió antes).
+
+## 10. Cancelación y Botón de Arrepentimiento
+
+Las reglas (arrepentimiento por encima de la configuración del camping) están en la [Documentación Técnica](./technical_documentation.md), sección 11.
+
+**Condiciones de cancelación** (respuesta de los dos `GET`):
+
+```json
+{
+  "puede_cancelar": true,
+  "dias_minimos": 7,
+  "fecha_limite": "2026-11-20",
+  "porcentaje_devolucion": 100,
+  "monto_devolucion": 15000.0,
+  "mensaje": null,
+  "arrepentimiento": true
+}
+```
+
+`mensaje` explica por qué no se puede cancelar (nulo si se puede). `arrepentimiento` es `true` cuando rige la devolución total; entonces `fecha_limite` es el último día del arrepentimiento y `dias_minimos` sigue siendo el de la configuración.
+
+**Desde Mis reservas** (exigen sesión; 404 si la reserva no existe o es de otro usuario):
+
+| Método y ruta | Qué hace |
+|---|---|
+| `GET /reservas/{id}/cancelacion` | Condiciones de cancelación de la reserva. |
+| `POST /reservas/{id}/cancelar` | Cancela y devuelve por Mercado Pago. Responde la reserva cancelada más `monto_devuelto`, `devolucion_realizada` y `mensaje`. 422 si no se puede cancelar, con el motivo en `detail`. |
+
+**Botón de arrepentimiento** (sin sesión):
+
+| Método y ruta | Qué hace |
+|---|---|
+| `POST /arrepentimiento/solicitud` | Body `{"email": "..."}`. Siempre **202** con `{"mensaje": "Si hay reservas con ese email, te enviamos un correo con un enlace para cada una."}`; si hay reservas pagadas y próximas, manda un correo con un enlace por reserva. 422 si el email está mal formado. |
+| `GET /arrepentimiento/condiciones?token=...` | Condiciones de la reserva del enlace. |
+| `POST /arrepentimiento/confirmar` | Body `{"token": "..."}`. Igual que `POST /reservas/{id}/cancelar`, más `codigo_gestion` (el id de la reserva). 422 si no se puede cancelar, por ejemplo "La reserva ya está cancelada." al usar el enlace dos veces. |
+
+Con un enlace vencido, las dos rutas con token responden **401** "El enlace venció. Pedí uno nuevo desde el botón de arrepentimiento."; con uno alterado o de otra reserva, **401** "El enlace no es válido. Pedí uno nuevo desde el botón de arrepentimiento.".
