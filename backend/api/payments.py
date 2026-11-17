@@ -1,7 +1,7 @@
 import logging
 
 from sqlalchemy import text
-from fastapi import APIRouter, HTTPException, Request, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Request, Depends, BackgroundTasks, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from services.payment_service import (
@@ -20,6 +20,7 @@ from core.database import get_db
 from core.dependencies import get_current_user
 from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
 from models.user import RoleEnum, User
+from schemas.estado_pago import EstadoPagoRetorno, EstadoRetorno, ReservaRetorno
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -275,3 +276,96 @@ def reconciliar_pago(
             status_code=500, 
             detail=f"Error de red al intentar consultar a Mercado Pago: {str(e)}"
         )
+
+
+# --- Estado del pago al volver de Mercado Pago (sin sesión) ---
+
+DATOS_NO_COINCIDEN = "No encontramos un pago de Mercado Pago para esta reserva."
+SIN_RESPUESTA_MP = "No pudimos consultar el pago en Mercado Pago. Intentá de nuevo en unos segundos."
+
+# Estados de Mercado Pago de un pago que todavía se puede aprobar
+_PAGO_EN_PROCESO = {"pending", "in_process", "authorized"}
+
+_MENSAJES: dict[str, str] = {
+    "confirmada": "Tu pago fue acreditado y la reserva está confirmada.",
+    "en_proceso": "Estamos confirmando tu pago.",
+    "rechazado": "El pago no fue aprobado. Tu reserva no está confirmada.",
+    "cancelada": "La reserva fue cancelada. Si se te cobró, te avisamos por correo cómo se devuelve el dinero.",
+    "revision": "Recibimos tu pago, pero tenemos que revisarlo antes de confirmar la reserva. Te escribimos por correo.",
+}
+
+
+def _estado_de_la_reserva(reserva: Reserva, estado_mp: str, resultado: ResultadoConfirmacion | None) -> EstadoRetorno:
+    if reserva.estado_reserva == EstadoReservaEnum.CANCELADA:
+        return "cancelada"
+    if reserva.estado_pago == EstadoPagoEnum.PAGADO:
+        return "confirmada"
+    if resultado == ResultadoConfirmacion.IMPORTE_DISTINTO:
+        return "revision"
+    if estado_mp == "approved" or estado_mp in _PAGO_EN_PROCESO:
+        return "en_proceso"
+    return "rechazado"
+
+
+@router.get(
+    "/estado/{reserva_id}",
+    response_model=EstadoPagoRetorno,
+    summary="Estado del pago al volver de Mercado Pago",
+)
+def estado_del_pago(
+    reserva_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    payment_id: str = Query(..., min_length=1, max_length=64),
+    db: Session = Depends(get_db),
+):
+    """Lo usa la pantalla /pago/exito, también para los visitantes que reservan sin cuenta.
+
+    No confía en la URL: le pregunta a Mercado Pago por el pago y comprueba que su
+    external_reference sea esta reserva. Si está aprobado y la reserva sigue pendiente, la
+    confirma por el mismo camino que el webhook y la reconciliación, así que consultarlo varias
+    veces no la confirma ni manda el correo dos veces.
+    """
+    reserva = db.query(Reserva).filter(Reserva.id == reserva_id).first()
+    if reserva is None:
+        raise HTTPException(status_code=404, detail=DATOS_NO_COINCIDEN)
+
+    try:
+        respuesta_mp = payment_service.mp.payment().get(payment_id)
+    except Exception:
+        logger.exception(f"No se pudo consultar el pago {payment_id} en Mercado Pago")
+        raise HTTPException(status_code=503, detail=SIN_RESPUESTA_MP)
+
+    estado_http = respuesta_mp.get("status")
+    if estado_http == 404:
+        raise HTTPException(status_code=404, detail=DATOS_NO_COINCIDEN)
+    if estado_http != 200:
+        raise HTTPException(status_code=503, detail=SIN_RESPUESTA_MP)
+
+    datos_pago = respuesta_mp.get("response") or {}
+    if str(datos_pago.get("external_reference")) != str(reserva.id):
+        raise HTTPException(status_code=404, detail=DATOS_NO_COINCIDEN)
+
+    _registrar_pagos(db, [datos_pago])
+
+    estado_mp = str(datos_pago.get("status"))
+    resultado = None
+    if estado_mp == "approved":
+        resultado = confirmar_pago(
+            db, reserva.id, background_tasks,
+            monto_cobrado=datos_pago.get("transaction_amount"),
+            mp_payment_id=datos_pago.get("id"),
+        )
+        db.refresh(reserva)
+
+    estado = _estado_de_la_reserva(reserva, estado_mp, resultado)
+    return EstadoPagoRetorno(
+        estado=estado,
+        mensaje=_MENSAJES[estado],
+        reserva=ReservaRetorno(
+            id=reserva.id,
+            codigo=f"#{str(reserva.id)[:8]}",
+            fecha_ingreso=reserva.fecha_ingreso,
+            fecha_egreso=reserva.fecha_egreso,
+            cantidad_personas=reserva.cantidad_personas,
+        ),
+    )
