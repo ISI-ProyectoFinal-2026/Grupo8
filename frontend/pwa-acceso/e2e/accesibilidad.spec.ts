@@ -60,6 +60,26 @@ async function abrirReservas(page: Page): Promise<void> {
   ).toBeVisible();
 }
 
+/** Sección del panel que se abre con su URL y se reconoce por su título principal. */
+function seccionDelPanel(
+  nombre: string,
+  ruta: string,
+  titulo: string,
+  encabezado: string
+): Pantalla {
+  return {
+    nombre,
+    actor: 'admin',
+    titulo: `${titulo} | Qamp Panel`,
+    abrir: async (page) => {
+      await page.goto(ruta);
+      await expect(
+        page.getByRole('heading', { name: encabezado, level: 1 })
+      ).toBeVisible();
+    },
+  };
+}
+
 const PANTALLAS: Pantalla[] = [
   // --- Web de reservas ---------------------------------------------------------------------
   {
@@ -175,6 +195,57 @@ const PANTALLAS: Pantalla[] = [
       await expect(
         page.getByRole('heading', { name: 'Gestión de reservas', level: 1 })
       ).toBeVisible();
+    },
+  },
+  seccionDelPanel('Socios', '/admin/socios', 'Socios', 'Socios'),
+  seccionDelPanel('Egresos', '/admin/egresos', 'Egresos', 'Egresos'),
+  seccionDelPanel(
+    'Descuentos',
+    '/admin/descuentos',
+    'Descuentos',
+    'Descuentos'
+  ),
+  seccionDelPanel(
+    'Tipos de reserva',
+    '/admin/tipos-reserva',
+    'Tipos de reserva',
+    'Tipos de reserva'
+  ),
+  {
+    nombre: 'Configuración',
+    actor: 'admin',
+    titulo: 'Configuración | Qamp Panel',
+    abrir: async (page) => {
+      await page.goto('/admin/configuracion');
+      await expect(
+        page.getByRole('heading', {
+          name: 'Configuración del camping',
+          level: 1,
+        })
+      ).toBeVisible();
+      // Se espera a que termine de cargar: el formulario aparece con los valores del backend
+      await expect(page.getByLabel(/Cupo máximo del camping/)).toBeVisible();
+    },
+  },
+  seccionDelPanel('Alertas', '/admin/alertas', 'Alertas', 'Alertas de acceso'),
+  {
+    // El formulario abierto con sus errores a la vista
+    nombre: 'Socios: formulario con errores',
+    actor: 'admin',
+    titulo: 'Socios | Qamp Panel',
+    abrir: async (page) => {
+      await page.goto('/admin/socios');
+      await page.getByRole('button', { name: 'Nuevo socio' }).click();
+      await page.getByRole('button', { name: 'Guardar' }).click();
+      await expect(page.getByRole('alert').first()).toBeVisible();
+    },
+  },
+  {
+    nombre: 'Ingreso al panel',
+    titulo: 'Ingreso al panel | Qamp Panel',
+    abrir: async (page) => {
+      await page.goto('/admin/login');
+      await expect(page.getByLabel('DNI o Email')).toBeVisible();
     },
   },
   {
@@ -305,5 +376,70 @@ test.describe('Teclado en la web de reservas', () => {
     await page.keyboard.press('Escape');
     await expect(dialogo).toBeHidden();
     await expect(cancelar).toBeFocused();
+  });
+});
+
+// =========================================================================================
+// Sub-issue 27.3: el panel se usa solo con teclado
+// =========================================================================================
+test.describe('Teclado en el panel', () => {
+  test.beforeEach(async ({ page }) => {
+    await iniciarSesion(page, LOGIN.admin, CREDENCIALES.admin);
+  });
+
+  test('el primer Tab ofrece "Saltar al contenido", que deja atrás el menú lateral', async ({
+    page,
+  }) => {
+    await page.goto('/admin/socios');
+    await expect(
+      page.getByRole('heading', { name: 'Socios', level: 1 })
+    ).toBeVisible();
+
+    await page.keyboard.press('Tab');
+    await expect(
+      page.getByRole('link', { name: 'Saltar al contenido' })
+    ).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('main')).toBeFocused();
+  });
+
+  test('"Ver detalle" abre la reserva en una ventana y al cerrarla el foco vuelve al botón', async ({
+    page,
+    request,
+  }) => {
+    await crearReservaPagada(request, ['Dora Detalle']);
+    await page.goto('/admin/reservas');
+    await page.getByLabel('Buscar').fill('Dora Detalle');
+    const verDetalle = page
+      .getByRole('row', { name: /Dora Detalle/ })
+      .getByRole('button', { name: 'Ver detalle' });
+
+    await verDetalle.focus();
+    await page.keyboard.press('Enter');
+    const dialogo = page.getByRole('dialog');
+    await expect(dialogo).toBeVisible();
+    await expect
+      .poll(() =>
+        dialogo.evaluate((nodo) => nodo.contains(document.activeElement))
+      )
+      .toBe(true);
+
+    await page.keyboard.press('Escape');
+    await expect(dialogo).toBeHidden();
+    await expect(verDetalle).toBeFocused();
+  });
+
+  test('"Editar" lleva el foco al formulario y "Cancelar" lo devuelve a la fila', async ({
+    page,
+  }) => {
+    await page.goto('/admin/socios');
+    const editar = page.getByRole('button', { name: 'Editar Socio E2E' });
+
+    await editar.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByLabel('Nombre', { exact: true })).toBeFocused();
+
+    await page.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(editar).toBeFocused();
   });
 });

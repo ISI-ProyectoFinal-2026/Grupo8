@@ -49,7 +49,26 @@ Este documento anota qué se hizo en cada app y las diferencias con WCAG 2.2 AA 
 
 ## Panel de administración (27.3)
 
-Pendiente.
+| Pauta | Cómo se cumple |
+|---|---|
+| 1.3.1 Tablas | Gestión de reservas, Socios, Descuentos, Tipos de reserva y las personas del detalle tienen `<caption>` (oculto a la vista), encabezados de columna con `scope="col"` y la primera celda de cada fila como encabezado de fila (`scope="row"`). Resumen de cobros ya cumplía |
+| 1.3.1 y 3.3.2 Filtros | Todos los filtros tienen etiqueta visible. El error de fechas de Gestión de reservas queda asociado al campo "Ingreso hasta" |
+| 3.3.1 Errores | Los formularios de socios, descuentos, tipos de reserva, configuración y renovación usan `ErrorDeCampo` y `atributosDeError`, como la web. Si el campo tiene texto de ayuda, se lee la ayuda y después el error |
+| 1.3.1 / 1.4.1 Ocupación | La barra tiene `role="progressbar"` con `aria-valuenow`, `aria-valuemax` y `aria-valuetext`, y el valor, el porcentaje y el nivel también están en texto ("Ocupación alta") |
+| 2.4.3 Ventanas emergentes | El diálogo común (`components/ui/dialog.tsx`) devuelve el foco al botón que lo abrió aunque no sea un `DialogTrigger`. Antes, al cerrar "Ver detalle" el foco se perdía. Lo aprovechan también la web y la PWA |
+| 2.4.3 Formularios dentro de la pantalla | Al abrir "Nuevo", "Editar" o "Renovar", el foco va al primer campo del formulario. Al cancelar, vuelve al botón que lo abrió. Al guardar, va al aviso con el resultado (`hooks/useFocoDeFormulario.ts`) |
+| 2.4.3 Confirmaciones en la fila | "Dar de baja" (socios) y "Resolver incidente" (alertas) llevan el foco a la confirmación y, si se cancela, lo devuelven al botón |
+| 2.4.1 Evitar bloques | "Saltar al contenido" deja atrás el menú lateral. Al cambiar de sección, el foco pasa al contenido |
+| 2.4.7 Foco visible | En la barra lateral el contorno de foco es blanco: el verde común no se veía sobre el verde oscuro. Los selectores nativos de los filtros pasan de un anillo de 1 px a uno de 2 px |
+| 1.4.3 Contraste | `text-zinc-500` pasa a `text-zinc-600` (de 3,6:1 a 5,7:1 sobre el fondo) y los errores a `text-destructive`. En Alertas, los grises y rojos sueltos (#666, #a94442) no llegaban a 4,5:1 |
+
+### Diferencias que quedan
+
+| Pantalla | Diferencia | Motivo |
+|---|---|---|
+| Historial de ingresos | Se revisa cuando se integre la 26.6 | La pantalla todavía no existe; la prueba de axe ya la incluye como pendiente. Su tabla tiene que seguir el mismo patrón (caption, `scope`) |
+| Egresos | No tiene tabla | La issue nombra una tabla de egresos, pero la pantalla solo registra egresos y no los lista |
+| Alertas e Incidentes | Siguen con estilos sueltos, sin el estilo común de la 24.5 | Se corrigió el contraste y el foco. El aspecto queda para la 24.5 del panel y la 26.5 (unifica Incidentes y Alertas) |
 
 ## PWA de acceso (27.4)
 

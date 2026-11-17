@@ -1,3 +1,6 @@
+import { ErrorDeCampo } from '@/components/ErrorDeCampo';
+import { enfocarPrimerCampo } from '@/hooks/useFocoDeFormulario';
+import { atributosDeError } from '@/lib/errorDeCampo';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,14 +21,6 @@ interface Props {
   /** Recibe solo los campos que cambiaron. Si falla, lanza el error con el mensaje para mostrar. */
   onGuardar: (cambios: Partial<EdicionFormulario>) => Promise<void>;
   onCancelar: () => void;
-}
-
-function MensajeError({ texto }: { texto?: string }) {
-  return texto ? (
-    <p role="alert" className="mt-1 text-sm text-red-600">
-      {texto}
-    </p>
-  ) : null;
 }
 
 /** Corrección de nombre, DNI y email de un socio. */
@@ -77,6 +72,7 @@ export default function FormularioEdicionSocio({
       </CardHeader>
       <CardContent>
         <form
+          ref={enfocarPrimerCampo}
           onSubmit={guardar}
           noValidate
           className="grid gap-4 sm:grid-cols-3"
@@ -88,10 +84,14 @@ export default function FormularioEdicionSocio({
               className="mt-1"
               value={form.nombre}
               maxLength={100}
-              aria-invalid={!!errores.nombre}
+              {...atributosDeError('editar-nombre', errores.nombre)}
               onChange={(e) => cambiar('nombre', limpiarNombre(e.target.value))}
             />
-            <MensajeError texto={errores.nombre} />
+            <ErrorDeCampo
+              idCampo="editar-nombre"
+              mensaje={errores.nombre}
+              className="mt-1"
+            />
           </div>
 
           <div>
@@ -102,10 +102,14 @@ export default function FormularioEdicionSocio({
               inputMode="numeric"
               value={form.dni}
               maxLength={8}
-              aria-invalid={!!errores.dni}
+              {...atributosDeError('editar-dni', errores.dni)}
               onChange={(e) => cambiar('dni', soloDigitos(e.target.value))}
             />
-            <MensajeError texto={errores.dni} />
+            <ErrorDeCampo
+              idCampo="editar-dni"
+              mensaje={errores.dni}
+              className="mt-1"
+            />
           </div>
 
           <div>
@@ -116,14 +120,18 @@ export default function FormularioEdicionSocio({
               type="email"
               value={form.email}
               maxLength={254}
-              aria-invalid={!!errores.email}
+              {...atributosDeError('editar-email', errores.email)}
               onChange={(e) => cambiar('email', e.target.value)}
             />
-            <MensajeError texto={errores.email} />
+            <ErrorDeCampo
+              idCampo="editar-email"
+              mensaje={errores.email}
+              className="mt-1"
+            />
           </div>
 
           {errorServidor && (
-            <p role="alert" className="text-sm text-red-600 sm:col-span-3">
+            <p role="alert" className="text-sm text-destructive sm:col-span-3">
               {errorServidor}
             </p>
           )}

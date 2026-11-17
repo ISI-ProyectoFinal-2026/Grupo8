@@ -79,7 +79,7 @@ export function FormularioEgreso({ personasDentro, onRegistrado }: FormularioEgr
         </form>
 
         {error && (
-          <p id="egreso-error" role="alert" className="mt-3 text-sm text-red-600">
+          <p id="egreso-error" role="alert" className="mt-3 text-sm text-destructive">
             {error}
           </p>
         )}
@@ -88,7 +88,7 @@ export function FormularioEgreso({ personasDentro, onRegistrado }: FormularioEgr
             {aviso}
           </p>
         )}
-        <p className="mt-3 text-xs text-zinc-500">Se guarda con la fecha y hora del momento en que lo registrás.</p>
+        <p className="mt-3 text-xs text-zinc-600">Se guarda con la fecha y hora del momento en que lo registrás.</p>
       </CardContent>
     </Card>
   );

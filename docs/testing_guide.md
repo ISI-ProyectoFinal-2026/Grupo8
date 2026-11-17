@@ -255,6 +255,12 @@ Desde la 27.2 la prueba también revisa Disponibilidad, Reservas con los errores
 * Al enviar la reserva con errores, el foco va al primer campo con error y el campo tiene su error como descripción accesible.
 * El diálogo de cancelación se abre con Enter, Tab no saca el foco del diálogo y Esc lo cierra devolviendo el foco al botón "Cancelar".
 
+Desde la 27.3 también revisa las secciones del panel (Socios, Egresos, Descuentos, Tipos de reserva, Configuración, Alertas, el formulario de socios con errores y el login del panel) y suma tres pruebas de teclado del panel:
+
+* "Saltar al contenido" deja atrás el menú lateral.
+* "Ver detalle" abre la reserva en una ventana con el foco adentro, y Esc la cierra devolviendo el foco al botón.
+* "Editar" en un socio lleva el foco al primer campo y "Cancelar" lo devuelve al botón de la fila.
+
 Lo que se cumple en cada app y las diferencias que quedan con WCAG 2.2 AA están en `docs/accesibilidad.md`.
 
 #### Títulos de la pestaña

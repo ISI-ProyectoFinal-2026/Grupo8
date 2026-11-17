@@ -31,7 +31,7 @@ interface Props {
 function Dato({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
     <div>
-      <dt className="text-xs text-zinc-500">{etiqueta}</dt>
+      <dt className="text-xs text-zinc-600">{etiqueta}</dt>
       <dd className="text-sm text-zinc-900">{children}</dd>
     </div>
   );
@@ -128,13 +128,15 @@ export default function DetalleReserva({ reservaId, onCerrar }: Props) {
                 </p>
               ) : (
                 <table className="w-full text-left text-sm">
-                  <thead className="border-b text-zinc-500">
+                  {/* Nombre de la tabla para los lectores de pantalla */}
+                  <caption className="sr-only">Personas de la reserva</caption>
+                  <thead className="border-b text-zinc-600">
                     <tr>
-                      <th className="py-1 font-medium">Nombre</th>
-                      <th className="py-1 font-medium">Edad</th>
-                      <th className="py-1 font-medium">Condición</th>
-                      <th className="py-1 font-medium">DNI</th>
-                      <th className="py-1 text-right font-medium">Precio</th>
+                      <th scope="col" className="py-1 font-medium">Nombre</th>
+                      <th scope="col" className="py-1 font-medium">Edad</th>
+                      <th scope="col" className="py-1 font-medium">Condición</th>
+                      <th scope="col" className="py-1 font-medium">DNI</th>
+                      <th scope="col" className="py-1 text-right font-medium">Precio</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -164,7 +166,7 @@ export default function DetalleReserva({ reservaId, onCerrar }: Props) {
                         <span className="font-medium">{etiquetaEstadoPago(pago.estado)}</span>
                         <span>{pago.monto !== null ? formatearMonto(pago.monto) : '—'}</span>
                       </div>
-                      <div className="text-xs text-zinc-500">
+                      <div className="text-xs text-zinc-600">
                         {`Mercado Pago ${pago.mp_payment_id} · ${formatearFechaHora(
                           pago.fecha_aprobacion ?? pago.fecha_creacion
                         )}`}

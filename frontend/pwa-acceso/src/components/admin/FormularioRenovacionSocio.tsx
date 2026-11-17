@@ -1,3 +1,6 @@
+import { ErrorDeCampo } from '@/components/ErrorDeCampo';
+import { enfocarPrimerCampo } from '@/hooks/useFocoDeFormulario';
+import { atributosDeError } from '@/lib/errorDeCampo';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,7 +54,12 @@ export default function FormularioRenovacionSocio({
         <CardTitle>Renovar membresía de {socio.nombre}</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={renovar} noValidate className="space-y-4">
+        <form
+          ref={enfocarPrimerCampo}
+          onSubmit={renovar}
+          noValidate
+          className="space-y-4"
+        >
           <p className="text-sm text-zinc-600">
             {socio.membresia_vence
               ? `Vencimiento actual: ${formatearFecha(socio.membresia_vence)}.`
@@ -65,15 +73,11 @@ export default function FormularioRenovacionSocio({
               type="date"
               min={hoyISO()}
               value={fecha}
-              aria-invalid={!!error}
+              {...atributosDeError('renovar-vence', error)}
               onChange={(e) => setFecha(e.target.value)}
             />
           </div>
-          {error && (
-            <p role="alert" className="text-sm text-red-600">
-              {error}
-            </p>
-          )}
+          <ErrorDeCampo idCampo="renovar-vence" mensaje={error} />
           <div className="flex gap-2">
             <Button type="submit" disabled={guardando}>
               {guardando ? 'Renovando…' : 'Renovar'}

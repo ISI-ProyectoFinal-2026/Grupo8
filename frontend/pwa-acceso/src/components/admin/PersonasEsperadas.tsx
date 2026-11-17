@@ -15,7 +15,7 @@ export function PersonasEsperadas() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <CalendarDays className="h-5 w-5 text-zinc-500" aria-hidden="true" />
+          <CalendarDays className="h-5 w-5 text-zinc-600" aria-hidden="true" />
           Personas esperadas hoy
         </CardTitle>
       </CardHeader>
@@ -43,12 +43,12 @@ export function PersonasEsperadas() {
 
         {/* Si ya había datos y falla una actualización, se siguen mostrando los últimos */}
         {esperados && error && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-destructive">
             {`No se pudo actualizar: ${error}`}
           </p>
         )}
 
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-zinc-600">
           Reservas web pagadas para hoy que todavía no ingresaron. No se suman a la ocupación
           actual: cuentan recién cuando el guardia escanea el QR.
         </p>

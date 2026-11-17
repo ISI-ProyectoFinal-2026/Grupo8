@@ -280,7 +280,11 @@ describe('Mis reservas', () => {
 
     mostrar();
     fireEvent.mouseDown(await screen.findByRole('tab', { name: /próximas/i }), { button: 0 });
-    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+    // Se abre con el teclado, como haría la persona: el botón tiene el foco antes de abrir.
+    // (fireEvent.click no enfoca, y el diálogo devuelve el foco a lo que estaba enfocado)
+    const cancelar = await screen.findByRole('button', { name: 'Cancelar' });
+    cancelar.focus();
+    fireEvent.click(cancelar);
     await screen.findByText('Lo sentimos, las reservas solo se pueden cancelar hasta 1 día antes del ingreso.');
     expect(screen.queryByRole('button', { name: 'Confirmar cancelación' })).toBeNull();
 

@@ -86,7 +86,7 @@ export function ResumenCobros() {
         </form>
 
         {errorRango && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-destructive">
             {errorRango}
           </p>
         )}
@@ -110,12 +110,12 @@ export function ResumenCobros() {
 
         {/* Si ya había datos y falla una consulta nueva, se siguen mostrando los anteriores */}
         {error && datos && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-destructive">
             {`No se pudo actualizar el resumen: ${error}`}
           </p>
         )}
 
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-zinc-600">
           Mercado Pago: solo pagos aprobados, en el día en que se aprobaron. Efectivo: lo cobrado en
           los ingresos manuales, que se suma cuando los guardias sincronizan.
         </p>
@@ -144,7 +144,7 @@ function Detalle({ resumen }: { resumen: Resumen }) {
           <table className="w-full text-sm">
             <caption className="sr-only">Cobros por día</caption>
             <thead>
-              <tr className="border-b text-left text-zinc-500">
+              <tr className="border-b text-left text-zinc-600">
                 <th scope="col" className="py-2 font-medium">Fecha</th>
                 <th scope="col" className="py-2 text-right font-medium">Efectivo</th>
                 <th scope="col" className="py-2 text-right font-medium">Mercado Pago</th>

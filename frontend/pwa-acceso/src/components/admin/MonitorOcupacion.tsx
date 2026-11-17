@@ -65,12 +65,12 @@ export function MonitorOcupacion({ ocupacion, estado, error, recargar }: Monitor
 
         {/* Si ya había datos y falla una actualización, se siguen mostrando los últimos */}
         {ocupacion && error && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-destructive">
             {`No se pudo actualizar la ocupación: ${error}`}
           </p>
         )}
 
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-zinc-600">
           Se actualiza cada 30 segundos. Los ingresos que los guardias registran sin conexión se
           suman cuando sincronizan, así que el valor puede ir atrasado.
         </p>
@@ -89,7 +89,7 @@ function Barra({ ocupacion }: { ocupacion: NonNullable<UseOcupacion['ocupacion']
     <div className="space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-3xl font-bold text-zinc-900">
-          {actual} <span className="text-lg font-medium text-zinc-500">{`/ ${capacidad} personas`}</span>
+          {actual} <span className="text-lg font-medium text-zinc-600">{`/ ${capacidad} personas`}</span>
         </p>
         <p className={cn('text-lg font-semibold', COLOR_TEXTO[nivel])}>
           {`${porcentaje} %`} <span className="text-sm font-medium">· {TEXTO_NIVEL[nivel]}</span>

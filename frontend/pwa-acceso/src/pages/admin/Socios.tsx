@@ -1,3 +1,6 @@
+import { ErrorDeCampo } from '@/components/ErrorDeCampo';
+import { enfocarPrimerCampo, useEnfocarAviso, useVolverAlAbridor } from '@/hooks/useFocoDeFormulario';
+import { atributosDeError } from '@/lib/errorDeCampo';
 import { Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import AccionesSocio from '@/components/admin/AccionesSocio';
@@ -48,13 +51,6 @@ const VARIANTE_ESTADO: Record<EstadoSocio, BadgeProps['variant']> = {
 // Un solo panel abierto a la vez: alta, edición o renovación de un socio
 type Panel = { tipo: 'alta' } | { tipo: 'editar'; socio: Socio } | { tipo: 'renovar'; socio: Socio } | null;
 
-function MensajeError({ texto }: { texto?: string }) {
-  return texto ? (
-    <p role="alert" className="mt-1 text-sm text-red-600">
-      {texto}
-    </p>
-  ) : null;
-}
 
 export default function Socios() {
   const { token } = useAuth();
@@ -62,6 +58,10 @@ export default function Socios() {
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState('');
   const [aviso, setAviso] = useState('');
+  // Foco al abrir y cerrar los formularios, y en el aviso de resultado (27.3)
+  const refAviso = useEnfocarAviso<HTMLParagraphElement>(aviso);
+  const { recordar, volver } = useVolverAlAbridor();
+  const refBotonNuevo = useRef<HTMLButtonElement>(null);
 
   const [filtros, setFiltros] = useState<Filtros>(filtrosVacios);
   const buscarDiferido = useValorDiferido(filtros.buscar, DEMORA_BUSQUEDA_MS);
@@ -116,6 +116,7 @@ export default function Socios() {
   const formularioAbierto = panel?.tipo === 'alta';
 
   const abrirPanel = (nuevo: Exclude<Panel, null>) => {
+    recordar();
     setPanel(nuevo);
     setAviso('');
     setErrorAccion('');
@@ -132,6 +133,12 @@ export default function Socios() {
     setPanel(null);
     setErrores({});
     setErrorServidor('');
+  };
+
+  // Cancelar: el foco vuelve al botón que abrió el formulario
+  const cancelarPanel = () => {
+    cerrarFormulario();
+    volver(refBotonNuevo);
   };
 
   // Edición y renovación: si falla, el formulario muestra el mensaje y queda abierto
@@ -215,7 +222,7 @@ export default function Socios() {
           </p>
         </div>
         {!formularioAbierto && (
-          <Button onClick={abrirAlta} className="gap-2">
+          <Button ref={refBotonNuevo} onClick={abrirAlta} className="gap-2">
             <Plus className="h-4 w-4" />
             Nuevo socio
           </Button>
@@ -223,7 +230,12 @@ export default function Socios() {
       </div>
 
       {aviso && (
-        <p role="status" className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+        <p
+          ref={refAviso}
+          role="status"
+          tabIndex={-1}
+          className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800"
+        >
           {aviso}
         </p>
       )}
@@ -234,7 +246,7 @@ export default function Socios() {
             <CardTitle>Nuevo socio</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={guardar} noValidate className="grid gap-4 sm:grid-cols-2">
+            <form ref={enfocarPrimerCampo} onSubmit={guardar} noValidate className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="socio-nombre">Nombre</Label>
                 <Input
@@ -242,10 +254,10 @@ export default function Socios() {
                   className="mt-1"
                   value={form.nombre}
                   maxLength={100}
-                  aria-invalid={!!errores.nombre}
+                  {...atributosDeError('socio-nombre', errores.nombre)}
                   onChange={(e) => cambiar('nombre', limpiarNombre(e.target.value))}
                 />
-                <MensajeError texto={errores.nombre} />
+                <ErrorDeCampo idCampo="socio-nombre" mensaje={errores.nombre} className="mt-1" />
               </div>
 
               <div>
@@ -256,10 +268,10 @@ export default function Socios() {
                   inputMode="numeric"
                   value={form.dni}
                   maxLength={8}
-                  aria-invalid={!!errores.dni}
+                  {...atributosDeError('socio-dni', errores.dni)}
                   onChange={(e) => cambiar('dni', soloDigitos(e.target.value))}
                 />
-                <MensajeError texto={errores.dni} />
+                <ErrorDeCampo idCampo="socio-dni" mensaje={errores.dni} className="mt-1" />
               </div>
 
               <div>
@@ -270,10 +282,10 @@ export default function Socios() {
                   type="email"
                   value={form.email}
                   maxLength={254}
-                  aria-invalid={!!errores.email}
+                  {...atributosDeError('socio-email', errores.email)}
                   onChange={(e) => cambiar('email', e.target.value)}
                 />
-                <MensajeError texto={errores.email} />
+                <ErrorDeCampo idCampo="socio-email" mensaje={errores.email} className="mt-1" />
               </div>
 
               <div>
@@ -284,13 +296,13 @@ export default function Socios() {
                   type="password"
                   autoComplete="new-password"
                   value={form.password}
-                  aria-invalid={!!errores.password}
+                  {...atributosDeError('socio-password', errores.password, 'socio-password-ayuda')}
                   onChange={(e) => cambiar('password', e.target.value)}
                 />
-                <p className="mt-1 text-xs text-zinc-500">
+                <p id="socio-password-ayuda" className="mt-1 text-xs text-zinc-600">
                   Al menos {PASSWORD_MIN} caracteres. El socio la usa para su primer ingreso.
                 </p>
-                <MensajeError texto={errores.password} />
+                <ErrorDeCampo idCampo="socio-password" mensaje={errores.password} className="mt-1" />
               </div>
 
               <div>
@@ -300,14 +312,14 @@ export default function Socios() {
                   className="mt-1"
                   type="date"
                   value={form.membresia_vence}
-                  aria-invalid={!!errores.membresia_vence}
+                  {...atributosDeError('socio-vence', errores.membresia_vence)}
                   onChange={(e) => cambiar('membresia_vence', e.target.value)}
                 />
-                <MensajeError texto={errores.membresia_vence} />
+                <ErrorDeCampo idCampo="socio-vence" mensaje={errores.membresia_vence} className="mt-1" />
               </div>
 
               {errorServidor && (
-                <p role="alert" className="text-sm text-red-600 sm:col-span-2">
+                <p role="alert" className="text-sm text-destructive sm:col-span-2">
                   {errorServidor}
                 </p>
               )}
@@ -316,7 +328,7 @@ export default function Socios() {
                 <Button type="submit" disabled={guardando}>
                   {guardando ? 'Guardando…' : 'Guardar'}
                 </Button>
-                <Button type="button" variant="outline" onClick={cerrarFormulario}>
+                <Button type="button" variant="outline" onClick={cancelarPanel}>
                   Cancelar
                 </Button>
               </div>
@@ -330,7 +342,7 @@ export default function Socios() {
           key={panel.socio.id}
           socio={panel.socio}
           onGuardar={(cambios) => guardarEdicion(panel.socio, cambios)}
-          onCancelar={() => setPanel(null)}
+          onCancelar={cancelarPanel}
         />
       )}
 
@@ -339,7 +351,7 @@ export default function Socios() {
           key={panel.socio.id}
           socio={panel.socio}
           onRenovar={(fecha) => renovar(panel.socio, fecha)}
-          onCancelar={() => setPanel(null)}
+          onCancelar={cancelarPanel}
         />
       )}
 
@@ -354,7 +366,7 @@ export default function Socios() {
       <Card>
         <CardContent className="p-0">
           {cargando && socios.length > 0 && (
-            <p role="status" className="border-b px-4 py-2 text-xs text-zinc-500">
+            <p role="status" className="border-b px-4 py-2 text-xs text-zinc-600">
               Buscando…
             </p>
           )}
@@ -383,13 +395,15 @@ export default function Socios() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
+                {/* Nombre de la tabla para los lectores de pantalla */}
+                <caption className="sr-only">Padrón de socios</caption>
                 <thead className="border-b bg-zinc-50 text-zinc-600">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Socio</th>
-                    <th className="px-4 py-3 font-medium">DNI</th>
-                    <th className="px-4 py-3 font-medium">Vence</th>
-                    <th className="px-4 py-3 font-medium">Estado</th>
-                    <th className="px-4 py-3 text-right font-medium">
+                    <th scope="col" className="px-4 py-3 font-medium">Socio</th>
+                    <th scope="col" className="px-4 py-3 font-medium">DNI</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Vence</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Estado</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">
                       <span className="sr-only">Acciones</span>
                     </th>
                   </tr>
@@ -397,10 +411,10 @@ export default function Socios() {
                 <tbody>
                   {socios.map((socio) => (
                     <tr key={socio.id} className="border-b last:border-b-0">
-                      <td className="px-4 py-3">
+                      <th scope="row" className="px-4 py-3 text-left font-normal">
                         <div className="font-medium text-zinc-900">{socio.nombre}</div>
-                        <div className="text-xs text-zinc-500">{socio.email}</div>
-                      </td>
+                        <div className="text-xs text-zinc-600">{socio.email}</div>
+                      </th>
                       <td className="px-4 py-3">{socio.dni}</td>
                       <td className="px-4 py-3">
                         {socio.membresia_vence ? formatearFecha(socio.membresia_vence) : '—'}
