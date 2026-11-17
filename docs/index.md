@@ -42,7 +42,9 @@ Definición estricta de contratos de datos y endpoints:
 Cómo llevar la plataforma a entornos de producción:
 - Integración y despliegue continuo (CI/CD) automatizado en GitHub Actions.
 - Infraestructura Frontend hospedada en Vercel.
-- Infraestructura Backend hospedada en Render.
+- Infraestructura Backend hospedada en Render y base de datos PostgreSQL en Neon.
+- Configuración de Mercado Pago (credenciales de prueba, webhook y retorno automático) y de Resend.
+- Checklist y problemas encontrados en la prueba del pago con el sandbox en el entorno publicado.
 - Gestión estricta de secretos y variables de entorno (`.env`).
 
 ### 6. [Diseño UX/UI](./ux-ui/)
