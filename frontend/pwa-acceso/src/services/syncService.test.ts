@@ -370,6 +370,18 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     expect(await syncService.obtenerUltimaSincronizacion()).toBeNull();
   });
 
+  it('Test 9e — iniciarBackgroundSync es idempotente: volver a llamarlo no suma listeners (26.4)', () => {
+    const agregar = vi.spyOn(window, 'addEventListener');
+    const intervalo = vi.spyOn(globalThis, 'setInterval');
+
+    // Ya se llamó en beforeAll: cada vez que se monta el marco de la app se vuelve a llamar
+    syncService.iniciarBackgroundSync();
+    syncService.iniciarBackgroundSync();
+
+    expect(agregar.mock.calls.some(([evento]) => evento === 'online')).toBe(false);
+    expect(intervalo).not.toHaveBeenCalled();
+  });
+
   it('Test 10 — bulk-sync viaja con el token del guardia en el header Authorization', async () => {
     await dbService.registrarIngresoManual('11111111', 'Con Token', 0, 'Espontaneo', 10);
 

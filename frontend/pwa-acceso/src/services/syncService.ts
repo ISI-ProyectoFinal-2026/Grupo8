@@ -99,6 +99,9 @@ export const syncService = {
   // Candado para evitar envíos duplicados si la red parpadea
   isSyncing: false,
 
+  // La sincronización de fondo se arranca una sola vez por carga de la app
+  backgroundIniciado: false,
+
   // Motor con Backoff Exponencial incorporado
   async sincronizarIngresosPendientes(intento = 1, delay = 5000) {
     if (this.isSyncing && intento === 1) return;
@@ -213,6 +216,10 @@ export const syncService = {
   },
 
   iniciarBackgroundSync() {
+    // Lo llama el marco de la app del guardia: si se vuelve a montar, no se suman listeners ni intervalos
+    if (this.backgroundIniciado) return;
+    this.backgroundIniciado = true;
+
     // Escucha el evento nativo del navegador cuando vuelve el WiFi/4G
     window.addEventListener('online', () => {
       this.sincronizarIngresosPendientes();
