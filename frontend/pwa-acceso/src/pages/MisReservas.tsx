@@ -71,8 +71,8 @@ export default function MisReservas() {
   const [avisoCancelacion, setAvisoCancelacion] = useState<string | null>(null);
   const [avisoPago, setAvisoPago] = useState<AvisoPago | null>(null);
 
-  // Botón "Cancelar" que abrió el diálogo, para devolverle el foco al cerrarlo
-  const botonQueAbrio = useRef<HTMLElement | null>(null);
+  // Después de cancelar, el foco va al mensaje con el resultado
+  const recienCancelada = useRef(false);
   const refAvisoCancelacion = useRef<HTMLParagraphElement>(null);
 
   const cargarReservas = useCallback(
@@ -149,8 +149,8 @@ export default function MisReservas() {
     }
   };
 
-  const abrirCancelacion = (reserva: ReservaDetalle, boton: HTMLElement) => {
-    botonQueAbrio.current = boton;
+  const abrirCancelacion = (reserva: ReservaDetalle) => {
+    recienCancelada.current = false;
     setAvisoCancelacion(null);
     setReservaACancelar(reserva);
   };
@@ -165,16 +165,17 @@ export default function MisReservas() {
       )
     );
     setAvisoCancelacion(resultado.mensaje);
+    recienCancelada.current = true;
     setReservaACancelar(null);
   };
 
-  // Al cerrar el diálogo el foco vuelve al botón "Cancelar". Si la reserva se canceló, la tarjeta
-  // pasó a Canceladas y el botón ya no está: el foco va al mensaje con el resultado
+  // Al cerrar el diálogo el foco vuelve solo al botón "Cancelar" (components/ui/dialog). Si la
+  // reserva se canceló, la tarjeta pasó a Canceladas y ese botón ya no está: el foco va al mensaje
   const devolverFoco = (evento: Event) => {
+    if (!recienCancelada.current) return;
+    recienCancelada.current = false;
     evento.preventDefault();
-    const boton = botonQueAbrio.current;
-    (boton?.isConnected ? boton : refAvisoCancelacion.current)?.focus();
-    botonQueAbrio.current = null;
+    refAvisoCancelacion.current?.focus();
   };
 
   // Sin sesión no hay reservas propias para mostrar
@@ -249,7 +250,7 @@ export default function MisReservas() {
             {categoria === 'proxima' && (
               <Button
                 variant="outline"
-                onClick={(e) => abrirCancelacion(reserva, e.currentTarget)}
+                onClick={() => abrirCancelacion(reserva)}
                 className="flex-1 md:flex-none"
               >
                 Cancelar

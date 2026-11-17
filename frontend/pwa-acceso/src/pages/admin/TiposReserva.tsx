@@ -1,5 +1,18 @@
+import { ErrorDeCampo } from '@/components/ErrorDeCampo';
+import {
+  enfocarPrimerCampo,
+  useEnfocarAviso,
+  useVolverAlAbridor,
+} from '@/hooks/useFocoDeFormulario';
+import { atributosDeError } from '@/lib/errorDeCampo';
 import { Pencil, Plus } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,15 +36,7 @@ import {
 } from '@/lib/tiposReserva';
 
 const CLASE_SELECT =
-  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
-
-function MensajeError({ texto }: { texto?: string }) {
-  return texto ? (
-    <p role="alert" className="mt-1 text-sm text-red-600">
-      {texto}
-    </p>
-  ) : null;
-}
+  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 function describirUnidades(tipo: TipoReservaAdmin): string {
   if (tipo.forma_cobro === 'POR_PERSONA') return '—';
@@ -46,6 +51,10 @@ export default function TiposReserva() {
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState('');
   const [aviso, setAviso] = useState('');
+  // Foco al abrir y cerrar el formulario, y en el aviso de resultado (27.3)
+  const refAviso = useEnfocarAviso<HTMLParagraphElement>(aviso);
+  const { recordar, volver } = useVolverAlAbridor();
+  const refBotonNuevo = useRef<HTMLButtonElement>(null);
   const [errorAccion, setErrorAccion] = useState('');
 
   // null = formulario cerrado; 'nuevo' = alta; otro valor = tipo que se está editando
@@ -85,6 +94,7 @@ export default function TiposReserva() {
   }, [cargar]);
 
   const abrirAlta = () => {
+    recordar();
     setEditando('nuevo');
     setForm(formularioVacio);
     setErrores({});
@@ -93,6 +103,7 @@ export default function TiposReserva() {
   };
 
   const abrirEdicion = (tipo: TipoReservaAdmin) => {
+    recordar();
     setEditando(tipo);
     setForm(formularioDesdeTipo(tipo));
     setErrores({});
@@ -104,6 +115,12 @@ export default function TiposReserva() {
     setEditando(null);
     setErrores({});
     setErrorServidor('');
+  };
+
+  // Cancelar: el foco vuelve al botón que abrió el formulario
+  const cancelarFormulario = () => {
+    cerrarFormulario();
+    volver(refBotonNuevo);
   };
 
   const cambiar = <K extends keyof TipoFormulario>(
@@ -170,7 +187,7 @@ export default function TiposReserva() {
           </p>
         </div>
         {editando === null && (
-          <Button onClick={abrirAlta} className="gap-2">
+          <Button ref={refBotonNuevo} onClick={abrirAlta} className="gap-2">
             <Plus className="h-4 w-4" />
             Nuevo tipo
           </Button>
@@ -179,7 +196,9 @@ export default function TiposReserva() {
 
       {aviso && (
         <p
+          ref={refAviso}
           role="status"
+          tabIndex={-1}
           className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800"
         >
           {aviso}
@@ -195,7 +214,8 @@ export default function TiposReserva() {
       )}
 
       {editando !== null && (
-        <Card>
+        // Cambia de key al editar otro registro: se vuelve a montar y el foco va al primer campo
+        <Card key={editando === 'nuevo' ? 'nuevo' : editando.id}>
           <CardHeader>
             <CardTitle>
               {esEdicion ? 'Editar tipo de reserva' : 'Nuevo tipo de reserva'}
@@ -203,6 +223,7 @@ export default function TiposReserva() {
           </CardHeader>
           <CardContent>
             <form
+              ref={enfocarPrimerCampo}
               onSubmit={guardar}
               noValidate
               className="grid gap-4 sm:grid-cols-2"
@@ -214,10 +235,14 @@ export default function TiposReserva() {
                   className="mt-1"
                   value={form.nombre}
                   maxLength={80}
-                  aria-invalid={!!errores.nombre}
+                  {...atributosDeError('tipo-nombre', errores.nombre)}
                   onChange={(e) => cambiar('nombre', e.target.value)}
                 />
-                <MensajeError texto={errores.nombre} />
+                <ErrorDeCampo
+                  idCampo="tipo-nombre"
+                  mensaje={errores.nombre}
+                  className="mt-1"
+                />
               </div>
 
               <div>
@@ -246,10 +271,14 @@ export default function TiposReserva() {
                   className="mt-1"
                   inputMode="decimal"
                   value={form.precio}
-                  aria-invalid={!!errores.precio}
+                  {...atributosDeError('tipo-precio', errores.precio)}
                   onChange={(e) => cambiar('precio', e.target.value)}
                 />
-                <MensajeError texto={errores.precio} />
+                <ErrorDeCampo
+                  idCampo="tipo-precio"
+                  mensaje={errores.precio}
+                  className="mt-1"
+                />
               </div>
 
               <div>
@@ -261,10 +290,14 @@ export default function TiposReserva() {
                   className="mt-1"
                   inputMode="numeric"
                   value={form.max_personas}
-                  aria-invalid={!!errores.max_personas}
+                  {...atributosDeError('tipo-maximo', errores.max_personas)}
                   onChange={(e) => cambiar('max_personas', e.target.value)}
                 />
-                <MensajeError texto={errores.max_personas} />
+                <ErrorDeCampo
+                  idCampo="tipo-maximo"
+                  mensaje={errores.max_personas}
+                  className="mt-1"
+                />
               </div>
 
               {porUnidad && (
@@ -276,16 +309,23 @@ export default function TiposReserva() {
                     inputMode="numeric"
                     placeholder="Sin límite"
                     value={form.cantidad_unidades}
-                    aria-invalid={!!errores.cantidad_unidades}
-                    aria-describedby="tipo-unidades-ayuda"
+                    {...atributosDeError(
+                      'tipo-unidades',
+                      errores.cantidad_unidades,
+                      'tipo-unidades-ayuda'
+                    )}
                     onChange={(e) =>
                       cambiar('cantidad_unidades', e.target.value)
                     }
                   />
-                  <MensajeError texto={errores.cantidad_unidades} />
+                  <ErrorDeCampo
+                    idCampo="tipo-unidades"
+                    mensaje={errores.cantidad_unidades}
+                    className="mt-1"
+                  />
                   <p
                     id="tipo-unidades-ayuda"
-                    className="mt-1 text-xs text-zinc-500"
+                    className="mt-1 text-xs text-zinc-600"
                   >
                     Cuántas se pueden reservar por noche. Vacío = sin límite.
                   </p>
@@ -306,7 +346,10 @@ export default function TiposReserva() {
               </div>
 
               {errorServidor && (
-                <p role="alert" className="text-sm text-red-600 sm:col-span-2">
+                <p
+                  role="alert"
+                  className="text-sm text-destructive sm:col-span-2"
+                >
                   {errorServidor}
                 </p>
               )}
@@ -318,7 +361,7 @@ export default function TiposReserva() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={cerrarFormulario}
+                  onClick={cancelarFormulario}
                 >
                   Cancelar
                 </Button>
@@ -348,22 +391,39 @@ export default function TiposReserva() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
+                {/* Nombre de la tabla para los lectores de pantalla */}
+                <caption className="sr-only">Tipos de reserva</caption>
                 <thead className="border-b bg-zinc-50 text-zinc-600">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Tipo</th>
-                    <th className="px-4 py-3 font-medium">Precio</th>
-                    <th className="px-4 py-3 font-medium">Máx. personas</th>
-                    <th className="px-4 py-3 font-medium">Unidades</th>
-                    <th className="px-4 py-3 font-medium">Estado</th>
-                    <th className="px-4 py-3 font-medium">Acciones</th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Tipo
+                    </th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Precio
+                    </th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Máx. personas
+                    </th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Unidades
+                    </th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Estado
+                    </th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Acciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {tipos.map((tipo) => (
                     <tr key={tipo.id} className="border-b last:border-b-0">
-                      <td className="px-4 py-3 font-medium text-zinc-900">
+                      <th
+                        scope="row"
+                        className="px-4 py-3 text-left font-medium text-zinc-900"
+                      >
                         {tipo.nombre}
-                      </td>
+                      </th>
                       <td className="px-4 py-3">{describirPrecio(tipo)}</td>
                       <td className="px-4 py-3">{tipo.max_personas}</td>
                       <td className="px-4 py-3">{describirUnidades(tipo)}</td>

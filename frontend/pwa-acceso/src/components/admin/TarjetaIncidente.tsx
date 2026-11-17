@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { mensajeDeError, type AlertaClonacion } from '@/services/alertasService';
 
 interface Props {
@@ -18,6 +18,27 @@ export function TarjetaIncidente({ alerta, onResolver }: Props) {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const idNota = `nota-${alerta.reserva_id}`;
+  const idTitulo = `incidente-${alerta.reserva_id}`;
+
+  // "Resolver incidente" se reemplaza por la confirmación: el foco pasa a la nota y, si se
+  // cancela, vuelve al botón (27.3). Si se resuelve, la tarjeta sale y Alertas enfoca el aviso
+  const refNota = useRef<HTMLTextAreaElement>(null);
+  const refBotonResolver = useRef<HTMLButtonElement>(null);
+  const volverAlBoton = useRef(false);
+
+  useEffect(() => {
+    if (confirmando) {
+      refNota.current?.focus();
+    } else if (volverAlBoton.current) {
+      volverAlBoton.current = false;
+      refBotonResolver.current?.focus();
+    }
+  }, [confirmando]);
+
+  const cancelar = () => {
+    volverAlBoton.current = true;
+    setConfirmando(false);
+  };
 
   const confirmar = async (): Promise<void> => {
     setEnviando(true);
@@ -33,8 +54,11 @@ export function TarjetaIncidente({ alerta, onResolver }: Props) {
   };
 
   return (
-    <article style={{ border: '1px solid #f0ad4e', background: '#fff8e5', borderRadius: 8, padding: 16 }}>
-      <p style={{ margin: 0, fontWeight: 'bold', color: '#8a5a00' }}>
+    <article
+      aria-labelledby={idTitulo}
+      style={{ border: '1px solid #f0ad4e', background: '#fff8e5', borderRadius: 8, padding: 16 }}
+    >
+      <p id={idTitulo} style={{ margin: 0, fontWeight: 'bold', color: '#8a5a00' }}>
         {`Intento de múltiple ingreso detectado para el titular ${alerta.titular}`}
       </p>
       <p style={{ margin: '8px 0 0', fontSize: 14 }}>
@@ -45,7 +69,12 @@ export function TarjetaIncidente({ alerta, onResolver }: Props) {
       </p>
 
       {!confirmando ? (
-        <button type="button" onClick={() => setConfirmando(true)} style={{ marginTop: 12 }}>
+        <button
+          ref={refBotonResolver}
+          type="button"
+          onClick={() => setConfirmando(true)}
+          style={{ marginTop: 12 }}
+        >
           Resolver incidente
         </button>
       ) : (
@@ -57,6 +86,7 @@ export function TarjetaIncidente({ alerta, onResolver }: Props) {
             Nota (opcional)
           </label>
           <textarea
+            ref={refNota}
             id={idNota}
             value={nota}
             maxLength={500}
@@ -64,12 +94,12 @@ export function TarjetaIncidente({ alerta, onResolver }: Props) {
             onChange={(e) => setNota(e.target.value)}
             style={{ width: '100%', boxSizing: 'border-box' }}
           />
-          {error && <p role="alert" style={{ color: '#a94442' }}>{error}</p>}
+          {error && <p role="alert" style={{ color: '#b42318' }}>{error}</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <button type="button" disabled={enviando} onClick={() => void confirmar()}>
               {enviando ? 'Resolviendo…' : 'Confirmar resolución'}
             </button>
-            <button type="button" disabled={enviando} onClick={() => setConfirmando(false)}>
+            <button type="button" disabled={enviando} onClick={cancelar}>
               Cancelar
             </button>
           </div>

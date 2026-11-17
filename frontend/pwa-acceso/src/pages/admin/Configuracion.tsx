@@ -1,3 +1,5 @@
+import { ErrorDeCampo } from '@/components/ErrorDeCampo';
+import { atributosDeError } from '@/lib/errorDeCampo';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,14 +21,6 @@ import {
   type ErroresConfiguracion,
 } from '@/lib/configuracion';
 import { ErrorApi } from '@/lib/descuentos';
-
-function MensajeError({ texto }: { texto?: string }) {
-  return texto ? (
-    <p role="alert" className="mt-1 text-sm text-red-600">
-      {texto}
-    </p>
-  ) : null;
-}
 
 const formularioVacio: ConfiguracionFormulario = {
   capacidad_total: '',
@@ -194,10 +188,17 @@ export default function Configuracion() {
                   className="mt-1"
                   inputMode="numeric"
                   value={form.capacidad_total}
-                  aria-invalid={!!errores.capacidad_total}
+                  {...atributosDeError(
+                    'config-capacidad',
+                    errores.capacidad_total
+                  )}
                   onChange={(e) => cambiar('capacidad_total', e.target.value)}
                 />
-                <MensajeError texto={errores.capacidad_total} />
+                <ErrorDeCampo
+                  idCampo="config-capacidad"
+                  mensaje={errores.capacidad_total}
+                  className="mt-1"
+                />
               </div>
 
               <div>
@@ -210,16 +211,23 @@ export default function Configuracion() {
                     recomendado !== null ? String(recomendado) : undefined
                   }
                   value={form.porcentaje_buffer_offline}
-                  aria-invalid={!!errores.porcentaje_buffer_offline}
-                  aria-describedby="config-buffer-ayuda"
+                  {...atributosDeError(
+                    'config-buffer',
+                    errores.porcentaje_buffer_offline,
+                    'config-buffer-ayuda'
+                  )}
                   onChange={(e) =>
                     cambiar('porcentaje_buffer_offline', e.target.value)
                   }
                 />
-                <MensajeError texto={errores.porcentaje_buffer_offline} />
+                <ErrorDeCampo
+                  idCampo="config-buffer"
+                  mensaje={errores.porcentaje_buffer_offline}
+                  className="mt-1"
+                />
                 <p
                   id="config-buffer-ayuda"
-                  className="mt-1 text-xs text-zinc-500"
+                  className="mt-1 text-xs text-zinc-600"
                 >
                   Parte del cupo que no se vende online y queda para los
                   ingresos que registra el guardia, aunque no haya internet.
@@ -253,12 +261,19 @@ export default function Configuracion() {
                   className="mt-1"
                   inputMode="numeric"
                   value={form.max_personas_por_reserva}
-                  aria-invalid={!!errores.max_personas_por_reserva}
+                  {...atributosDeError(
+                    'config-maximo',
+                    errores.max_personas_por_reserva
+                  )}
                   onChange={(e) =>
                     cambiar('max_personas_por_reserva', e.target.value)
                   }
                 />
-                <MensajeError texto={errores.max_personas_por_reserva} />
+                <ErrorDeCampo
+                  idCampo="config-maximo"
+                  mensaje={errores.max_personas_por_reserva}
+                  className="mt-1"
+                />
               </div>
 
               {lugaresPuerta !== null && capacidad !== null && (
@@ -285,14 +300,21 @@ export default function Configuracion() {
                   className="mt-1"
                   inputMode="numeric"
                   value={form.dias_cancelacion}
-                  aria-invalid={!!errores.dias_cancelacion}
-                  aria-describedby="config-dias-cancelacion-ayuda"
+                  {...atributosDeError(
+                    'config-dias-cancelacion',
+                    errores.dias_cancelacion,
+                    'config-dias-cancelacion-ayuda'
+                  )}
                   onChange={(e) => cambiar('dias_cancelacion', e.target.value)}
                 />
-                <MensajeError texto={errores.dias_cancelacion} />
+                <ErrorDeCampo
+                  idCampo="config-dias-cancelacion"
+                  mensaje={errores.dias_cancelacion}
+                  className="mt-1"
+                />
                 <p
                   id="config-dias-cancelacion-ayuda"
-                  className="mt-1 text-xs text-zinc-500"
+                  className="mt-1 text-xs text-zinc-600"
                 >
                   Con 0, se puede cancelar hasta el mismo día del ingreso.
                 </p>
@@ -305,16 +327,23 @@ export default function Configuracion() {
                   className="mt-1"
                   inputMode="numeric"
                   value={form.porcentaje_devolucion}
-                  aria-invalid={!!errores.porcentaje_devolucion}
-                  aria-describedby="config-devolucion-ayuda"
+                  {...atributosDeError(
+                    'config-devolucion',
+                    errores.porcentaje_devolucion,
+                    'config-devolucion-ayuda'
+                  )}
                   onChange={(e) =>
                     cambiar('porcentaje_devolucion', e.target.value)
                   }
                 />
-                <MensajeError texto={errores.porcentaje_devolucion} />
+                <ErrorDeCampo
+                  idCampo="config-devolucion"
+                  mensaje={errores.porcentaje_devolucion}
+                  className="mt-1"
+                />
                 <p
                   id="config-devolucion-ayuda"
-                  className="mt-1 text-xs text-zinc-500"
+                  className="mt-1 text-xs text-zinc-600"
                 >
                   Parte de lo pagado que se devuelve por Mercado Pago al
                   cancelar.
@@ -330,7 +359,7 @@ export default function Configuracion() {
           </Card>
 
           {errorServidor && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="text-sm text-destructive">
               {errorServidor}
             </p>
           )}

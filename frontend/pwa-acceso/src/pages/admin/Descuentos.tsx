@@ -1,5 +1,8 @@
+import { ErrorDeCampo } from '@/components/ErrorDeCampo';
+import { enfocarPrimerCampo, useEnfocarAviso, useVolverAlAbridor } from '@/hooks/useFocoDeFormulario';
+import { atributosDeError } from '@/lib/errorDeCampo';
 import { Pencil, Plus } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,15 +27,8 @@ import {
 } from '@/lib/descuentos';
 
 const CLASE_SELECT =
-  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
-function MensajeError({ texto }: { texto?: string }) {
-  return texto ? (
-    <p role="alert" className="mt-1 text-sm text-red-600">
-      {texto}
-    </p>
-  ) : null;
-}
 
 export default function Descuentos() {
   const { token } = useAuth();
@@ -40,6 +36,10 @@ export default function Descuentos() {
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState('');
   const [aviso, setAviso] = useState('');
+  // Foco al abrir y cerrar el formulario, y en el aviso de resultado (27.3)
+  const refAviso = useEnfocarAviso<HTMLParagraphElement>(aviso);
+  const { recordar, volver } = useVolverAlAbridor();
+  const refBotonNuevo = useRef<HTMLButtonElement>(null);
   const [errorAccion, setErrorAccion] = useState('');
 
   // null = formulario cerrado; 'nuevo' = alta; otro valor = descuento que se está editando
@@ -76,6 +76,7 @@ export default function Descuentos() {
   }, [cargar]);
 
   const abrirAlta = () => {
+    recordar();
     setEditando('nuevo');
     setForm(formularioVacio);
     setErrores({});
@@ -84,6 +85,7 @@ export default function Descuentos() {
   };
 
   const abrirEdicion = (descuento: Descuento) => {
+    recordar();
     setEditando(descuento);
     setForm(formularioDesdeDescuento(descuento));
     setErrores({});
@@ -95,6 +97,12 @@ export default function Descuentos() {
     setEditando(null);
     setErrores({});
     setErrorServidor('');
+  };
+
+  // Cancelar: el foco vuelve al botón que abrió el formulario
+  const cancelarFormulario = () => {
+    cerrarFormulario();
+    volver(refBotonNuevo);
   };
 
   const cambiar = <K extends keyof DescuentoFormulario>(
@@ -152,7 +160,7 @@ export default function Descuentos() {
           </p>
         </div>
         {editando === null && (
-          <Button onClick={abrirAlta} className="gap-2">
+          <Button ref={refBotonNuevo} onClick={abrirAlta} className="gap-2">
             <Plus className="h-4 w-4" />
             Nuevo descuento
           </Button>
@@ -160,7 +168,12 @@ export default function Descuentos() {
       </div>
 
       {aviso && (
-        <p role="status" className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+        <p
+          ref={refAviso}
+          role="status"
+          tabIndex={-1}
+          className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800"
+        >
           {aviso}
         </p>
       )}
@@ -171,12 +184,13 @@ export default function Descuentos() {
       )}
 
       {editando !== null && (
-        <Card>
+        // Cambia de key al editar otro registro: se vuelve a montar y el foco va al primer campo
+        <Card key={editando === 'nuevo' ? 'nuevo' : editando.id}>
           <CardHeader>
             <CardTitle>{esEdicion ? 'Editar descuento' : 'Nuevo descuento'}</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={guardar} noValidate className="grid gap-4 sm:grid-cols-2">
+            <form ref={enfocarPrimerCampo} onSubmit={guardar} noValidate className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="descuento-codigo">Código</Label>
                 <Input
@@ -185,10 +199,10 @@ export default function Descuentos() {
                   value={form.codigo}
                   disabled={esEdicion}
                   maxLength={30}
-                  aria-invalid={!!errores.codigo}
+                  {...atributosDeError('descuento-codigo', errores.codigo)}
                   onChange={(e) => cambiar('codigo', e.target.value)}
                 />
-                <MensajeError texto={errores.codigo} />
+                <ErrorDeCampo idCampo="descuento-codigo" mensaje={errores.codigo} className="mt-1" />
               </div>
 
               <div>
@@ -198,10 +212,10 @@ export default function Descuentos() {
                   className="mt-1"
                   value={form.nombre}
                   maxLength={100}
-                  aria-invalid={!!errores.nombre}
+                  {...atributosDeError('descuento-nombre', errores.nombre)}
                   onChange={(e) => cambiar('nombre', e.target.value)}
                 />
-                <MensajeError texto={errores.nombre} />
+                <ErrorDeCampo idCampo="descuento-nombre" mensaje={errores.nombre} className="mt-1" />
               </div>
 
               <div>
@@ -225,10 +239,10 @@ export default function Descuentos() {
                   className="mt-1"
                   inputMode="decimal"
                   value={form.porcentaje}
-                  aria-invalid={!!errores.porcentaje}
+                  {...atributosDeError('descuento-porcentaje', errores.porcentaje)}
                   onChange={(e) => cambiar('porcentaje', e.target.value)}
                 />
-                <MensajeError texto={errores.porcentaje} />
+                <ErrorDeCampo idCampo="descuento-porcentaje" mensaje={errores.porcentaje} className="mt-1" />
               </div>
 
               {form.aplica_a === 'edad' && (
@@ -240,10 +254,10 @@ export default function Descuentos() {
                       className="mt-1"
                       inputMode="numeric"
                       value={form.edad_min}
-                      aria-invalid={!!errores.edad_min}
+                      {...atributosDeError('descuento-edad-min', errores.edad_min)}
                       onChange={(e) => cambiar('edad_min', e.target.value)}
                     />
-                    <MensajeError texto={errores.edad_min} />
+                    <ErrorDeCampo idCampo="descuento-edad-min" mensaje={errores.edad_min} className="mt-1" />
                   </div>
                   <div>
                     <Label htmlFor="descuento-edad-max">Edad máxima</Label>
@@ -252,10 +266,10 @@ export default function Descuentos() {
                       className="mt-1"
                       inputMode="numeric"
                       value={form.edad_max}
-                      aria-invalid={!!errores.edad_max}
+                      {...atributosDeError('descuento-edad-max', errores.edad_max)}
                       onChange={(e) => cambiar('edad_max', e.target.value)}
                     />
-                    <MensajeError texto={errores.edad_max} />
+                    <ErrorDeCampo idCampo="descuento-edad-max" mensaje={errores.edad_max} className="mt-1" />
                   </div>
                 </>
               )}
@@ -272,7 +286,7 @@ export default function Descuentos() {
               </div>
 
               {errorServidor && (
-                <p role="alert" className="text-sm text-red-600 sm:col-span-2">
+                <p role="alert" className="text-sm text-destructive sm:col-span-2">
                   {errorServidor}
                 </p>
               )}
@@ -281,7 +295,7 @@ export default function Descuentos() {
                 <Button type="submit" disabled={guardando}>
                   {guardando ? 'Guardando…' : 'Guardar'}
                 </Button>
-                <Button type="button" variant="outline" onClick={cerrarFormulario}>
+                <Button type="button" variant="outline" onClick={cancelarFormulario}>
                   Cancelar
                 </Button>
               </div>
@@ -308,22 +322,24 @@ export default function Descuentos() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
+                {/* Nombre de la tabla para los lectores de pantalla */}
+                <caption className="sr-only">Descuentos</caption>
                 <thead className="border-b bg-zinc-50 text-zinc-600">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Descuento</th>
-                    <th className="px-4 py-3 font-medium">Aplica a</th>
-                    <th className="px-4 py-3 font-medium">Porcentaje</th>
-                    <th className="px-4 py-3 font-medium">Estado</th>
-                    <th className="px-4 py-3 font-medium">Acciones</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Descuento</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Aplica a</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Porcentaje</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Estado</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {descuentos.map((descuento) => (
                     <tr key={descuento.id} className="border-b last:border-b-0">
-                      <td className="px-4 py-3">
+                      <th scope="row" className="px-4 py-3 text-left font-normal">
                         <div className="font-medium text-zinc-900">{descuento.nombre}</div>
-                        <div className="text-xs text-zinc-500">{descuento.codigo}</div>
-                      </td>
+                        <div className="text-xs text-zinc-600">{descuento.codigo}</div>
+                      </th>
                       <td className="px-4 py-3">{describirAplicacion(descuento)}</td>
                       <td className="px-4 py-3">{formatearPorcentaje(descuento.porcentaje)}</td>
                       <td className="px-4 py-3">

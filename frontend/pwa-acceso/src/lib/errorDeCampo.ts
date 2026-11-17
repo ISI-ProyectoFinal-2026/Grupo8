@@ -17,14 +17,22 @@ interface AtributosDeError {
 /**
  * Atributos que se le pasan al campo. Sin error no agrega nada.
  * `error` es el mensaje, o `true` cuando el mensaje lo dibuja otro componente con el mismo id.
+ * `idAyuda` es el texto de ayuda del campo, si tiene: se lee siempre, y el error después.
  */
 export function atributosDeError(
   idCampo: string,
-  error?: string | boolean | null
+  error?: string | boolean | null,
+  idAyuda?: string
 ): AtributosDeError {
-  return error
-    ? { 'aria-invalid': true, 'aria-describedby': idDelError(idCampo) }
-    : { 'aria-invalid': undefined, 'aria-describedby': undefined };
+  const descripciones = [
+    idAyuda,
+    error ? idDelError(idCampo) : undefined,
+  ].filter(Boolean);
+  return {
+    'aria-invalid': error ? true : undefined,
+    'aria-describedby':
+      descripciones.length > 0 ? descripciones.join(' ') : undefined,
+  };
 }
 
 /**

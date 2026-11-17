@@ -20,6 +20,15 @@ describe('atributosDeError', () => {
     });
   });
 
+  it('conserva el texto de ayuda y suma el error después', () => {
+    expect(atributosDeError('dias', '', 'dias-ayuda')['aria-describedby']).toBe(
+      'dias-ayuda'
+    );
+    expect(
+      atributosDeError('dias', 'Mal', 'dias-ayuda')['aria-describedby']
+    ).toBe('dias-ayuda dias-error');
+  });
+
   it('acepta true cuando el mensaje lo muestra otro componente', () => {
     expect(atributosDeError('dni-0', true)['aria-describedby']).toBe(
       'dni-0-error'

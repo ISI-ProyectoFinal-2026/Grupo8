@@ -25,8 +25,8 @@ interface Props {
   onCerrar: () => void;
   onCancelada: (resultado: ResultadoCancelacion) => void;
   /**
-   * Dónde queda el foco al cerrar. El diálogo no tiene un botón propio que lo abra (lo abre
-   * cada tarjeta), así que Radix no sabe a dónde devolverlo: lo decide quien lo usa.
+   * Por defecto el foco vuelve al botón que abrió el diálogo. Sirve para mandarlo a otro lado
+   * cuando ese botón ya no existe (por ejemplo, después de cancelar).
    */
   devolverFoco?: (evento: Event) => void;
 }

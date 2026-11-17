@@ -100,7 +100,7 @@ export default function GestionReservas() {
       <Card>
         <CardContent className="p-0">
           {cargando && reservas.length > 0 && (
-            <p role="status" className="border-b px-4 py-2 text-xs text-zinc-500">
+            <p role="status" className="border-b px-4 py-2 text-xs text-zinc-600">
               Buscando…
             </p>
           )}
@@ -131,16 +131,18 @@ export default function GestionReservas() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
+                {/* Nombre de la tabla para los lectores de pantalla */}
+                <caption className="sr-only">Reservas</caption>
                 <thead className="border-b bg-zinc-50 text-zinc-600">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Reserva</th>
-                    <th className="px-4 py-3 font-medium">Titular</th>
-                    <th className="px-4 py-3 font-medium">Cliente</th>
-                    <th className="px-4 py-3 font-medium">Fechas</th>
-                    <th className="px-4 py-3 font-medium">Personas</th>
-                    <th className="px-4 py-3 font-medium">Monto</th>
-                    <th className="px-4 py-3 font-medium">Estado</th>
-                    <th className="px-4 py-3 text-right font-medium">
+                    <th scope="col" className="px-4 py-3 font-medium">Reserva</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Titular</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Cliente</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Fechas</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Personas</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Monto</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Estado</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">
                       <span className="sr-only">Acciones</span>
                     </th>
                   </tr>
@@ -148,10 +150,10 @@ export default function GestionReservas() {
                 <tbody>
                   {reservas.map((reserva) => (
                     <tr key={reserva.id} className="border-b last:border-b-0">
-                      <td className="px-4 py-3 font-mono text-xs">{numeroReserva(reserva.id)}</td>
+                      <th scope="row" className="px-4 py-3 text-left font-mono text-xs font-normal">{numeroReserva(reserva.id)}</th>
                       <td className="px-4 py-3">
                         <div className="font-medium text-zinc-900">{reserva.titular}</div>
-                        <div className="text-xs text-zinc-500">{reserva.email}</div>
+                        <div className="text-xs text-zinc-600">{reserva.email}</div>
                       </td>
                       <td className="px-4 py-3">{ETIQUETA_TIPO_CLIENTE[reserva.tipo_cliente]}</td>
                       <td className="whitespace-nowrap px-4 py-3">
@@ -164,7 +166,7 @@ export default function GestionReservas() {
                           <Badge variant={VARIANTE_ESTADO[reserva.estado_reserva] ?? 'outline'}>
                             {reserva.estado_reserva}
                           </Badge>
-                          <span className="text-xs text-zinc-500">{`Pago: ${reserva.estado_pago}`}</span>
+                          <span className="text-xs text-zinc-600">{`Pago: ${reserva.estado_pago}`}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">

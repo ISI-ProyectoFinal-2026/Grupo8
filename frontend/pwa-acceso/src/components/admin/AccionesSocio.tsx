@@ -1,5 +1,5 @@
 import { CalendarPlus, Pencil, RotateCcw, UserX } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { Socio } from '@/lib/socios';
 
@@ -27,11 +27,34 @@ export default function AccionesSocio({
 }: Props) {
   const [confirmandoBaja, setConfirmandoBaja] = useState(false);
 
+  // La confirmación reemplaza a los botones de la fila: el foco pasa a la pregunta y, si se
+  // cancela, vuelve a "Dar de baja". Si se confirma, la fila cambia y el aviso de la pantalla
+  // recibe el foco (useEnfocarAviso en Socios)
+  const refConfirmacion = useRef<HTMLDivElement>(null);
+  const refBotonBaja = useRef<HTMLButtonElement>(null);
+  const volverABaja = useRef(false);
+
+  useEffect(() => {
+    if (confirmandoBaja) {
+      refConfirmacion.current?.focus();
+    } else if (volverABaja.current) {
+      volverABaja.current = false;
+      refBotonBaja.current?.focus();
+    }
+  }, [confirmandoBaja]);
+
+  const cancelarBaja = () => {
+    volverABaja.current = true;
+    setConfirmandoBaja(false);
+  };
+
   if (confirmandoBaja) {
     return (
       <div
+        ref={refConfirmacion}
         role="group"
         aria-label={`Confirmar baja de ${socio.nombre}`}
+        tabIndex={-1}
         className="space-y-2 text-left"
       >
         <p className="max-w-xs text-xs text-zinc-700">
@@ -52,7 +75,7 @@ export default function AccionesSocio({
             variant="outline"
             size="sm"
             disabled={ocupado}
-            onClick={() => setConfirmandoBaja(false)}
+            onClick={cancelarBaja}
           >
             Cancelar
           </Button>
@@ -86,6 +109,7 @@ export default function AccionesSocio({
             Renovar
           </Button>
           <Button
+            ref={refBotonBaja}
             variant="ghost"
             size="sm"
             disabled={ocupado}

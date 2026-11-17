@@ -1,3 +1,5 @@
+import { SaltarAlContenido } from '@/components/layout/SaltarAlContenido';
+import { useFocoAlCambiarDePantalla } from '@/hooks/useFocoAlCambiarDePantalla';
 import { ExternalLink, LogOut } from 'lucide-react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { LogoQamp } from '@/components/marca/LogoQamp';
@@ -6,8 +8,11 @@ import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 import { adminRoutes, type AdminRoute } from '@/pages/admin/routes';
 
+const ID_CONTENIDO = 'contenido-panel';
+
 const CLASE_OPCION =
-  'flex items-center gap-3 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-medium transition-colors';
+  // Foco en blanco: el verde del anillo común no se ve sobre la barra lateral verde oscuro
+  'flex items-center gap-3 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-white';
 
 function OpcionMenu({ path, titulo, icono: Icono }: AdminRoute) {
   return (
@@ -38,9 +43,14 @@ export function AdminLayout() {
   const { cerrarSesion } = useAuth();
   const principales = adminRoutes.filter((r) => !r.alPie);
   const alPie = adminRoutes.filter((r) => r.alPie);
+  // Al cambiar de sección el foco pasa al contenido (27.3)
+  const contenido = useFocoAlCambiarDePantalla<HTMLElement>();
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
+      {/* Primer Tab: salta el menú lateral y lleva directo al contenido */}
+      <SaltarAlContenido destino={contenido} idDestino={ID_CONTENIDO} />
+
       <aside className="relative z-10 bg-lateral text-white md:sticky md:top-0 md:flex md:h-screen md:w-64 md:shrink-0 md:flex-col">
         <div className="px-6 pb-2 pt-5 md:pb-6 md:pt-7">
           <LogoQamp tamanio={30} />
@@ -87,7 +97,12 @@ export function AdminLayout() {
           </Button>
         </header>
 
-        <main className="relative min-w-0 flex-1 px-6 pb-10">
+        <main
+          id={ID_CONTENIDO}
+          ref={contenido}
+          tabIndex={-1}
+          className="relative min-w-0 flex-1 px-6 pb-10 focus:outline-none"
+        >
           <Outlet />
         </main>
       </div>

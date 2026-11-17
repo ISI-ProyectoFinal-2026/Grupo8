@@ -1,3 +1,5 @@
+import { ErrorDeCampo } from '@/components/ErrorDeCampo';
+import { atributosDeError } from '@/lib/errorDeCampo';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +14,7 @@ import {
 } from '@/lib/reservasAdmin';
 
 const CLASE_SELECT =
-  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+  'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 const TIPOS_CLIENTE: TipoCliente[] = ['socio', 'visitante'];
 
@@ -93,16 +95,15 @@ export default function FiltrosReservas({ filtros, onCambiar }: Props) {
             type="date"
             className="mt-1"
             value={filtros.fechaHasta}
-            aria-invalid={rangoInvalido(filtros)}
+            {...atributosDeError('reservas-hasta', rangoInvalido(filtros))}
             onChange={(e) => cambiar('fechaHasta', e.target.value)}
           />
         </div>
       </div>
-      {rangoInvalido(filtros) && (
-        <p role="alert" className="text-sm text-red-600">
-          La fecha "hasta" no puede ser anterior a la fecha "desde".
-        </p>
-      )}
+      <ErrorDeCampo
+        idCampo="reservas-hasta"
+        mensaje={rangoInvalido(filtros) ? 'La fecha "hasta" no puede ser anterior a la fecha "desde".' : null}
+      />
     </div>
   );
 }

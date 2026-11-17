@@ -1,3 +1,4 @@
+import { useEnfocarAviso } from '@/hooks/useFocoDeFormulario';
 import { useState } from 'react';
 import { TarjetaIncidente } from '@/components/admin/TarjetaIncidente';
 import { useAlertas } from '@/hooks/useAlertas';
@@ -6,6 +7,8 @@ import { AlertasApiError, type AlertaClonacion } from '@/services/alertasService
 export function Alertas() {
   const { alertas, estado, error, actualizando, recargar, resolver } = useAlertas();
   const [aviso, setAviso] = useState<string | null>(null);
+  // Al resolver, la tarjeta sale del listado: el foco pasa al aviso (27.3)
+  const refAviso = useEnfocarAviso<HTMLParagraphElement>(aviso ?? '');
 
   const manejarResolver = async (alerta: AlertaClonacion, nota: string): Promise<void> => {
     try {
@@ -24,9 +27,13 @@ export function Alertas() {
     <section aria-labelledby="titulo-alertas" style={{ padding: 20, maxWidth: 800 }}>
       <h1 id="titulo-alertas">Alertas de acceso</h1>
 
-      {aviso && <p role="status" style={{ color: '#2b6b2b' }}>{aviso}</p>}
+      {aviso && (
+        <p ref={refAviso} role="status" tabIndex={-1} style={{ color: '#2b6b2b' }}>
+          {aviso}
+        </p>
+      )}
       {actualizando && estado !== 'cargando' && (
-        <p role="status" style={{ fontSize: 13, color: '#666' }}>Actualizando…</p>
+        <p role="status" style={{ fontSize: 13, color: '#52525b' }}>Actualizando…</p>
       )}
 
       {estado === 'cargando' && <p role="status">Cargando alertas…</p>}
@@ -54,7 +61,7 @@ export function Alertas() {
 
       {/* Si el listado ya estaba cargado y falla una actualización, no se tira lo que se ve */}
       {(estado === 'listo' || estado === 'vacio') && error && (
-        <p role="alert" style={{ color: '#a94442' }}>{`No se pudo actualizar el listado: ${error}`}</p>
+        <p role="alert" style={{ color: '#b42318' }}>{`No se pudo actualizar el listado: ${error}`}</p>
       )}
     </section>
   );
