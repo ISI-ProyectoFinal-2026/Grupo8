@@ -14,7 +14,6 @@ import Configuracion from './Configuracion';
 import Descuentos from './Descuentos';
 import Egresos from './Egresos';
 import GestionReservas from './GestionReservas';
-import Incidentes from './Incidentes';
 import Inicio from './Inicio';
 import Socios from './Socios';
 import TiposReserva from './TiposReserva';
@@ -53,19 +52,14 @@ export const adminRoutes: AdminRoute[] = [
     element: <Descuentos />,
   },
   {
-    path: 'incidentes',
-    titulo: 'Incidentes',
-    icono: ShieldAlert,
-    element: <Incidentes />,
-  },
-  {
     path: 'egresos',
     titulo: 'Egresos',
     icono: DoorOpen,
     element: <Egresos />,
   },
+  // Única sección de incidentes de acceso: la de "Incidentes" (pantalla vacía de la 15.1) se unificó acá en la 26.5
   {
-    path:'alertas',
+    path: 'alertas',
     titulo: 'Alertas',
     icono: ShieldAlert,
     element: <Alertas />,

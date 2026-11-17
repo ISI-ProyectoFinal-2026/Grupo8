@@ -23,6 +23,8 @@ vi.mock('@/context/AuthContext', () => ({
 vi.mock('@/components/admin/ResumenCobros', () => ({ ResumenCobros: () => null }));
 // Las personas esperadas también tienen sus propios tests
 vi.mock('@/components/admin/PersonasEsperadas', () => ({ PersonasEsperadas: () => null }));
+// El banner tiene sus propios tests; acá interesa dónde se ubica
+vi.mock('./BannerAlertas', () => ({ BannerAlertas: () => <div data-testid="banner-alertas" /> }));
 
 const ocupacion = (actual: number, capacidad = 50, buffer = 5): Ocupacion => ({
   ocupacion_actual: actual,
@@ -39,6 +41,24 @@ describe('Monitor de ocupación en el inicio del panel', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+  });
+
+  it('muestra el banner de alertas arriba del monitor de ocupación (26.5)', () => {
+    vi.mocked(obtenerOcupacion).mockReturnValue(new Promise(() => {}));
+
+    render(<Inicio />);
+
+    const banner = screen.getByTestId('banner-alertas');
+    const monitor = screen.getByText('Ocupación del camping');
+    // DOCUMENT_POSITION_FOLLOWING: el monitor viene después del banner en el documento
+    expect(
+      banner.compareDocumentPosition(monitor) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole('heading', { level: 1, name: 'Inicio' })
+        .compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it('muestra "cargando" mientras espera la respuesta', () => {
