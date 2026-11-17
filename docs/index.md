@@ -18,6 +18,7 @@ Arquitectura y decisiones de diseño interno:
 - **Frontend:** React, Vite y arquitecturas de interfaz con Shadcn UI; un inicio de sesión por app, rutas por rol, estructura del panel de administración y estilo común de las tres apps.
 - **Seguridad Offline:** Criptografía asimétrica (ES256), IndexedDB, Dexie.js y el motor de validación local mediante la *Web Crypto API*.
 - **Comunicaciones:** Orquestación asíncrona para la generación de correos electrónicos y códigos QR en memoria RAM (Resend + Jinja2).
+- **Sesiones y permisos:** inicio de sesión con DNI o correo, roles, protección de rutas, sesión del guardia sin conexión y alta de socios.
 - **Socios y clonación:** baja lógica y regla única de vigencia; detección de QR clonados y resolución de alertas.
 - **Pagos:** registro de cada pago de Mercado Pago, firma de los avisos, control del importe y plazo de pago de 10 minutos con reembolso de los pagos tardíos.
 - **Cancelaciones:** reglas del camping, plazo de arrepentimiento (Ley 24.240 y Disposición 954/2025) y enlaces firmados por correo para cancelar sin cuenta.
@@ -36,6 +37,7 @@ Definición estricta de contratos de datos y endpoints:
 - Motor de reglas, cálculo dinámico de tarifas y validaciones de cupos.
 - Endpoints de sincronización transaccional (`/bootstrap`, `/bulk-sync`) y webhooks financieros (Mercado Pago).
 - Endpoints del panel: ocupación, personas esperadas, gestión de reservas, egresos y resumen de cobros.
+- Inicio de sesión (`/auth/login`, `/auth/me`), token de sesión y permisos por rol.
 - Socios y membresías (padrón, renovación y baja) y alertas de clonación.
 - Cancelación de reservas y botón de arrepentimiento.
 

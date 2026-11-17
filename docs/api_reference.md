@@ -9,7 +9,7 @@ El sistema utiliza SQLAlchemy como ORM, mapeando clases Python a tablas en Postg
 * **Modelo de Usuario (`User`)**
 * **Tabla:** `usuarios`
 * **Campos Principales:** ID (`UUID` como identificador único), correo electrónico único, hash de contraseña, DNI.
-* **Lógica de Negocio:** Atributo de membresía `is_socio`, estado de cuota y rol del sistema configurado mediante `RoleEnum` (Admin, Seguridad, Cliente).
+* **Lógica de Negocio:** Atributo de membresía `is_socio`, `membresia_vence` (último día con la cuota al día: es lo que decide si la membresía está vigente, Issue 13.3), `activo` (baja lógica) y rol del sistema configurado mediante `RoleEnum` (Admin, Seguridad, Cliente). `estado_cuota` está en desuso y ya no decide nada.
 * **Auditoría:** Marcas de tiempo `created_at` y `updated_at`.
 * **Modelo de Reserva (`Reserva`)**
 * **Tabla:** `reservas`
@@ -83,7 +83,7 @@ Estos endpoints estructuran la operación principal del sistema de reservas y su
 * **Manejo de Errores:** Devuelve 422 si no hay personas, hay más del máximo o alguna edad o condición es inválida.
 * **`POST /reservas`**
 * **Descripción:** Crea una nueva reserva inyectando datos a través de `ReservaCreate`. Funciona con o sin sesión: no recibe `user_id`. Si el pedido trae un token válido, la reserva queda asociada al usuario de ese token; sin token se crea igual y `user_id` queda nulo. Un `user_id` enviado en el cuerpo se ignora.
-* **Sesión opcional:** Usa `get_current_user_optional` (`core/auth_opcional.py`). Con un token inválido o vencido responde 401 (no se trata como visitante) para que el frontend sepa que debe volver a iniciar sesión.
+* **Sesión opcional:** Usa `get_current_user_optional` (`core/dependencies.py`). Con un token inválido o vencido responde 401 (no se trata como visitante) para que el frontend sepa que debe volver a iniciar sesión.
 * **Cupo:** Las reservas canceladas y las pendientes con el plazo de pago vencido (más antiguas que `RESERVA_PENDIENTE_TTL_MINUTES`, 10 minutos por defecto) no ocupan cupo; las pendientes dentro del plazo sí, para evitar la sobreventa mientras se espera el pago.
 * **Plazo de pago:** La respuesta incluye `vencimiento_pago` (UTC, con zona horaria): hasta cuándo se puede pagar. Es `null` en las reservas que no están pendientes. Las pendientes vencidas pasan a `CANCELADA` al crear y al consultar reservas (`POST /reservas`, `GET /reservas/mias`, `GET /reservas`), sin tarea programada.
 * **Tipo de reserva (Issue 19.3):** `tipo_reserva_id` es opcional por ahora; sin tipo, la reserva funciona como antes y `tipo_reserva_id` y `precio_tipo` quedan nulos. Con tipo, la reserva guarda `tipo_reserva_id` y `precio_tipo` (el precio del tipo en ese momento).
@@ -344,6 +344,35 @@ FastAPI gestiona dos tipos de llaves criptográficas completamente separadas par
 * **Códigos QR de Acceso (ES256):** El sistema utiliza un par asimétrico de llaves de curva elíptica. El backend emplea la `JWT_PRIVATE_KEY` de manera exclusiva para emitir y firmar las credenciales QR. La `VITE_PUBLIC_KEY` se extrae mediante `/bootstrap` y permite a la aplicación PWA verificar la autenticidad matemática de los QRs sin capacidad de emitir nuevos.
 
 
+### `POST /auth/login`
+
+* **Tag:** Autenticación.
+* **Descripción:** Inicia sesión con DNI o correo electrónico (Issue 13.1). No hay registro público: las cuentas las crea el administrador (`POST /admin/socios`) o el seed.
+* **Request Body (`LoginRequest`):** `identificador` (si contiene `@` se busca por correo, sin distinguir mayúsculas; si no, por DNI; se recortan los espacios) y `password`.
+* **Respuesta (200 OK, `LoginResponse`):** `access_token`, `token_type` (`bearer`), `expires_in` (segundos) y `usuario` (`UsuarioSesion`: `id`, `nombre`, `email`, `dni`, `rol`, `is_socio`, `membresia_vigente`, `membresia_vence`). Nunca incluye el hash de la contraseña.
+* **Quién puede entrar:** el administrador, el guardia y los socios activos, tengan o no la cuota al día (así pueden ver su estado). No entran los usuarios dados de baja ni un cliente que no es socio.
+* **Errores:** 401 con el mismo mensaje, "Credenciales inválidas", para cualquier falla: usuario inexistente, contraseña incorrecta, cuenta dada de baja o cliente que no es socio. Si el usuario no existe igual se compara la contraseña contra un hash ficticio, para que el tiempo de respuesta no revele qué DNI o correos están registrados. 422 si falta algún campo.
+* **Contraseñas:** se guardan con bcrypt. Mínimo 8 caracteres y máximo 72 bytes (límite del algoritmo).
+
+### `GET /auth/me`
+
+* **Seguridad:** Exige sesión (401 sin token, o con un token inválido o vencido).
+* **Descripción:** Devuelve el `UsuarioSesion` del usuario del token. `membresia_vigente` se calcula en el momento con la regla única de vigencia, así que la pantalla siempre ve el estado actual.
+
+### Token de sesión y permisos por rol
+
+* **Token:** JWT HS256 firmado con `AUTH_SECRET_KEY`, con los claims `sub` (id del usuario), `rol`, `iat` y `exp`. Dura `AUTH_TOKEN_EXPIRE_MINUTES` (60) para clientes, socios y administradores, y `GUARD_TOKEN_EXPIRE_HOURS` (168, siete días) para el guardia, que puede trabajar varios días sin conexión.
+* **Dependencias (`core/dependencies.py`):**
+
+| Dependencia | Qué hace |
+|---|---|
+| `get_current_user` | Devuelve el usuario del token. 401 sin token o con un token inválido, vencido, de otro algoritmo o con un `sub` que no sea un UUID, y si el usuario no existe o está dado de baja. |
+| `get_current_user_optional` | Igual, pero sin token devuelve `None`. Con un token inválido o vencido responde 401 (no lo trata como visitante). La usa `POST /reservas`. |
+| `require_role(*roles)` | Acepta uno o varios roles. 403 si el rol del usuario no está entre ellos. Declararla sin roles es un error de programación (`ValueError`). |
+
+* **El rol sale de la base:** se lee en cada petición. El claim `rol` del token solo sirve para decidir qué pantallas mostrar; no da ni quita permisos. Si el rol de un usuario cambia, rige desde la petición siguiente con el mismo token.
+* **Quién accede a qué:** `ADMIN` a las rutas de administración (`/admin/...`, `GET /reservas/`, ocupación, egresos y configuración); `SEGURIDAD` a `POST /api/v1/ingresos/bulk-sync` (el `ADMIN` recibe 403); `SEGURIDAD` y `ADMIN` a `GET /api/v1/sincronizacion/bootstrap`; cualquier usuario con sesión a lo suyo (`GET /reservas/mias`, `GET /auth/me`).
+
 ## 8. Socios y Membresías
 
 Todas las rutas de `/admin/socios` exigen rol `ADMIN`.
@@ -352,7 +381,7 @@ Todas las rutas de `/admin/socios` exigen rol `ADMIN`.
 |---|---|
 | `GET /socios/validar/{dni}` | Público. Responde `valido` y, si no vale, el `motivo`: `NO_EXISTE`, `NO_ES_SOCIO` (también para los dados de baja) o `CUOTA_VENCIDA`. |
 | `GET /admin/socios?buscar=&estado=` | Padrón. `buscar`: comienzo del DNI (acepta puntos) o palabras del nombre, sin importar acentos ni mayúsculas. `estado`: `vigente`, `vencida` o `baja`. Sin parámetros devuelve todos. |
-| `POST /admin/socios` | Alta de un socio. |
+| `POST /admin/socios` | Alta de un socio (Issue 13.4). Se crea siempre con rol `CLIENTE` y `is_socio = true`; un `rol` o `is_socio` enviado en el body se ignora. Pide `nombre`, `dni` (7 u 8 dígitos), `email`, `password` (8 a 72 bytes, no se recorta) y `membresia_vence` (obligatoria). Responde 201 con el socio, sin la contraseña. |
 | `PUT /admin/socios/{id}` | Corrige `nombre`, `dni` o `email`. Aplica solo los campos enviados; cualquier otro (por ejemplo `membresia_vence` o `activo`) da 422. |
 | `POST /admin/socios/{id}/renovar` | Body `{"membresia_vence": "AAAA-MM-DD"}`, con fecha de hoy o posterior. |
 | `POST /admin/socios/{id}/baja` | Baja lógica (`activo = false`). |
