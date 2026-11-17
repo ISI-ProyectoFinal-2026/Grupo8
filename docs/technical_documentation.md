@@ -64,7 +64,13 @@ La base de datos relacional PostgreSQL administra las transacciones del sistema 
 * **Modelo Usuario (`models/user.py`):** Utiliza UUID como identificador único principal. Incluye atributos clave como correo electrónico, hash de contraseña, DNI, indicador de membresía (`is_socio`), marcas de auditoría (`created_at`, `updated_at`) y un rol de sistema basado en `RoleEnum` (Admin, Seguridad, Cliente).
 
 
-* **Modelo Reserva (`models/reserva.py`):** Almacena el ID (`UUID`), una clave foránea (`user_id`), fecha y hora, cantidad de personas y el `jwt_jti` (identificador único para el código QR). Controla su avance mediante `EstadoPagoEnum` (Pendiente, Pagado, Cancelado).
+* **Modelo Reserva (`models/reserva.py`):** Almacena el ID (`UUID`), una clave foránea (`user_id`), fecha y hora, cantidad de personas y el `jwt_jti` (identificador único para el código QR). Controla su avance mediante `EstadoPagoEnum` (Pendiente, Pagado, Cancelado). `user_id` admite nulo: es lo que identifica a una reserva hecha sin cuenta (Issue 14.5). `telefono` se conserva solo para leer las reservas anteriores; las nuevas no lo guardan (Issue 14.4).
+
+
+* **Modelo ReservaPersona (`reserva_personas`, Issue 14.1):** Una fila por cada persona de la reserva, con nombre, edad, condición (socio o visitante), DNI y el precio que se le cobró (`precio_base`, `descuento_pct`, `precio_final`). Guarda una copia del cobro, así que cambiar después una tarifa o un descuento no altera las reservas ya hechas. El titular es la primera persona (`orden` 0). Las reservas anteriores a esta tabla no tienen filas y la API devuelve `personas = []`.
+
+
+* **Modelo Descuento (`models/descuento.py`, Issue 14.2):** Descuentos que el administrador configura desde el panel: aplican a los socios o a un rango de edad, tienen un porcentaje y se activan o desactivan (no se borran). El descuento `socio` existe siempre; su porcentaje inicial lo carga la migración desde `PORCENTAJE_DESCUENTO_SOCIO`.
 
 
 * **Modelo Pago (`models/pago.py`, Issue 17.1):** Un registro por cada pago que informa Mercado Pago, aprobado o no: `reserva_id`, `mp_payment_id` (único), estado, detalle, monto, moneda, medio de pago, fechas y `respuesta_mp` (JSONB). Si se borra la reserva, el pago se conserva con `reserva_id` en nulo.
@@ -73,7 +79,7 @@ La base de datos relacional PostgreSQL administra las transacciones del sistema 
 
 ### 2.3. Control de Versiones y Seeding
 
-* **Migraciones:** Alembic mantiene la sincronización entre SQLAlchemy y la base de datos. La revisión automática `f30ae74360fe_initial_schema.py` tradujo los modelos ORM a instrucciones DDL, aplicables con el comando `alembic upgrade head`.
+* **Migraciones:** Alembic mantiene la sincronización entre SQLAlchemy y la base de datos. La revisión automática `f30ae74360fe_initial_schema.py` tradujo los modelos ORM a instrucciones DDL, aplicables con el comando `alembic upgrade head`. La Issue 14 agregó tres migraciones (`reserva_personas`, `descuentos` y `reservas_user_id_nullable`); sus revisiones están en `guia_migraciones.md`. La 14.5 solo quita el `NOT NULL` de `reservas.user_id` y no toca las reservas existentes; al revertirla, si hay reservas sin cuenta se frena con un aviso en vez de borrarlas.
 
 
 * **Conexión de Alembic (Issue 21.1):** `alembic/env.py` usa `DATABASE_URL` cuando está definida (la misma que la app), y si no, arma la conexión local con las variables `POSTGRES_*`. Así las mismas migraciones se aplican en el contenedor local y en la base publicada.
@@ -94,10 +100,13 @@ El núcleo (FastAPI) está organizado de forma modular (`api/`, `core/`, `models
   * `check_availability` compara lo ocupado más el margen offline contra la capacidad total. `crear_reserva` solo invoca estos dos métodos.
 
 
-* **Tarifas (`services/pricing_service.py`):** Algoritmo de *pricing* dinámico que determina el costo final basado en la cantidad de huéspedes declarados.
+* **Tarifas (`services/pricing_service.py`):** Algoritmo de *pricing* dinámico que determina el costo final por persona (Issue 14.3). A cada una se le aplica un solo descuento: el mayor entre los activos que le corresponden (socio o edad); no se acumulan. El dinero se calcula con `Decimal` y se redondea por persona a dos decimales. `PricingService.cotizar` es la única implementación: la usan `POST /reservas/cotizar` y `POST /reservas`, de modo que el total que ve el cliente es el que se guarda en `monto_total` y el que se cobra en Mercado Pago. El frontend no calcula importes ni porcentajes.
 
 
 * **Endpoints Transaccionales (`api/reservas.py`):** Emplean Pydantic (`ReservaCreate` y `ReservaResponse`) para la serialización estricta de entrada y salida.
+
+
+* **Reservar con o sin cuenta (Issue 14.5):** `POST /reservas` usa la dependencia `get_current_user_optional`: con un token válido la reserva queda asociada a ese usuario; sin token se crea igual, con `user_id` nulo. El `user_id` nunca viene del cuerpo de la petición (si un cliente lo manda, se ignora), y un token inválido o vencido devuelve 401. `GET /reservas/mias` exige sesión y filtra por el usuario del token, así que cada persona ve solo sus reservas; las hechas sin cuenta no aparecen en ningún listado personal. Se agregó el esquema `ReservaDetalle` para no modificar `ReservaResponse`. `GET /usuarios/prueba` quedó solo para desarrollo y la web ya no lo usa.
 
 
 
