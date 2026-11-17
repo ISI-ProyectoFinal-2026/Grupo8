@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { AUTH_EXPIRED_EVENT, TOKEN_KEY } from '@/context/AuthContext';
 import { db } from '../db/db';
 import { dbService, MAX_HISTORIAL } from './dbService';
-import { syncService } from './syncService';
+import { CLAVE_ULTIMA_SINCRONIZACION, MENSAJE_SESION, syncService } from './syncService';
 
 /**
  * Issue 8.4 — Comportamiento Offline/Online (integration tests).
@@ -336,6 +336,40 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     return globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
   }
 
+  // ---------- Última sincronización (26.3) ----------
+
+  it('Test 9b — con respuesta OK guarda la hora de la última sincronización, aunque haya éxito parcial', async () => {
+    await dbService.registrarIngresoManual('11111111', 'Uno', 0, 'Espontaneo', 10);
+    const [pendiente] = await dbService.obtenerPendientesSincronizacion();
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ sincronizados_jti: [], errores: [{ indice: 0, jti: pendiente.jti, motivo: 'dni' }] }),
+    }) as unknown as typeof fetch;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-16T05:30:15.000Z'));
+
+    await syncService.sincronizarIngresosPendientes();
+
+    expect(await dbService.obtenerConfiguracion(CLAVE_ULTIMA_SINCRONIZACION)).toBe('2026-11-16T05:30:15.000Z');
+    expect((await syncService.obtenerUltimaSincronizacion())?.toISOString()).toBe('2026-11-16T05:30:15.000Z');
+  });
+
+  it.each([500, 401, 403])('Test 9c — con HTTP %i no cambia la última sincronización', async (status) => {
+    await dbService.guardarConfiguracion(CLAVE_ULTIMA_SINCRONIZACION, '2026-11-15T10:00:00.000Z');
+    await dbService.registrarIngresoManual('11111111', 'Uno', 0, 'Espontaneo', 10);
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status, json: async () => ({}) }) as unknown as typeof fetch;
+    // Evita que el reintento con backoff quede agendado para otro test
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation((() => 0) as never);
+
+    await syncService.sincronizarIngresosPendientes();
+
+    expect(await dbService.obtenerConfiguracion(CLAVE_ULTIMA_SINCRONIZACION)).toBe('2026-11-15T10:00:00.000Z');
+  });
+
+  it('Test 9d — sin una sincronización previa, obtenerUltimaSincronizacion devuelve null', async () => {
+    expect(await syncService.obtenerUltimaSincronizacion()).toBeNull();
+  });
+
   it('Test 10 — bulk-sync viaja con el token del guardia en el header Authorization', async () => {
     await dbService.registrarIngresoManual('11111111', 'Con Token', 0, 'Espontaneo', 10);
 
@@ -371,6 +405,8 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     window.removeEventListener(AUTH_EXPIRED_EVENT, sesionVencida);
     window.removeEventListener('sync-status', escuchar);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    // El aviso viaja con el evento para que el login del guardia lo muestre (26.3)
+    expect((sesionVencida.mock.calls[0][0] as CustomEvent).detail).toEqual({ mensaje: MENSAJE_SESION });
     expect(temporizador.mock.calls.some(([, demora]) => demora === 5000)).toBe(false);
     expect(await db.ingresos_pendientes.toArray()).toHaveLength(1);
     expect(sesionVencida).toHaveBeenCalledTimes(1);

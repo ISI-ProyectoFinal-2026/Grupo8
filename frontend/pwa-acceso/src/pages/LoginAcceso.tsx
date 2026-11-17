@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import { LogoQamp } from '@/components/marca/LogoQamp';
 import { AccesoDenegado } from '@/components/auth/AccesoDenegado';
@@ -10,7 +11,7 @@ import { RUTA_POR_ROL } from '@/lib/auth';
  * barra verde, campos y botón grandes y alto contraste para usarla en la entrada.
  */
 export default function LoginAcceso() {
-  const { rol } = useAuth();
+  const { rol, avisoSesion } = useAuth();
 
   if (rol === 'SEGURIDAD') return <Navigate to={RUTA_POR_ROL.SEGURIDAD} replace />;
   if (rol) return <AccesoDenegado />;
@@ -29,6 +30,16 @@ export default function LoginAcceso() {
       <main className="relative mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10">
         <h1 className="mb-2 text-3xl font-bold text-foreground">Control de acceso</h1>
         <p className="mb-8 text-lg text-muted-foreground">Ingreso del personal de seguridad</p>
+        {/* Por qué se cerró la sesión, por ejemplo cuando el servidor rechazó el token al sincronizar */}
+        {avisoSesion && (
+          <p
+            role="alert"
+            className="mb-6 flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 font-semibold text-amber-900"
+          >
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            {avisoSesion}
+          </p>
+        )}
         <FormularioLogin
           roles={['SEGURIDAD']}
           claseCampo="h-12 border-2 border-tierra-400 text-lg"

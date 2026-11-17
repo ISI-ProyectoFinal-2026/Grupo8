@@ -1,4 +1,4 @@
-import { AUTH_EXPIRED_EVENT, TOKEN_KEY } from '@/context/AuthContext';
+import { AUTH_EXPIRED_EVENT, TOKEN_KEY, type DetalleSesionVencida } from '@/context/AuthContext';
 import { dbService } from './dbService';
 import { obtenerDispositivoId } from '../utils/dispositivo';
 
@@ -12,7 +12,7 @@ interface DetallesSync {
   mensaje?: string;
 }
 
-// Avisa a la pantalla del guardia cómo va la sincronización (evento "sync-status")
+// Función para emitir señales que nuestra pantalla de React va a escuchar (DoD 7.4)
 const notificarUI = (estado: EstadoSync, detalles?: DetallesSync) => {
   window.dispatchEvent(new CustomEvent('sync-status', { detail: { estado, detalles } }));
 };
@@ -60,7 +60,11 @@ const leerToken = (): string | null => {
   }
 };
 
-const MENSAJE_SESION = 'Iniciá sesión de nuevo para sincronizar. Tus ingresos siguen guardados en este dispositivo.';
+/** Aviso de sesión vencida. Lo usan también Estado de sincronización y el login del guardia. */
+export const MENSAJE_SESION = 'Iniciá sesión de nuevo para sincronizar. Tus ingresos siguen guardados en este dispositivo.';
+
+/** Clave de `configuracion` con la hora (ISO) de la última vez que el servidor recibió un lote. */
+export const CLAVE_ULTIMA_SINCRONIZACION = 'ultima_sincronizacion';
 
 type Pendiente = Awaited<ReturnType<typeof dbService.obtenerPendientesSincronizacion>>[number];
 
@@ -139,7 +143,12 @@ export const syncService = {
       // el envío y se conserva la cola. Con 401 además se cierra la sesión para pedir un nuevo login.
       if (response.status === 401 || response.status === 403) {
         this.isSyncing = false;
-        if (response.status === 401) window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+        // El mensaje viaja con el evento para que el login muestre por qué se cerró la sesión
+        if (response.status === 401) {
+          window.dispatchEvent(
+            new CustomEvent<DetalleSesionVencida>(AUTH_EXPIRED_EVENT, { detail: { mensaje: MENSAJE_SESION } })
+          );
+        }
         notificarUI('error', {
           mensaje:
             response.status === 401
@@ -158,6 +167,12 @@ export const syncService = {
       // 4. Solo se borran de la cola los que el servidor confirmó
       if (sincronizados.length > 0) {
         await dbService.marcarComoSincronizados(sincronizados);
+      }
+
+      // El servidor recibió y procesó el lote (aunque haya rechazado alguno): cuenta como sincronización
+      await dbService.guardarConfiguracion(CLAVE_ULTIMA_SINCRONIZACION, new Date().toISOString());
+
+      if (sincronizados.length > 0) {
         notificarUI('completado', { cantidad: sincronizados.length });
       }
 
@@ -187,6 +202,14 @@ export const syncService = {
         notificarUI('error', { mensaje: 'Sincronización pausada. Se reintentará al detectar red.' });
       }
     }
+  },
+
+  /** Hora de la última sincronización correcta de este dispositivo, o null si nunca hubo una. */
+  async obtenerUltimaSincronizacion(): Promise<Date | null> {
+    const valor = await dbService.obtenerConfiguracion(CLAVE_ULTIMA_SINCRONIZACION);
+    if (typeof valor !== 'string') return null;
+    const fecha = new Date(valor);
+    return Number.isNaN(fecha.getTime()) ? null : fecha;
   },
 
   iniciarBackgroundSync() {
