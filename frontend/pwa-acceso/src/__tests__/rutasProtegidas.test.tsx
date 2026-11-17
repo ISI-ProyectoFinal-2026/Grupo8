@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TOKEN_KEY } from '@/context/AuthContext';
 import App from '../App';
@@ -80,16 +80,54 @@ describe('Rutas protegidas por rol', () => {
     expect(formularioLogin()).toBeTruthy();
   });
 
-  it('el guardia entra al historial de la app de acceso', () => {
-    abrir('/acceso/historial', 'SEGURIDAD');
+  // ---------- Las cuatro pantallas de la app del guardia (26.4) ----------
+  const PANTALLAS_GUARDIA: Array<[string, () => HTMLElement | null]> = [
+    ['/acceso', pantallaAcceso],
+    ['/acceso/manual', () => screen.queryByRole('heading', { level: 1, name: 'Registro manual' })],
+    ['/acceso/historial', () => screen.queryByRole('heading', { level: 1, name: 'Historial' })],
+    ['/acceso/sincronizacion', () => screen.queryByRole('heading', { level: 1, name: 'Estado de sincronización' })],
+  ];
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Historial' })).toBeTruthy();
+  it.each(PANTALLAS_GUARDIA)('el guardia entra a %s, dentro del marco con la barra inferior', (ruta, pantalla) => {
+    abrir(ruta, 'SEGURIDAD');
+
+    expect(pantalla()).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Navegación de la app del guardia' })).toBeTruthy();
   });
 
-  it('el guardia entra al estado de sincronización (26.3)', () => {
-    abrir('/acceso/sincronizacion', 'SEGURIDAD');
+  it.each(
+    PANTALLAS_GUARDIA.flatMap(([ruta]) => [
+      [ruta, 'ADMIN'],
+      [ruta, 'CLIENTE'],
+    ])
+  )('%s no es para el rol %s: ve acceso denegado', (ruta, rol) => {
+    abrir(ruta, rol);
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Estado de sincronización' })).toBeTruthy();
+    expect(accesoDenegado()).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Navegación de la app del guardia' })).toBeNull();
+  });
+
+  it.each(PANTALLAS_GUARDIA)('sin conexión y con el token vencido, el guardia sigue entrando a %s', (ruta, pantalla) => {
+    simularConexion(false);
+    localStorage.setItem(TOKEN_KEY, crearToken('SEGURIDAD', AYER()));
+
+    abrir(ruta);
+
+    expect(pantalla()).toBeTruthy();
+    expect(formularioLogin()).toBeNull();
+  });
+
+  // WCAG 2.4.2 (27.1). App monta TituloDePagina: si se pierde al mergear, este test lo avisa
+  it.each([
+    ['/acceso', 'SEGURIDAD', 'Escáner | Qamp Acceso'],
+    ['/acceso/manual', 'SEGURIDAD', 'Registro manual | Qamp Acceso'],
+    ['/acceso/sincronizacion', 'SEGURIDAD', 'Estado de sincronización | Qamp Acceso'],
+    ['/admin/socios', 'ADMIN', 'Socios | Qamp Panel'],
+  ])('App pone el título de la pestaña en %s', async (ruta, rol, titulo) => {
+    simularBackend(SOCIO);
+    abrir(ruta, rol);
+
+    await waitFor(() => expect(document.title).toBe(titulo));
   });
 
   it('el guardia entra a /acceso', () => {
@@ -103,8 +141,8 @@ describe('Rutas protegidas por rol', () => {
 
     expect(pantallaAcceso()).toBeTruthy();
     expect(screen.queryByRole('link', { name: /^beneficios$/i })).toBeNull();
-    // "Cerrar sesión" está en el menú ☰ de la app del guardia
-    expect(screen.getByRole('button', { name: 'Abrir menú' })).toBeTruthy();
+    // "Cerrar sesión" está en la barra inferior de la app del guardia (26.4)
+    expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeTruthy();
   });
 
   it.each(['CLIENTE', 'ADMIN'])('el rol %s no entra a /acceso y ve acceso denegado', (rol) => {

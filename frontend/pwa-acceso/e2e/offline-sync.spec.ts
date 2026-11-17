@@ -92,8 +92,11 @@ test('sin conexión el guardia registra un QR y un ingreso en efectivo; al recon
   });
 
   await test.step('registra un ingreso manual cobrado en efectivo', async () => {
-    // El registro manual se abre desde la barra inferior de la app
-    await guardia.getByRole('link', { name: 'Registro manual' }).click();
+    // El registro manual es una pantalla propia y se abre desde la barra inferior (26.4)
+    const barra = guardia.getByRole('navigation', { name: 'Navegación de la app del guardia' });
+    await barra.getByRole('link', { name: 'Registro manual' }).click();
+    await expect(guardia).toHaveURL(/\/acceso\/manual$/);
+    await expect(barra.getByRole('link', { name: 'Registro manual' })).toHaveAttribute('aria-current', 'page');
     await guardia.getByLabel('DNI / Pasaporte').fill(MANUAL.dni);
     await guardia.getByLabel('Nombre completo').fill(MANUAL.nombre);
     await guardia.getByLabel('Acompañantes').fill(String(MANUAL.acompanantes));
@@ -105,12 +108,17 @@ test('sin conexión el guardia registra un QR y un ingreso en efectivo; al recon
       .fill(String(MANUAL.monto));
     await guardia.getByRole('button', { name: 'Guardar Ingreso' }).click();
 
+    // Confirmación de la pantalla 4 del documento
     await expect(
-      guardia.getByRole('heading', { name: /INGRESO MANUAL REGISTRADO/ })
+      guardia.getByRole('heading', { name: 'Ingreso registrado', level: 1 })
     ).toBeVisible();
-    await expect(
-      guardia.getByText(`Monto cobrado: $${MANUAL.monto.toFixed(2)}`)
-    ).toBeVisible();
+    await expect(guardia.getByText(/^manual-[0-9a-f-]{36}$/)).toBeVisible();
+    await expect(guardia.getByText('Se sincronizará cuando regrese Internet.')).toBeVisible();
+    await expect(guardia.getByText(`$${MANUAL.monto.toFixed(2)}`)).toBeVisible();
+
+    // "Aceptar" vuelve al escáner, que es donde se ve el aviso de la sincronización
+    await guardia.getByRole('button', { name: 'Aceptar' }).click();
+    await expect(guardia).toHaveURL(/\/acceso$/);
   });
 
   await test.step('mientras no hay red, nada llegó al servidor', async () => {

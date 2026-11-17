@@ -163,7 +163,7 @@ export const dbService = {
     acompanantes: number,
     tipoVisita: string,
     montoCobrado = 0
-  ): Promise<void> {
+  ): Promise<string> {
     // El id se genera una sola vez acá y queda guardado, así los reintentos mandan siempre el mismo
     const jti = generarJti('manual');
   
@@ -178,6 +178,8 @@ export const dbService = {
     };
   
     await this.registrarIngresoOffline(jti, payloadManual);
+    // Es el "ID local" que ve el guardia en la confirmación
+    return jti;
   },
 
   // ==========================================

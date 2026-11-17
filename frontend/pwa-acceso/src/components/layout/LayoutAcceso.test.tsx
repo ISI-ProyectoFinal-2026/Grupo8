@@ -3,15 +3,20 @@
 // Dexie (useLiveQuery) solo emite si existe indexedDB, como en el navegador
 import 'fake-indexeddb/auto';
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, TOKEN_KEY } from '@/context/AuthContext';
 import { dbService } from '@/services/dbService';
+import { syncService } from '@/services/syncService';
 import { LayoutAcceso } from './LayoutAcceso';
 
 vi.mock('@/services/dbService', () => ({
   dbService: { contarIngresosPendientes: vi.fn() },
+}));
+// La sincronización de fondo se prueba en syncService; acá interesa que el marco la arranque
+vi.mock('@/services/syncService', () => ({
+  syncService: { iniciarBackgroundSync: vi.fn() },
 }));
 
 function base64Url(objeto: object) {
@@ -33,6 +38,7 @@ function mostrar(ruta = '/acceso') {
             <Route path="/acceso" element={<p>Pantalla del escáner</p>} />
             <Route path="/acceso/manual" element={<p>Pantalla del registro manual</p>} />
             <Route path="/acceso/historial" element={<p>Pantalla del historial</p>} />
+            <Route path="/acceso/sincronizacion" element={<p>Pantalla de sincronización</p>} />
           </Route>
         </Routes>
       </AuthProvider>
@@ -96,47 +102,58 @@ describe('Marco de la app del guardia (24.5 y 26.1)', () => {
     expect(screen.getByText('Sincronizando 1 ingreso pendiente…')).toBeTruthy();
   });
 
-  it('la barra inferior marca la pantalla actual y lleva al registro manual', () => {
-    mostrar();
-    const escaner = screen.getByRole('link', { name: 'Escáner' });
-    expect(escaner.getAttribute('aria-current')).toBe('page');
-
-    fireEvent.click(screen.getByRole('link', { name: 'Registro manual' }));
-
-    expect(screen.getByText('Pantalla del registro manual')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Registro manual' }).getAttribute('aria-current')).toBe('page');
-  });
-
-  it('la barra inferior tiene Historial, Escáner y Registro manual, y lleva al historial', () => {
+  it('la barra inferior tiene las cinco opciones del documento, cada una con ícono y texto (26.4)', () => {
     mostrar();
     const nav = screen.getByRole('navigation', { name: 'Navegación de la app del guardia' });
-    const textos = Array.from(nav.querySelectorAll('a')).map((enlace) => enlace.textContent);
-    expect(textos).toEqual(['Historial', 'Escáner', 'Registro manual']);
+    const opciones = within(nav).getAllByRole('listitem');
 
-    fireEvent.click(screen.getByRole('link', { name: 'Historial' }));
-
-    expect(screen.getByText('Pantalla del historial')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Historial' }).getAttribute('aria-current')).toBe('page');
+    expect(opciones.map((opcion) => opcion.textContent)).toEqual([
+      'Historial',
+      'Registro manual',
+      'Escáner',
+      'Sincronización',
+      'Cerrar sesión',
+    ]);
+    for (const opcion of opciones) {
+      expect(opcion.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    }
+    // Las cuatro pantallas son enlaces; cerrar sesión es una acción, así que es un botón
+    expect(within(nav).getAllByRole('link')).toHaveLength(4);
+    expect(within(nav).getByRole('button', { name: 'Cerrar sesión' })).toBeTruthy();
   });
 
-  it('el menú muestra el estado de sincronización y permite cerrar sesión', async () => {
-    vi.mocked(dbService.contarIngresosPendientes).mockResolvedValue(2);
+  it.each([
+    ['Registro manual', 'Pantalla del registro manual'],
+    ['Historial', 'Pantalla del historial'],
+    ['Sincronización', 'Pantalla de sincronización'],
+    ['Escáner', 'Pantalla del escáner'],
+  ])('al tocar "%s" abre su pantalla y solo esa opción queda con aria-current="page" (26.4)', (opcion, pantalla) => {
+    mostrar(opcion === 'Escáner' ? '/acceso/historial' : '/acceso');
+
+    fireEvent.click(screen.getByRole('link', { name: opcion }));
+
+    expect(screen.getByText(pantalla)).toBeTruthy();
+    expect(screen.getByRole('link', { name: opcion }).getAttribute('aria-current')).toBe('page');
+    const marcadas = screen.getAllByRole('link').filter((enlace) => enlace.getAttribute('aria-current') === 'page');
+    expect(marcadas).toHaveLength(1);
+  });
+
+  it('el título de la barra superior sigue a la pantalla actual', () => {
+    mostrar('/acceso/sincronizacion');
+    expect(screen.getByRole('banner').textContent).toContain('Sincronización');
+  });
+
+  it('"Cerrar sesión" está en la barra inferior y ya no hay menú en la barra superior (26.4)', () => {
     mostrar();
+    expect(screen.queryByRole('button', { name: 'Abrir menú' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Abrir menú' }));
-
-    // El texto aparece en la barra superior y en el menú
-    expect(await screen.findAllByText('2 ingresos pendientes')).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: /cerrar sesión/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
 
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
   });
 
-  it('sin pendientes, el menú dice "Todo sincronizado"', async () => {
-    mostrar();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Abrir menú' }));
-
-    expect(await screen.findAllByText('Todo sincronizado')).toHaveLength(2);
+  it('arranca la sincronización de fondo, que ya no depende de estar en el escáner (26.4)', () => {
+    mostrar('/acceso/historial');
+    expect(syncService.iniciarBackgroundSync).toHaveBeenCalledTimes(1);
   });
 });

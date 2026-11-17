@@ -4,7 +4,7 @@ import 'fake-indexeddb/auto';
 
 import type { ReactElement } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import { dbService } from '../services/dbService';
@@ -12,7 +12,7 @@ import type { IJwtPayload } from '../types/security';
 import { verifyQRToken } from '../utils/security';
 import ControlAcceso from './ControlAcceso';
 
-// La pantalla usa el router para volver al escáner después del registro manual
+// La pantalla vive dentro del router de la app
 const renderizar = (ui: ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
 // La sincronización de fondo y la cámara no son lo que se prueba acá
@@ -222,7 +222,7 @@ describe('ControlAcceso — rechazo offline de reservas canceladas (Issue 20.4)'
   });
 });
 
-describe('ControlAcceso — registro manual desde la barra inferior (24.5)', () => {
+describe('ControlAcceso — solo el escáner (26.4)', () => {
   beforeEach(async () => {
     await db.configuracion.clear();
     vi.stubGlobal('fetch', sinRed());
@@ -236,54 +236,11 @@ describe('ControlAcceso — registro manual desde la barra inferior (24.5)', () 
     await db.configuracion.clear();
   });
 
-  const mostrarEnRutas = (inicial: string) =>
-    render(
-      <MemoryRouter initialEntries={[inicial]}>
-        <Routes>
-          <Route path="/acceso" element={<ControlAcceso />} />
-          <Route path="/acceso/manual" element={<ControlAcceso modo="manual" />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-  it('en /acceso/manual abre directo el formulario', async () => {
-    mostrarEnRutas('/acceso/manual');
-
-    expect(await screen.findByRole('heading', { name: 'Registro Manual de Ingreso' })).toBeTruthy();
-    expect(screen.getByLabelText(/DNI \/ Pasaporte/)).toBeTruthy();
-  });
-
-  it('"Cancelar" vuelve al escáner', async () => {
-    mostrarEnRutas('/acceso/manual');
-    await screen.findByRole('heading', { name: 'Registro Manual de Ingreso' });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+  it('muestra el escáner, sin el formulario manual ni un botón para abrirlo', async () => {
+    renderizar(<ControlAcceso />);
 
     expect(await screen.findByRole('button', { name: /Escanear QR|CAMPING LLENO/ })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Registro Manual de Ingreso' })).toBeNull();
-  });
-
-  it('el registro manual ya no tiene un botón propio en el escáner: se llega por la barra inferior', async () => {
-    mostrarEnRutas('/acceso');
-
-    await screen.findByRole('button', { name: /Escanear QR|CAMPING LLENO/ });
+    expect(screen.queryByLabelText(/DNI \/ Pasaporte/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Ingreso Manual/ })).toBeNull();
-  });
-
-  it('con el camping lleno no deja guardar un ingreso manual', async () => {
-    await dbService.guardarCapacidadMaxima(2);
-    await dbService.guardarConfiguracion('ocupacion_actual', '2');
-
-    mostrarEnRutas('/acceso/manual');
-
-    expect(await screen.findByText(/CAMPING LLENO: no se pueden registrar más ingresos/)).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Guardar Ingreso' }) as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('en /acceso muestra el escáner, sin el formulario', async () => {
-    mostrarEnRutas('/acceso');
-
-    expect(await screen.findByRole('button', { name: /Escanear QR|CAMPING LLENO/ })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Registro Manual de Ingreso' })).toBeNull();
   });
 });

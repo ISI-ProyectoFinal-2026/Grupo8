@@ -139,7 +139,7 @@ describe('dbService — capacidad máxima (Issue 16.5)', () => {
   it('sin capacidad descargada no se frena el ingreso por cupo', async () => {
     await expect(
       dbService.registrarIngresoManual('30111222', 'Grupo Grande', 999, 'Espontaneo')
-    ).resolves.toBeUndefined();
+    ).resolves.toMatch(/^manual-/);
   });
 
   it('con capacidad conocida, un grupo que no entra se rechaza', async () => {
@@ -186,7 +186,9 @@ describe('dbService — Historial del dispositivo (26.2)', () => {
   });
 
   it('un ingreso manual entra como "MANUAL", sin reserva y sin los datos del visitante', async () => {
-    await dbService.registrarIngresoManual('30111222', 'Juan Perez', 1, 'Espontaneo', 1500);
+    const idLocal = await dbService.registrarIngresoManual('30111222', 'Juan Perez', 1, 'Espontaneo', 1500);
+    // Devuelve el jti: es el "ID local" que muestra la confirmación (26.4)
+    expect((await db.historial.toArray())[0].jti).toBe(idLocal);
 
     const [fila] = await db.historial.toArray();
     expect(fila).toMatchObject({ tipo: 'MANUAL', reserva_id: null, cantidad_personas: 2, estado: 'pendiente' });
