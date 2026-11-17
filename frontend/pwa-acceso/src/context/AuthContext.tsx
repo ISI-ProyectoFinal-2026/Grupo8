@@ -27,6 +27,13 @@ interface AuthContextValue {
   /** Guarda el token y abre la sesión. Devuelve false si el token no es utilizable. */
   iniciarSesion: (token: string) => boolean;
   cerrarSesion: () => void;
+  /** Motivo por el que se cerró la sesión sola (por ejemplo, el aviso de syncService). Se borra al iniciar sesión. */
+  avisoSesion: string | null;
+}
+
+/** Lo que puede acompañar a AUTH_EXPIRED_EVENT. Sin detalle, la sesión se cierra sin aviso. */
+export interface DetalleSesionVencida {
+  mensaje?: string;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -63,6 +70,17 @@ function sesionDesdeToken(token: string | null, tolerarVencido = false): Sesion 
   }
 }
 
+/** El token ya pasó su `exp`. Al guardia se le conserva la sesión sin red, pero el servidor lo va a rechazar. */
+export function tokenVencido(token: string | null): boolean {
+  if (!token) return false;
+  try {
+    const { exp } = decodeJwt(token);
+    return typeof exp === 'number' && exp * 1000 <= Date.now();
+  } catch {
+    return false;
+  }
+}
+
 /** Rol que trae el token, o null si no es un token utilizable. No abre ninguna sesión. */
 export function rolDeToken(token: string): Rol | null {
   return sesionDesdeToken(token)?.rol ?? null;
@@ -86,10 +104,12 @@ function leerSesionGuardada(): Sesion | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [sesion, setSesion] = useState<Sesion | null>(leerSesionGuardada);
+  const [avisoSesion, setAvisoSesion] = useState<string | null>(null);
 
   const cerrarSesion = useCallback(() => {
     borrarToken();
     setSesion(null);
+    setAvisoSesion(null);
   }, []);
 
   const iniciarSesion = useCallback((token: string) => {
@@ -101,13 +121,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     guardarToken(token);
     setSesion(nueva);
+    setAvisoSesion(null);
     return true;
   }, []);
 
   useEffect(() => {
-    window.addEventListener(AUTH_EXPIRED_EVENT, cerrarSesion);
-    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, cerrarSesion);
-  }, [cerrarSesion]);
+    // Si el evento trae un mensaje, el login lo muestra para que se entienda por qué se cerró
+    const alVencer = (evento: Event) => {
+      const { mensaje } = (evento as CustomEvent<DetalleSesionVencida | null>).detail ?? {};
+      borrarToken();
+      setSesion(null);
+      setAvisoSesion(typeof mensaje === 'string' ? mensaje : null);
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, alVencer);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, alVencer);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -116,8 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       estaAutenticado: sesion !== null,
       iniciarSesion,
       cerrarSesion,
+      avisoSesion,
     }),
-    [sesion, iniciarSesion, cerrarSesion]
+    [sesion, iniciarSesion, cerrarSesion, avisoSesion]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

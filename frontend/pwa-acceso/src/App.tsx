@@ -12,6 +12,7 @@ import ControlAcceso from "./pages/ControlAcceso";
 import Disponibilidad from "./pages/Disponibilidad";
 import Home from "./pages/Home";
 import HistorialAcceso from "./pages/HistorialAcceso";
+import EstadoSincronizacion from "./pages/EstadoSincronizacion";
 import Login from "./pages/Login";
 import LoginAcceso from "./pages/LoginAcceso";
 import MisReservas from "./pages/MisReservas";
@@ -24,7 +25,6 @@ import PagarReserva from "./pages/PagarReserva";
 import { syncService } from "./services/syncService";
 import { LOGIN_POR_ROL } from "./lib/auth";
 import { useEffect } from "react";
-import { TituloDePagina } from "./components/TituloDePagina";
 
 function App() {
 
@@ -37,8 +37,6 @@ function App() {
     <BrowserRouter>
     {/* La sesión (token y rol) queda disponible para todo el árbol de rutas */}
     <AuthProvider>
-      {/* Título de la pestaña según la pantalla (accesibilidad, 27.1) */}
-      <TituloDePagina />
       <Routes>
         {/* Panel de administración: es una app aparte, sin el Header ni el Footer de la web.
             Tiene su propio login en /admin/login y su propio manifest. Está protegido para ADMIN
@@ -53,8 +51,10 @@ function App() {
             <Route path="/acceso" element={<ControlAcceso />} />
             {/* Registro manual desde la barra inferior. La 26.4 lo pasa a su propia pantalla */}
             <Route path="/acceso/manual" element={<ControlAcceso modo="manual" />} />
-            {/* Pantalla vacía por ahora: la 26.2 le carga los últimos ingresos del dispositivo */}
+            {/* Últimos ingresos del dispositivo (26.2) */}
             <Route path="/acceso/historial" element={<HistorialAcceso />} />
+            {/* Por ahora se entra por URL: la 26.4 la suma a la barra inferior */}
+            <Route path="/acceso/sincronizacion" element={<EstadoSincronizacion />} />
           </Route>
         </Route>
 
