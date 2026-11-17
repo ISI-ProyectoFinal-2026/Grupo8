@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Derecho de arrepentimiento (art. 34 Ley 24.240): días corridos desde que se hizo la reserva en los que
     # se puede cancelar con devolución total, hasta el día anterior al ingreso, sin importar las reglas del camping
     ARREPENTIMIENTO_DIAS: int = 10
+    # Firma de los enlaces del botón de arrepentimiento (uno por reserva, llegan por correo) y su vencimiento
+    ARREPENTIMIENTO_SECRET_KEY: str
+    ARREPENTIMIENTO_TOKEN_MINUTOS: int = 60
 
     # --- Tarifas ---
     PRECIO_BASE_POR_PERSONA: float = 5000.0

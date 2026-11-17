@@ -47,9 +47,9 @@ Agregar a `contratos_sprint6.md` (o a un `contratos_sprint7.md`):
    ```json
    { "mensaje": "Si hay reservas con ese email, te enviamos un correo con un enlace para cada una." }
    ```
-   `GET /arrepentimiento/condiciones?token=...` → igual que `GET /reservas/{id}/cancelacion`, más `"arrepentimiento": true | false`. Token inválido o vencido → `401` con `detail`.
+   `GET /arrepentimiento/condiciones?token=...` → igual que `GET /reservas/{id}/cancelacion`, más `"arrepentimiento": true | false`. Token inválido o vencido → `401` con `detail`: vencido, "El enlace venció. Pedí uno nuevo desde el botón de arrepentimiento."; alterado o de otra reserva, "El enlace no es válido. Pedí uno nuevo desde el botón de arrepentimiento." (implementado en la 25.2).
 
-   `POST /arrepentimiento/confirmar` con `{ "token": "..." }` → igual que `POST /reservas/{id}/cancelar`, más `"codigo_gestion"`.
+   `POST /arrepentimiento/confirmar` con `{ "token": "..." }` → igual que `POST /reservas/{id}/cancelar`, más `"codigo_gestion"` (el id de la reserva). Mismos `401` que arriba; si no se puede cancelar (fuera de plazo, ya cancelada porque el enlace se usó dos veces, etc.) → `422` con el mismo `detail` que Mis reservas.
 
    `GET /api/v1/admin/ingresos?desde=&hasta=&skip=&limit=` (ADMIN) →
    ```json

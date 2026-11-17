@@ -70,5 +70,22 @@ class EmailService:
         except Exception as e:
             logger.error(f"Error crítico en hilo secundario al enviar correo de cancelación: {str(e)}")
 
+    @staticmethod
+    def enviar_enlaces_arrepentimiento_sync(destinatario: str, datos: dict):
+        """Botón de arrepentimiento: un enlace por reserva. datos lleva reservas (lista con reserva_id,
+        fechas, personas, monto y enlace) y minutos de validez de los enlaces."""
+        try:
+            template = template_env.get_template("arrepentimiento_enlaces.html")
+            params: resend.Emails.SendParams = {
+                "from": "Qamp Accesos <onboarding@resend.dev>",
+                "to": [destinatario],
+                "subject": "Botón de arrepentimiento: cancelá tu reserva en Qamp",
+                "html": template.render(**datos),
+            }
+            email = resend.Emails.send(params)
+            logger.info(f"Correo de arrepentimiento despachado con éxito. ID: {email['id']}")
+        except Exception as e:
+            logger.error(f"Error crítico en hilo secundario al enviar correo de arrepentimiento: {str(e)}")
+
 
 email_service = EmailService()

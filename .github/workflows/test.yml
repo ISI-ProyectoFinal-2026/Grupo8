@@ -18,6 +18,7 @@ jobs:
     # se realizan pagos ni se envían correos reales. Una única definición para todos los pasos.
     env:
       AUTH_SECRET_KEY: "clave_falsa_para_tests"
+      ARREPENTIMIENTO_SECRET_KEY: "clave_falsa_arrepentimiento_para_tests"
       MERCADOPAGO_ACCESS_TOKEN: "test_token"
       MERCADOPAGO_PUBLIC_KEY: "test_key"
       RESEND_API_KEY: "test_resend_key"
