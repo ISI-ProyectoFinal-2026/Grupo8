@@ -23,6 +23,8 @@ import PagoExito from "./pages/PagoExito";
 import PagoRechazado from "./pages/PagoRechazado";
 import PagoPendiente from "./pages/PagoPendiente";
 import PagarReserva from "./pages/PagarReserva";
+import Arrepentimiento from "./pages/Arrepentimiento";
+import CancelarReserva from "./pages/CancelarReserva";
 import { syncService } from "./services/syncService";
 import { LOGIN_POR_ROL } from "./lib/auth";
 import { useEffect } from "react";
@@ -76,6 +78,9 @@ function App() {
           <Route path="/pago/exito" element={<PagoExito />} />
           <Route path="/pago/rechazado" element={<PagoRechazado />} />
           <Route path="/pago/pendiente" element={<PagoPendiente />} />
+          {/* Botón de arrepentimiento (25.3): sin sesión, como exige la Disposición 954/2025 */}
+          <Route path="/arrepentimiento" element={<Arrepentimiento />} />
+          <Route path="/cancelar-reserva" element={<CancelarReserva />} />
 
           {/* Solo para socios con sesión*/}
           <Route element={<RutaProtegida roles={["CLIENTE"]} />}>

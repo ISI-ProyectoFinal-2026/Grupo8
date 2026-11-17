@@ -4,10 +4,14 @@ import { PNG } from 'pngjs';
 import { URL_SERVICIOS_FALSOS } from '../entorno';
 import type { CorreoFalso } from '../servicios-falsos';
 
-/** Espera el correo de confirmación que el backend mandó (a Resend falso) y devuelve el PNG del QR. */
+/**
+ * Espera el correo de confirmación que el backend mandó (a Resend falso) y devuelve el PNG del QR.
+ * Con `reservaId` toma el correo de esa reserva: hace falta cuando el email tiene varias (25.3).
+ */
 export async function esperarQrDelCorreo(
   request: APIRequestContext,
-  email: string
+  email: string,
+  reservaId?: string
 ): Promise<Buffer> {
   let correo: CorreoFalso | undefined;
   // El correo sale en segundo plano (BackgroundTasks) después de responder al webhook
@@ -19,8 +23,10 @@ export async function esperarQrDelCorreo(
           { params: { para: email } }
         );
         const correos = (await respuesta.json()) as CorreoFalso[];
-        correo = correos.find((c) =>
-          c.attachments?.some((a) => a.filename.endsWith('.png'))
+        correo = correos.find(
+          (c) =>
+            c.attachments?.some((a) => a.filename.endsWith('.png')) &&
+            (!reservaId || c.html.includes(reservaId))
         );
         return Boolean(correo);
       },

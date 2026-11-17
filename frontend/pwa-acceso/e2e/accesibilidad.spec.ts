@@ -167,7 +167,6 @@ const PANTALLAS: Pantalla[] = [
   {
     nombre: 'Botón de arrepentimiento',
     titulo: 'Botón de arrepentimiento | Qamp',
-    pendiente: '25.3',
     abrir: async (page) => {
       await page.goto('/arrepentimiento');
       await expect(
