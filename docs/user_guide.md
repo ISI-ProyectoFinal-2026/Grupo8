@@ -68,9 +68,10 @@ En esta carga inicial, la aplicación descargará en la base de datos local del 
 
 Para moverse dentro de la app:
 
-* **Barra inferior:** Historial, Escáner y Registro manual.
-* **Barra superior:** el título de la pantalla y el indicador "Online" u "Offline".
-* **Menú ☰:** cuántos ingresos faltan sincronizar y el botón "Cerrar sesión".
+* **Barra inferior:** Historial, Registro manual, Escáner, Sincronización y Cerrar sesión. La opción de la pantalla actual queda resaltada.
+* **Barra superior:** el título de la pantalla, el indicador "Online" u "Offline" y cuántos ingresos faltan sincronizar ("Todo sincronizado" cuando no queda ninguno).
+
+Todas las pantallas funcionan sin conexión, también si se recarga la app.
 
 ### 2.3. Escaneo y Validación (Modo Offline)
 
@@ -82,7 +83,7 @@ Si el código es válido, se aprueba el acceso mostrando una pantalla verde; de 
 ### 2.4. Ingresos Manuales y Control de Aforo
 
 La PWA incluye un tablero que muestra en tiempo real cuántas personas han ingresado.
-Desde "Registro manual", en la barra inferior, el guardia registra ingresos espontáneos (personas sin reserva previa) o gestionar contingencias.
+Desde "Registro manual", en la barra inferior, el guardia registra ingresos espontáneos (personas sin reserva previa) o gestiona contingencias. Al guardar se muestra "Ingreso registrado" con el ID local del ingreso; "Aceptar" vuelve al escáner.
 El sistema evalúa la capacidad máxima localmente y, si el camping se llena, desactiva automáticamente el botón de escaneo para evitar la sobreventa de lugares.
 
 ### 2.5. Sincronización Automática
@@ -91,9 +92,13 @@ Cada ingreso validado sin internet se guarda de manera segura en el almacenamien
 Tan pronto como el teléfono recupere la señal de internet, la aplicación enviará automáticamente todos los registros pendientes al servidor en un solo paquete de datos.
 El guardia puede observar este proceso a través de indicadores visuales en la interfaz que cambian de "Sincronizando" a "Datos Actualizados", sin que esto interrumpa su capacidad para seguir escaneando.
 
+* **Historial:** los últimos 50 ingresos de ese celular, del más nuevo al más viejo, con reserva (o "Ingreso manual"), hora, personas y estado: "Pendiente" o "Sincronizado".
+* **Sincronización:** conexión, hora de la última sincronización, pendientes y el botón "Sincronizar ahora". Sin conexión o sin pendientes el botón no se puede usar, y la pantalla dice por qué.
+* **Sesión vencida:** si al sincronizar la sesión ya no es válida, la app vuelve al inicio de sesión con el aviso "Iniciá sesión de nuevo para sincronizar". Los ingresos siguen guardados en el celular y se envían después de entrar.
+
 ## 3. Panel de Administración
 
-El administrador accede al panel desde `/admin/login`. Ese inicio de sesión es solo para administradores: con un usuario de otro rol se muestra "Acceso denegado". El menú lateral reúne las secciones de gestión: Inicio, Gestión de reservas, Socios, Descuentos, Incidentes, Egresos, Alertas y Tipos de reserva; Configuración queda al final, encima de "Cerrar sesión".
+El administrador accede al panel desde `/admin/login`. Ese inicio de sesión es solo para administradores: con un usuario de otro rol se muestra "Acceso denegado". El menú lateral reúne las secciones de gestión: Inicio, Gestión de reservas, Socios, Descuentos, Historial de ingresos, Egresos, Alertas y Tipos de reserva; Configuración queda al final, encima de "Cerrar sesión".
 
 El panel se puede instalar como una app aparte ("Qamp Admin"): con el panel abierto, desde el ícono de instalación de la barra de direcciones o el menú del navegador. Se abre directamente en el panel, separada de la app del guardia.
 
@@ -103,6 +108,8 @@ La pantalla de Inicio muestra cuántas personas hay dentro del camping sobre la 
 La barra cambia de color según el nivel: verde (ocupación normal, menos del 70 %), amarillo (alta, desde el 70 %) y rojo (crítica, desde el 90 %).
 El tramo rayado al final de la barra indica el buffer offline: los lugares que no se venden online y quedan para los ingresos en la puerta.
 El monitor se actualiza solo cada 30 segundos. Los ingresos que los guardias registran sin conexión se suman recién cuando sincronizan, por lo que el valor puede ir levemente atrasado.
+
+Arriba del monitor, un aviso indica si hay incidentes de acceso sin resolver (QR clonados), con un acceso directo a "Alertas".
 
 Al lado del monitor se muestran las **personas esperadas**: cuántas reservas pagadas tienen estadía hoy y todavía no llegaron, y cuántas personas suman. Una reserva deja de contarse en cuanto el guardia escanea su QR. Estas personas no se suman a la ocupación hasta que entran.
 
@@ -141,3 +148,9 @@ La sección "Socios" muestra el padrón con el estado de cada socio: Vigente, Ve
 Si dos guardias registraron el mismo QR desde celulares distintos, la reserva queda en alerta y aparece en "Alertas" con el titular y cuándo se detectó. Las dos personas ya entraron: el sistema no expulsa a nadie, solo avisa.
 
 Después de revisar el caso, el administrador aprieta "Resolver incidente" (puede dejar una nota). La reserva vuelve al estado que tenía, o queda confirmada si el pago entró mientras estaba en alerta, y queda registrado quién la resolvió y cuándo.
+
+### 3.7. Historial de Ingresos
+
+La sección "Historial de ingresos" lista los ingresos al camping de todos los guardias, los más nuevos primero, de a 20 por página: hora de escaneo (de Buenos Aires), reserva o "Manual", personas, socio o visitante, y tipo de ingreso (web o manual). Muestra hoy por defecto; con "Desde" y "Hasta" se elige un día o un período de hasta 92 días.
+
+Los ingresos que un guardia registró sin conexión aparecen recién cuando su celular se sincroniza. Los intentos rechazados por QR clonado no figuran: se ven en "Alertas".

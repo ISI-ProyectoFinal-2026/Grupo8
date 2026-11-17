@@ -91,6 +91,16 @@ La PWA emplea `vitest` para ejecutar pruebas unitarias y de integración que val
 * **`src/pages/admin/AdminRoutes.test.tsx`:** el panel solo se abre con `ADMIN`.
 * **`src/services/syncService.test.ts`:** el lote viaja con el token en `Authorization`; sin sesión no se envía nada; un 401 conserva la cola, no reintenta y cierra la sesión; un 403 conserva la cola; y con un token nuevo la cola pendiente se sincroniza sin duplicar ingresos.
 
+### 2.5. PWA del Guardia e Historial de Ingresos (Issue 26)
+
+* **`src/hooks/useConexion.test.tsx`:** el contador sube al registrar ingresos y baja con `marcarComoSincronizados` sin que nadie le avise (IndexedDB en memoria); también eventos de red, `sync-status` y limpieza de listeners.
+* **`src/services/dbService.test.ts` y `syncService.test.ts`:** alta en historial, recorte a 50 sin tocar la cola (con 51 ingresos), éxito parcial, envío de un ingreso que ya salió de la lista y hora de la última sincronización.
+* **`src/db/db.migracion.test.ts`:** arma una base v3 con pendientes y montos, la abre con la v4 y comprueba que no se perdió nada.
+* **Pantallas:** `HistorialAcceso`, `EstadoSincronizacion` (botón deshabilitado con motivo, envío, sesión vencida), `RegistroManual` (confirmación con el ID local) y `LayoutAcceso` (cinco opciones y `aria-current`).
+* **`src/__tests__/rutasProtegidas.test.tsx`:** las cuatro rutas de la PWA por rol, sin conexión con el token vencido, y que `App` pone el título de la pestaña (si se pierde `<TituloDePagina />` en un merge, falla).
+* **Backend (`tests/test_admin_ingresos_api.py`):** 401/403, hoy por defecto, bordes de medianoche de Buenos Aires, paginación sin filas repetidas, tipo de cliente y que un QR clonado no aparece. Usa `db_aislada`.
+
+
 ## 3. Pruebas End-to-End (E2E) y Dispositivos Reales
 
 ### 3.1. Pruebas de Estrés y Contingencia
@@ -272,7 +282,7 @@ Abre cada pantalla como lo haría una persona (con el login que corresponda), co
 
 La prueba falla si axe encuentra problemas **graves o críticos**. Los moderados y leves no la hacen fallar, pero aparecen como anotaciones en el informe. El detalle completo de cada pantalla queda adjunto en el informe HTML (`npm run test:e2e:informe`, archivo `axe-problemas.json`).
 
-Las pantallas que todavía no están integradas (Historial de ingresos, 26.6) están marcadas con `pendiente` y Playwright las muestra como salteadas. Al integrarlas se borra esa línea.
+Una pantalla que todavía no está integrada se marca con `pendiente` y Playwright la muestra como salteada; al integrarla se borra esa línea.
 
 Desde la 27.2 la prueba también revisa Disponibilidad, Reservas con los errores a la vista, Iniciar sesión, Mi perfil, Beneficios, Acerca de y Contacto. Además, tiene tres pruebas de teclado de la web de reservas:
 
