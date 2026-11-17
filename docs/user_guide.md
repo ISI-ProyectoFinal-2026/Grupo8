@@ -28,7 +28,7 @@ La web muestra el nombre, los horarios y los datos de contacto del camping. El p
 Las secciones "Perfil" y "Mis Reservas" son exclusivas para socios. Se puede reservar sin iniciar sesión, pero esas reservas no aparecen en ningún listado personal.
 Dentro del apartado "Perfil", los usuarios pueden visualizar el estado de su cuenta, identificado con etiquetas como "Activo" o "Inactivo".
 En la sección "Mis Reservas", el sistema ofrece un historial clasificado en pestañas para reservas "Próximas", "Finalizadas" y "Canceladas".
-En las reservas "Próximas", el botón "Descargar QR" baja el mismo código QR de acceso que llegó por correo, por si el cliente no encuentra el mensaje. Por ahora las reservas no se pueden cancelar desde el historial.
+En las reservas "Próximas", el botón "Descargar QR" baja el mismo código QR de acceso que llegó por correo, por si el cliente no encuentra el mensaje. También se puede descargar apenas se paga, desde la pantalla "¡Reserva Realizada!", con o sin cuenta. Por ahora las reservas no se pueden cancelar desde el historial.
 Adicionalmente, existe una pestaña de "Pendientes" con un botón de "Verificar Pago", el cual permite auditar manualmente transacciones que hayan quedado demoradas por intermitencias de red.
 
 ## 1.4. Recepción de la Credencial de Acceso
