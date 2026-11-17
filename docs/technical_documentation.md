@@ -67,6 +67,9 @@ La base de datos relacional PostgreSQL administra las transacciones del sistema 
 * **Modelo Reserva (`models/reserva.py`):** Almacena el ID (`UUID`), una clave foránea (`user_id`), fecha y hora, cantidad de personas y el `jwt_jti` (identificador único para el código QR). Controla su avance mediante `EstadoPagoEnum` (Pendiente, Pagado, Cancelado).
 
 
+* **Modelo Pago (`models/pago.py`, Issue 17.1):** Un registro por cada pago que informa Mercado Pago, aprobado o no: `reserva_id`, `mp_payment_id` (único), estado, detalle, monto, moneda, medio de pago, fechas y `respuesta_mp` (JSONB). Si se borra la reserva, el pago se conserva con `reserva_id` en nulo.
+
+
 
 ### 2.3. Control de Versiones y Seeding
 
@@ -196,16 +199,48 @@ La integración oficial con Mercado Pago gestiona todo el ciclo financiero en `s
 
 ### 6.1. Generación de Orden y Webhooks
 
-* El método `POST /api/payments/create` envía las preferencias al SDK vinculando el UUID local mediante el parámetro `external_reference`. Define también las `back_urls` (éxito, fallo, pendiente) y la `notification_url`.
+* El método `POST /api/payments/create` envía las preferencias al SDK vinculando el UUID local mediante el parámetro `external_reference`. Define también las `back_urls` (éxito, fallo, pendiente) y la `notification_url`, que salen de `FRONTEND_URL` y `BACKEND_PUBLIC_URL` (Issue 17.4). Con un backend local la preferencia se crea sin `notification_url`, porque Mercado Pago no acepta direcciones locales.
+
+
+* **Registro de pagos (Issue 17.1):** el webhook y la reconciliación guardan cada pago en la tabla `pagos` con un único `INSERT ... ON CONFLICT DO UPDATE` sobre `mp_payment_id`: un aviso repetido actualiza la fila en lugar de crear otra. `respuesta_mp` guarda solo una lista de campos permitidos, así nunca se almacenan los datos del pagador ni de la tarjeta (`payer`, `card`, `additional_info`, `point_of_interaction`).
+
+
+* **Avisos auténticos (Issue 17.3):** el webhook valida la firma `x-signature` (HMAC-SHA256 sobre el `data.id` de la URL, el `x-request-id` y el `ts`) con `MERCADOPAGO_WEBHOOK_SECRET`, usando el validador del SDK. Si no es válida responde 401 sin consultar a Mercado Pago; sin clave configurada se rechazan todos los avisos.
 
 
 * El webhook transaccional (`POST /api/payments/webhook`) mitiga vulnerabilidades de suplantación de origen (*spoofing*) consumiendo activamente `payment().get()` antes de ejecutar el `db.commit()` que cambia el estado a `PAGADO`.
 
 
+* **Confirmación única (Issues 17.2 y 17.3):** el webhook y la reconciliación confirman por la misma función, `confirmar_pago()`. Bloquea la reserva (`SELECT ... FOR UPDATE`), compara al centavo el importe cobrado con `monto_total`, la marca como pagada y programa el correo con el QR. El correo sale solo cuando la reserva pasa a pagada: un aviso repetido o una segunda reconciliación no lo reenvían. Si el importe no coincide, la reserva no se confirma y el pago queda en `pagos` para revisarlo. Un pago rechazado deja la reserva pendiente, para poder reintentar dentro del plazo.
 
-### 6.2. Auditoría y Contingencia de Huérfanas
 
-* En caso de pérdida de webhooks (fallo de servidor o red), se implementó el endpoint contingente `GET /api/payments/reconcile/{reserva_id}`. Usa el filtro `.search()` de Mercado Pago sobre el `external_reference` para asentar cobros ignorados.
+* **Tipo del QR (Issue 17.2):** el `typ` sale de las personas de la reserva: `socio` solo si todas son socias; con algún visitante, o sin personas cargadas, `visitante`.
+
+
+### 6.2. Plazo de Pago (Issue 17.5)
+
+* Una reserva pendiente tiene `RESERVA_PENDIENTE_TTL_MINUTES` (10 minutos) para pagarse, contados desde `fecha_reserva`. `POST /reservas` devuelve el vencimiento en `vencimiento_pago`.
+
+
+* La preferencia vence a la misma hora (`expires` y `expiration_date_to`) y excluye los medios que se acreditan días después (`ticket` y `atm`: Pago Fácil y Rapipago).
+
+
+* Las pendientes vencidas pasan a `CANCELADA` al crear y al consultar reservas (`cancelar_reservas_vencidas()`), sin tarea programada, y liberan el cupo.
+
+
+* **Pago tardío:** si igual llega un pago aprobado de una reserva vencida (por ejemplo, una tarjeta que quedó en revisión), se confirma si todavía hay cupo. Si no hay cupo, se devuelve el dinero con la API de reembolsos de Mercado Pago y se avisa al titular por correo; si el reembolso falla, el correo avisa que la devolución está en proceso y hay que hacerla a mano. En todos los casos el pago queda registrado.
+
+
+* En la web, después de crear la reserva se pasa a una pantalla propia (`/reservas/pagar`) con la cuenta regresiva y el botón "Ir a pagar". La reserva pendiente se guarda en `sessionStorage`, así sobrevive a la ida y vuelta a Mercado Pago y se puede reintentar después de un rechazo.
+
+
+
+### 6.3. Auditoría y Contingencia de Huérfanas
+
+* En caso de pérdida de webhooks (fallo de servidor o red), se implementó el endpoint contingente `GET /api/payments/reconcile/{reserva_id}`. Usa el filtro `.search()` de Mercado Pago sobre el `external_reference` para asentar cobros ignorados. Solo lo puede pedir el dueño de la reserva o un ADMIN (Issue 17.3); las reservas sin cuenta solo las verifica un ADMIN.
+
+
+* `GET /api/payments/test-user` es un auxiliar de desarrollo y responde 404 con `ENVIRONMENT=production` (Issue 17.3).
 
 
 * **Retorno automático (Issue 21.1):** la preferencia incluye `auto_return: "approved"` solo cuando `FRONTEND_URL` es una dirección publicada (`usa_retorno_automatico()`), porque Mercado Pago no acepta `auto_return` con `back_urls` locales. Con el pago aprobado, Mercado Pago devuelve al cliente a `PagoExito.tsx` sin que tenga que tocar "Volver al sitio". En desarrollo local, las pantallas de resultado se prueban con ese botón.
