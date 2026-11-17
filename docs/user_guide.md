@@ -6,14 +6,16 @@ Esta guía explica cómo utilizar la plataforma Qamp desde tres perspectivas: el
 
 ### 1.1. Búsqueda de reserva
 
-El usuario puede ingresar a la plataforma y utilizar el buscador para encontrar disponibilidad.
-Para iniciar, se deben ingresar parámetros de búsqueda específicos como la fecha deseada, la cantidad de personas y el tipo de alojamiento. En caso de que se seleccione un alojamiento con estadía, se pedirá indicar también el numero de días.
-El sistema consultará los cupos en tiempo real y mostrará una pantalla de resultados indicando el éxito o fallo de la disponibilidad.
+El usuario puede ingresar a la plataforma y utilizar el buscador para armar su reserva.
+Para iniciar, se ingresan la fecha deseada, la cantidad de personas y el tipo de reserva. Los tipos y sus precios los define el administrador: cada uno indica si se cobra por persona (por ejemplo, Carpa) o por noche (por ejemplo, Cabaña), y cuántas personas admite como máximo.
+También se indica la cantidad de noches. En los tipos por persona se puede poner 0 para pasar el día; los tipos que se cobran por noche piden al menos una.
+La pantalla siguiente muestra un resumen con el tipo, el precio y, en la cabaña, el total estimado (precio × noches). La disponibilidad se confirma al reservar: si ya no hay lugar, el sistema lo avisa en ese momento.
 
 ### 1.2. Proceso de Reserva y Pago
 
 Una vez confirmada la disponibilidad, el cliente avanza al formulario de reservas.
 El sistema genera dinámicamente los campos para ingresar los datos (nombre, edad y condición) de cada persona según la cantidad de visitantes declarada.
+Si el tipo elegido se cobra por noche (por ejemplo, una cabaña), solo se piden el nombre del titular y la cantidad de personas. El total es el precio por noche multiplicado por las noches, sin descuentos por persona. Si no quedan unidades libres en alguna de las noches elegidas, la reserva no se puede hacer.
 Si un visitante se identifica como "Socio", el campo de "DNI" se vuelve obligatorio y el sistema verifica que corresponda a un socio con la cuota al día; si no es así, no se puede continuar con la reserva.
 Si quien reserva es un socio con la sesión iniciada, sus datos ya aparecen cargados.
 El correo electrónico se escribe dos veces para evitar errores, ya que es la dirección a la que llega el código QR.
@@ -141,3 +143,21 @@ La sección "Socios" muestra el padrón con el estado de cada socio: Vigente, Ve
 Si dos guardias registraron el mismo QR desde celulares distintos, la reserva queda en alerta y aparece en "Alertas" con el titular y cuándo se detectó. Las dos personas ya entraron: el sistema no expulsa a nadie, solo avisa.
 
 Después de revisar el caso, el administrador aprieta "Resolver incidente" (puede dejar una nota). La reserva vuelve al estado que tenía, o queda confirmada si el pago entró mientras estaba en alerta, y queda registrado quién la resolvió y cuándo.
+
+### 3.7. Configuración del Camping
+
+En "Configuración", el apartado "Cupo y reservas" define tres valores:
+
+* **Cupo máximo del camping:** cuántas personas pueden estar en el predio.
+* **Buffer offline:** el porcentaje del cupo que no se vende por la web y queda para los ingresos que el guardia registra en la puerta, aunque no haya internet. El formulario muestra el valor recomendado y un botón para usarlo.
+* **Máximo de personas por reserva:** no puede superar el cupo que se vende online.
+
+Debajo se ve, a medida que se escribe, cuántos lugares se venden online y cuántos quedan para la puerta. Bajar el cupo no modifica las reservas ya hechas: solo se deja de vender hasta que se libere lugar.
+
+### 3.8. Tipos de Reserva
+
+La sección "Tipos de reserva" lista todo lo que se puede reservar desde la web, incluidos los tipos desactivados, con su precio, el máximo de personas y las unidades.
+
+* **Nuevo tipo / Editar:** nombre, forma de cobro ("Por persona" o "Por unidad y por noche"), precio, máximo de personas por reserva y, en los tipos por unidad, la cantidad de unidades por noche (vacío significa sin límite). El nombre no se puede repetir.
+* **Desactivar / Activar:** un tipo desactivado deja de ofrecerse en la web, pero las reservas que ya lo usan no cambian. Los tipos no se borran.
+* Cambiar el precio de un tipo no modifica las reservas ya hechas: cada una conserva el precio que tenía al reservarse.

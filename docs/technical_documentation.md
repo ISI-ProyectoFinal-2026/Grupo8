@@ -64,7 +64,13 @@ La base de datos relacional PostgreSQL administra las transacciones del sistema 
 * **Modelo Usuario (`models/user.py`):** Utiliza UUID como identificador único principal. Incluye atributos clave como correo electrónico, hash de contraseña, DNI, indicador de membresía (`is_socio`), fecha de vencimiento de la cuota (`membresia_vence`, Issue 13.3), baja lógica (`activo`), marcas de auditoría (`created_at`, `updated_at`) y un rol de sistema basado en `RoleEnum` (Admin, Seguridad, Cliente).
 
 
-* **Modelo Reserva (`models/reserva.py`):** Almacena el ID (`UUID`), una clave foránea (`user_id`), fecha y hora, cantidad de personas y el `jwt_jti` (identificador único para el código QR). Controla su avance mediante `EstadoPagoEnum` (Pendiente, Pagado, Cancelado).
+* **Modelo Reserva (`models/reserva.py`):** Almacena el ID (`UUID`), una clave foránea (`user_id`), fecha y hora, cantidad de personas y el `jwt_jti` (identificador único para el código QR). Controla su avance mediante `EstadoPagoEnum` (Pendiente, Pagado, Cancelado). Desde la Issue 19.3 guarda también el tipo elegido (`tipo_reserva_id`) y su precio en ese momento (`precio_tipo`); las reservas anteriores los tienen en nulo.
+
+
+* **Configuración del camping (`models/configuracion.py`):** una fila por camping con `capacidad_total`, `porcentaje_buffer_offline` y `max_personas_por_reserva` (Issue 19.1), además de las reglas de cancelación (Issue 22.1). El administrador la edita desde el panel; los valores del `.env` solo se usan para crearla la primera vez.
+
+
+* **Modelo Tipo de Reserva (`models/tipo_reserva.py`, Issue 19.2):** `nombre` (único sin distinguir mayúsculas), `precio`, `forma_cobro` (`POR_PERSONA` o `POR_UNIDAD`), `max_personas`, `cantidad_unidades` (vacío = sin límite; siempre vacío en los tipos por persona) y `activo`. La migración crea Entrada general, Carpa y Cabaña.
 
 
 * **Modelo Pago (`models/pago.py`, Issue 17.1):** Un registro por cada pago que informa Mercado Pago, aprobado o no: `reserva_id`, `mp_payment_id` (único), estado, detalle, monto, moneda, medio de pago, fechas y `respuesta_mp` (JSONB). Si se borra la reserva, el pago se conserva con `reserva_id` en nulo.
@@ -94,7 +100,7 @@ El núcleo (FastAPI) está organizado de forma modular (`api/`, `core/`, `models
   * `check_availability` compara lo ocupado más el margen offline contra la capacidad total. `crear_reserva` solo invoca estos dos métodos.
 
 
-* **Tarifas (`services/pricing_service.py`):** Algoritmo de *pricing* dinámico que determina el costo final basado en la cantidad de huéspedes declarados.
+* **Tarifas (`services/pricing_service.py`):** Algoritmo de *pricing* dinámico que determina el costo final basado en la cantidad de huéspedes declarados. Con un tipo por persona, el precio base de cada persona es el precio del tipo (con los mismos descuentos); con un tipo por unidad, el total es el precio de la unidad × noches, sin descuentos (Issue 19.3).
 
 
 * **Endpoints Transaccionales (`api/reservas.py`):** Emplean Pydantic (`ReservaCreate` y `ReservaResponse`) para la serialización estricta de entrada y salida.
@@ -126,6 +132,32 @@ El núcleo (FastAPI) está organizado de forma modular (`api/`, `core/`, `models
 
 * **Usuarios dados de baja:** un JWT no se puede anular, pero el backend busca al usuario en cada petición. Si está inactivo responde 401, así que una sesión abierta deja de valer en la petición siguiente, sin lista de tokens revocados. En el login, el inactivo se rechaza después de comprobar la contraseña, con el mismo "Credenciales inválidas", para no revelar si la cuenta existe.
 
+
+
+### 3.3. Configuración del Camping y Tipos de Reserva (Issue 19)
+
+* **Configuración editable (Issue 19.1):** cupo, buffer offline y máximo de personas por reserva se leen de `configuracion_camping` y no de `settings`. Los usan `capacity_service.py`, la validación de reservas, el bootstrap de la PWA y el monitor de ocupación. Se editan con `GET` y `PUT /api/v1/admin/configuracion`.
+
+
+* **Buffer como porcentaje:** se guarda como porcentaje del cupo y se convierte a personas redondeando hacia arriba. Cupo online = capacidad − buffer en personas − reservas activas. El máximo por reserva no puede superar ese cupo online, para que una reserva con el máximo siempre se pueda vender por la web.
+
+
+* **El máximo de personas se controla en el endpoint:** los validadores de Pydantic no tienen acceso a la base, así que `POST /reservas` y `POST /reservas/cotizar` comparan la cantidad con la configuración guardada y con el máximo del tipo (`services/tipo_reserva_service.py`).
+
+
+* **Tipos de reserva (Issue 19.2):** ABM solo para `ADMIN` en `/api/v1/admin/tipos-reserva` y listado público de los activos en `/api/v1/tipos-reserva`. No se borran: se desactivan. La clave foránea desde `reservas` es `RESTRICT`, así que un tipo con reservas no se puede eliminar. El máximo de personas de un tipo no puede superar el máximo general por reserva.
+
+
+* **Precio del momento (Issue 19.3):** la reserva guarda `precio_tipo`. Si después el administrador cambia el precio del tipo, las reservas ya hechas no cambian.
+
+
+* **Unidades por noche:** `unidades_ocupadas()` en `capacity_service.py` cuenta noche por noche (una reserva del 10 al 12 ocupa las noches del 10 y del 11, y el día de egreso libera la unidad). Cuentan las mismas reservas que para la capacidad: confirmadas, finalizadas, en alerta y pendientes dentro del plazo de pago. Si en alguna noche están todas ocupadas, la reserva se rechaza con 409. Las personas de una cabaña también cuentan para la capacidad total del camping.
+
+
+* **Última unidad con pedidos simultáneos:** al reservar un tipo por unidad, la fila del tipo se bloquea (`SELECT ... FOR UPDATE`) hasta el commit. Así, dos pedidos a la vez por la última cabaña no se venden los dos: el segundo espera y después la ve ocupada.
+
+
+* **`tipo_reserva_id` sigue siendo opcional en el backend:** la web lo envía siempre, pero sin tipo la reserva funciona como antes de la Issue 19, con `PRECIO_BASE_POR_PERSONA`. Así no hubo que cambiar los tests que reservan sin tipo.
 
 
 ## 4. Sistema Offline-First y Motor Criptográfico (PWA)
@@ -345,7 +377,16 @@ Las pantallas del cliente, la PWA del guardia y el panel del administrador convi
 * **Personas:** Se piden los datos de cada persona y se envía la lista completa al crear la reserva.
 
 
-* **Total:** Sale siempre de `POST /reservas/cotizar`; el frontend no tiene precios ni descuentos propios.
+* **Tipo de reserva (Issue 19.4):** `Home.tsx` muestra los tipos activos de `GET /api/v1/tipos-reserva`, con estados de carga, error y vacío; ningún tipo ni precio está escrito en el frontend (`lib/tiposReserva.ts`). El tipo elegido viaja completo a las pantallas siguientes; si se recarga la página, se vuelve al inicio. El máximo de personas sale del tipo elegido. Se piden noches para todos los tipos: 0 significa pasar el día en los tipos por persona, y los tipos por unidad exigen al menos una noche.
+
+
+* **Reserva por unidad:** con un tipo por unidad (cabaña), el formulario pide solo el titular y la cantidad de personas, sin la lista de personas, y el precio se muestra como precio × noches.
+
+
+* **Disponibilidad:** no hay un endpoint que consulte cupos antes de reservar, así que `Disponibilidad.tsx` es un resumen del tipo, su precio y, en la cabaña, el total estimado. Aclara que la disponibilidad se confirma al reservar: si no hay lugar, el backend lo rechaza al crear la reserva.
+
+
+* **Total:** Sale siempre de `POST /reservas/cotizar`; el frontend no tiene precios ni descuentos propios. Si la cotización falla por una regla del negocio (por ejemplo, más personas que el máximo del tipo), se muestra el motivo que devuelve el backend.
 
 
 * **Socios:** El DNI de cada persona marcada como socio se verifica con `GET /socios/validar/{dni}`. Si el DNI no existe, no es de un socio o tiene la cuota vencida, la reserva se bloquea. Si quien reserva es un socio con sesión, sus datos aparecen precargados.

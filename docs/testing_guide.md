@@ -29,7 +29,7 @@ El backend implementa una suite de pruebas automatizadas utilizando `pytest` jun
 * El script `seed.py` permite inicializar un estado base coherente borrando los registros en orden relacional inverso (primero reservas, luego usuarios) y generando usuarios de prueba y 15 registros de reservas para facilitar pruebas de desarrollo inmediatas.
 
 ### 1.4. Validación de Datos y Formularios (Schemas)
-* Restricciones de Negocio: El archivo test_validacion_reservas.py evalúa de forma unitaria y a nivel API los límites definidos en la configuración (MAX_PERSONAS_POR_RESERVA y MAX_NOCHES_POR_RESERVA), confirmando que la API rechace datos inválidos independientemente del frontend.
+* Restricciones de Negocio: El archivo test_validacion_reservas.py evalúa de forma unitaria y a nivel API los límites de la reserva: el máximo de personas guardado en la configuración del camping (Issue 19.1) y `MAX_NOCHES_POR_RESERVA`, confirmando que la API rechace datos inválidos independientemente del frontend.
 
 * Formatos y Saneamiento: Se verifica la correcta validación del EmailStr (mediante email-validator), la restricción de caracteres para el titular (solo letras, espacios, puntos, apóstrofes y guiones) y que la reserva ya no pida teléfono (se ignora si un cliente anterior lo envía), asegurando además que los espacios en blanco sean recortados.
 
@@ -52,6 +52,13 @@ El backend implementa una suite de pruebas automatizadas utilizando `pytest` jun
 * **Membresía y socios (`test_socios.py`, `test_admin_socios.py`):** los cuatro resultados de `GET /socios/validar/{dni}`, el borde del vencimiento con fecha fija (el día del vencimiento todavía vale), y el alta de socios (hash de la contraseña, 409 por DNI o correo repetido, 422 por datos inválidos y 401/403 según el rol). Un test verifica que Alembic tenga un único *head*.
 * **Cupo (`test_capacity_service.py`):** casos límite de `lugares_ocupados` con una "hora actual" fija: canceladas, pendientes dentro y fuera del plazo, el límite exacto del plazo y un segundo después, plazo tomado de la configuración y solapamiento de fechas. `test_cupo_depende_del_estado_de_reserva_y_no_del_pago` lo comprueba por la API.
 * **Fixtures:** los módulos que no prueban la autenticación usan `como_admin` o `como_guardia` (`conftest.py`), que reemplazan al usuario de la sesión solo durante el test y lo restauran al terminar.
+
+### 1.7. Configuración y Tipos de Reserva (Issue 19)
+
+* **Configuración (`test_configuracion_camping.py`):** lectura y edición de `GET` y `PUT /api/v1/admin/configuracion`, valores límite e inválidos (cupo, buffer entre 0 % y 100 %, máximo por reserva que no supere el cupo online), y 401/403 según el rol. También comprueba que la cotización y el monitor de ocupación usan los valores guardados; el bootstrap de la PWA se prueba en `test_sincronizacion_api.py`.
+* **Tipos de reserva (`test_tipos_reserva.py`):** alta, edición parcial, desactivación, nombre repetido sin distinguir mayúsculas (409), coherencia entre forma de cobro y unidades, listado público solo con los activos, permisos, que no exista el borrado y que la base impida borrar un tipo con reservas.
+* **Reserva según el tipo (`test_reserva_por_tipo.py`):** cada forma de cobro (por persona con descuentos, por unidad como precio × noches), precio del momento, máximo del tipo y máximo general, mínimo de una noche, unidades agotadas contadas noche por noche (el día de egreso libera la unidad; las canceladas y las pendientes vencidas no ocupan) y que las personas de una cabaña cuenten para la capacidad total.
+* **Fixtures (`conftest.py`):** `configuracion_del_env` (automática, para toda la corrida) deja la configuración con los valores del `.env`, aunque se hayan cambiado desde el panel en la base local, y los restaura al terminar. `configurar_camping` cambia la configuración solo durante un test.
 
 ## 2. Pruebas de Frontend (`vitest`)
 
@@ -90,6 +97,14 @@ La PWA emplea `vitest` para ejecutar pruebas unitarias y de integración que val
 * **`src/__tests__/rutasProtegidas.test.tsx`:** sin sesión, `/acceso` y `/admin` redirigen al login; con un rol incorrecto muestran "Acceso denegado" (y el enlace "Ir a mi pantalla" lleva a la del propio rol); con el rol correcto se entra. Cubre además el token vencido del guardia: con conexión se descarta y se pide el login, sin conexión la sesión se conserva, y para cualquier otro rol no se conserva.
 * **`src/pages/admin/AdminRoutes.test.tsx`:** el panel solo se abre con `ADMIN`.
 * **`src/services/syncService.test.ts`:** el lote viaja con el token en `Authorization`; sin sesión no se envía nada; un 401 conserva la cola, no reintenta y cierra la sesión; un 403 conserva la cola; y con un token nuevo la cola pendiente se sincroniza sin duplicar ingresos.
+
+### 2.5. Tipos de Reserva en la Web y en el Panel (Issue 19)
+
+* **`src/pages/Home.test.tsx`:** estados de carga, error con "Reintentar" y vacío; los tipos y precios vienen del backend (los tests usan nombres y precios que no existen en el frontend); 0 noches por persona y mínimo de una por unidad; máximo de personas del tipo.
+* **`src/pages/Disponibilidad.test.tsx`:** resumen con el precio del tipo, total estimado de la cabaña y vuelta al inicio si faltan los datos.
+* **`src/pages/ReservasPorUnidad.test.tsx`:** con un tipo por unidad se pide titular y cantidad, sin lista de personas; se cotiza y se reserva con esos datos, y se muestra el motivo del backend cuando no se puede cotizar.
+* **`src/pages/admin/Configuracion.test.tsx`:** valores guardados, buffer recomendado, lugares online y para la puerta, validaciones y errores del backend.
+* **`src/pages/admin/TiposReserva.test.tsx`:** carga, error y vacío, validaciones del formulario, errores del backend (409 y 422), edición y activar o desactivar sin borrado.
 
 ## 3. Pruebas End-to-End (E2E) y Dispositivos Reales
 
