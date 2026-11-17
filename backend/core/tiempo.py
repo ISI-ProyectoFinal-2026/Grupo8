@@ -7,7 +7,7 @@ Regla del proyecto:
 - America/Argentina/Buenos_Aires es la zona del negocio: se usa para mostrar una hora
   y para decidir a qué día pertenece un instante, nunca para guardarlo.
 """
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 ZONA_NEGOCIO = ZoneInfo("America/Argentina/Buenos_Aires")
@@ -30,3 +30,21 @@ def a_zona_negocio(valor: datetime) -> datetime:
     if valor.utcoffset() is None:
         valor = valor.replace(tzinfo=timezone.utc)
     return valor.astimezone(ZONA_NEGOCIO)
+
+def hoy_negocio() -> date:
+    """El día de hoy en Buenos Aires (en UTC ya puede ser mañana desde las 21:00)."""
+    return ahora_utc().astimezone(ZONA_NEGOCIO).date()
+
+
+def limites_dias_negocio(desde: date, hasta: date) -> tuple[datetime, datetime]:
+    """
+    Instantes que encierran los días de Buenos Aires de `desde` a `hasta`, ambos incluidos:
+    desde las 00:00 de `desde` hasta las 00:00 del día siguiente a `hasta` (ese instante ya no entra).
+
+    Se devuelven con zona. Al compararlos con una columna timestamptz, PostgreSQL los pasa a UTC,
+    así que el corte cae justo en la medianoche argentina (03:00 UTC) y no en la de UTC.
+    El fin abierto evita perder lo que pasó en el último segundo del día (23:59:59.5).
+    """
+    inicio = datetime.combine(desde, time.min, tzinfo=ZONA_NEGOCIO)
+    fin = datetime.combine(hasta + timedelta(days=1), time.min, tzinfo=ZONA_NEGOCIO)
+    return inicio, fin

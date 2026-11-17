@@ -251,7 +251,6 @@ const PANTALLAS: Pantalla[] = [
     nombre: 'Historial de ingresos',
     actor: 'admin',
     titulo: 'Historial de ingresos | Qamp Panel',
-    pendiente: '26.6',
     abrir: async (page) => {
       await page.goto('/admin/historial-ingresos');
       await expect(

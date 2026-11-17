@@ -21,6 +21,7 @@ from api.admin_alertas import router as admin_alertas_router
 from api.egresos import router as egresos_router
 from api.ocupacion import router as ocupacion_router
 from api.admin_cobros import router as admin_cobros_router
+from api.admin_ingresos import router as admin_ingresos_router
 from api.admin_esperados import router as admin_esperados_router
 from api.admin_configuracion import router as admin_configuracion_router
 from api.tipos_reserva import admin_router as admin_tipos_reserva_router
@@ -56,6 +57,7 @@ app.include_router(admin_alertas_router)
 app.include_router(egresos_router)
 app.include_router(ocupacion_router)
 app.include_router(admin_cobros_router)
+app.include_router(admin_ingresos_router)
 app.include_router(admin_esperados_router)
 app.include_router(admin_configuracion_router)
 app.include_router(tipos_reserva_router)

@@ -1,6 +1,7 @@
 import {
   ClipboardList,
   DoorOpen,
+  History,
   Home,
   LayoutDashboard,
   Percent,
@@ -14,6 +15,7 @@ import Configuracion from './Configuracion';
 import Descuentos from './Descuentos';
 import Egresos from './Egresos';
 import GestionReservas from './GestionReservas';
+import HistorialIngresos from './HistorialIngresos';
 import Inicio from './Inicio';
 import Socios from './Socios';
 import TiposReserva from './TiposReserva';
@@ -50,6 +52,13 @@ export const adminRoutes: AdminRoute[] = [
     titulo: 'Descuentos',
     icono: Percent,
     element: <Descuentos />,
+  },
+  // Pantalla 4 del dashboard: los ingresos de todos los dispositivos (26.6)
+  {
+    path: 'historial-ingresos',
+    titulo: 'Historial de ingresos',
+    icono: History,
+    element: <HistorialIngresos />,
   },
   {
     path: 'egresos',
