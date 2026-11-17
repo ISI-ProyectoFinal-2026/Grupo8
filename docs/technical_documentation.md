@@ -20,18 +20,31 @@ El sistema está orquestado mediante un pipeline de CI/CD configurado en GitHub 
 * **Gatillos de Despliegue:** Se configuraron webhooks para ejecutar redespliegues automáticos ante integraciones exitosas en la rama `main`.
 
 
+* **Rutas de la SPA (Issue 21.1):** `frontend/pwa-acceso/vercel.json` reescribe todas las rutas a `index.html`. Sin esa regla, entrar directo a una ruta interna (por ejemplo `/pago/exito`, a donde vuelve Mercado Pago) devuelve 404 en Vercel. La dirección del backend se inyecta con `VITE_API_URL`.
+
+
 
 ### 1.2. Backend (Render)
 
-* **Entorno y Configuración:** El servidor API REST (FastAPI) está alojado en Render apuntando al directorio `backend` y forzando el entorno a Python 3.13.7 mediante variables de entorno, respetando el `Pipfile.lock`.
+* **Entorno y Configuración:** El servidor API REST (FastAPI) está alojado en Render (plan Free) apuntando al directorio `backend`, con Python 3.13 (`PYTHON_VERSION`). El build convierte el `Pipfile.lock` en `requirements.txt` con `pipenv requirements` y lo instala con pip, así se usan exactamente las versiones bloqueadas.
 
 
-* **Inicialización:** El comando de arranque es `pipenv run uvicorn main:app --host 0.0.0.0 --port 10000`, exponiendo además un endpoint de salud (`/health`).
+* **Inicialización (Issue 21.1):** El comando de arranque es `alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT`: las migraciones se aplican solas antes de cada arranque y, si una falla, el servicio no se publica. Expone además un endpoint de salud (`/health`). En el plan Free el servicio se suspende tras 15 minutos sin tráfico y tarda cerca de un minuto en volver.
 
 
-* **Secretos (Fail-Fast):** El archivo `core/config.py` usa `pydantic-settings` para abortar el arranque de FastAPI inmediatamente si faltan variables esenciales (como `POSTGRES_*` o `JWT_PRIVATE_KEY`). Todos los secretos están encriptados en el hardware virtual de Render, ignorando el `.env` en el control de versiones.
+* **Secretos (Fail-Fast):** El archivo `core/config.py` usa `pydantic-settings` para abortar el arranque de FastAPI inmediatamente si faltan variables esenciales (como `DATABASE_URL` o `JWT_PRIVATE_KEY`). Todos los secretos están encriptados en el hardware virtual de Render, ignorando el `.env` en el control de versiones.
 
 
+
+### 1.3. Base de Datos (Neon)
+
+* **Elección (Issue 21.1):** La base PostgreSQL publicada está en Neon (plan Free) y no en Render, porque la base gratuita de Render vence a los 30 días de creada y el sistema tiene que seguir disponible hasta la presentación final. La base gratuita de Neon no vence; se suspende tras unos minutos sin consultas y se reactiva sola.
+
+
+* **Conexión:** El backend recibe la cadena de conexión directa de Neon (sin `-pooler`, con `sslmode=require`) en `DATABASE_URL`, cargada como variable de entorno en Render.
+
+
+El detalle de la configuración de cada plataforma, las variables y el resultado de la prueba del pago con el sandbox está en la [Guía de Despliegue](./deployment.md).
 
 ## 2. Capa de Datos, Modelos y ORM
 
@@ -58,6 +71,9 @@ La base de datos relacional PostgreSQL administra las transacciones del sistema 
 ### 2.3. Control de Versiones y Seeding
 
 * **Migraciones:** Alembic mantiene la sincronización entre SQLAlchemy y la base de datos. La revisión automática `f30ae74360fe_initial_schema.py` tradujo los modelos ORM a instrucciones DDL, aplicables con el comando `alembic upgrade head`.
+
+
+* **Conexión de Alembic (Issue 21.1):** `alembic/env.py` usa `DATABASE_URL` cuando está definida (la misma que la app), y si no, arma la conexión local con las variables `POSTGRES_*`. Así las mismas migraciones se aplican en el contenedor local y en la base publicada.
 
 
 * **Inicialización de Datos (`seed.py`):** Este script resetea tablas relacionales de manera inversa (primero reservas, luego usuarios) y genera automáticamente un Administrador, personal de Seguridad y cinco usuarios de prueba junto con 15 registros de reservas mixtas (pasadas y futuras) para visualizar métricas.
@@ -192,7 +208,10 @@ La integración oficial con Mercado Pago gestiona todo el ciclo financiero en `s
 * En caso de pérdida de webhooks (fallo de servidor o red), se implementó el endpoint contingente `GET /api/payments/reconcile/{reserva_id}`. Usa el filtro `.search()` de Mercado Pago sobre el `external_reference` para asentar cobros ignorados.
 
 
-* En desarrollo con `localhost`, Mercado Pago desactiva intencionalmente el redireccionamiento `auto_return: "approved"`, lo cual obliga a probar las pantallas en React (`PagoExito.tsx` y `PagoRechazado.tsx`) de forma manual hasta su despliegue HTTPS.
+* **Retorno automático (Issue 21.1):** la preferencia incluye `auto_return: "approved"` solo cuando `FRONTEND_URL` es una dirección publicada (`usa_retorno_automatico()`), porque Mercado Pago no acepta `auto_return` con `back_urls` locales. Con el pago aprobado, Mercado Pago devuelve al cliente a `PagoExito.tsx` sin que tenga que tocar "Volver al sitio". En desarrollo local, las pantallas de resultado se prueban con ese botón.
+
+
+* **Avisos con formato `id` + `topic`:** además del aviso con `data.id` y `type=payment`, Mercado Pago envía avisos en el formato anterior (`topic=payment` y `topic=merchant_order`). El webhook los rechaza con 401 porque no superan la validación de la firma. No afectan al pago, que se confirma con el primer aviso.
 
 
 

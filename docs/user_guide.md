@@ -19,7 +19,7 @@ Si quien reserva es un socio con la sesión iniciada, sus datos ya aparecen carg
 El correo electrónico se escribe dos veces para evitar errores, ya que es la dirección a la que llega el código QR.
 El panel lateral muestra el subtotal, los descuentos (por ejemplo, el de socios o por edad) y el total, calculados por el sistema cada vez que cambian los datos de las personas.
 El pago se procesa de forma segura a través de la integración con Mercado Pago.
-Finalizado el proceso, el usuario será redirigido a una vista específica (éxito, rechazo o pendiente) para conocer el resultado visual de su transacción.
+Finalizado el proceso, el usuario será redirigido a una vista específica (éxito, rechazo o pendiente) para conocer el resultado visual de su transacción. Si el pago se aprueba, Mercado Pago vuelve solo a la web, en hasta 40 segundos; también se puede tocar "Volver al sitio".
 
 ### 1.3. Autogestión y Panel de Usuario
 
