@@ -28,8 +28,20 @@ La web muestra el nombre, los horarios y los datos de contacto del camping. El p
 Las secciones "Perfil" y "Mis Reservas" son exclusivas para socios. Se puede reservar sin iniciar sesión, pero esas reservas no aparecen en ningún listado personal.
 Dentro del apartado "Perfil", los usuarios pueden visualizar el estado de su cuenta, identificado con etiquetas como "Activo" o "Inactivo".
 En la sección "Mis Reservas", el sistema ofrece un historial clasificado en pestañas para reservas "Próximas", "Finalizadas" y "Canceladas".
-En las reservas "Próximas", el botón "Descargar QR" baja el mismo código QR de acceso que llegó por correo, por si el cliente no encuentra el mensaje. Por ahora las reservas no se pueden cancelar desde el historial.
+En las reservas "Próximas", el botón "Descargar QR" baja el mismo código QR de acceso que llegó por correo, por si el cliente no encuentra el mensaje. El botón "Cancelar" muestra hasta cuándo se puede cancelar y cuánto se devuelve, y pide confirmación ("¿Está seguro que desea cancelar?").
 Adicionalmente, existe una pestaña de "Pendientes" con un botón de "Verificar Pago", el cual permite auditar manualmente transacciones que hayan quedado demoradas por intermitencias de red.
+
+### 1.3.1. Botón de Arrepentimiento (cancelar sin cuenta)
+
+Cualquier persona puede cancelar una reserva sin iniciar sesión:
+
+1. En el pie de cualquier pantalla de la web, tocar "Botón de arrepentimiento".
+2. Escribir el email con el que se hizo la reserva y tocar "Enviar enlace". La pantalla siempre responde "Si hay reservas con ese email, te enviamos un correo con un enlace para cada una."
+3. En el correo hay un enlace por cada reserva pagada y próxima. Abrir el de la reserva a cancelar (por defecto vence a la hora; si vence, se pide otro).
+4. La pantalla muestra hasta cuándo se puede cancelar y cuánto se devuelve. Tocar "Confirmar cancelación".
+5. Se muestra el resultado y un código de gestión, que también llega por correo. Las demás reservas no cambian.
+
+Dentro de los 10 días corridos desde que se hizo la reserva, y hasta el día anterior al ingreso, se devuelve el total. Fuera de ese plazo rigen las condiciones de cancelación del camping. La misma regla vale para los socios que cancelan desde "Mis Reservas". El correo con el QR también trae el enlace al botón de arrepentimiento.
 
 ## 1.4. Recepción de la Credencial de Acceso
 
