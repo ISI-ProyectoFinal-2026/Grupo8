@@ -158,7 +158,7 @@ La aplicación del guardia resuelve los cuellos de botella mediante una descentr
 
 ## 5. Base de Datos Local y Tolerancia a Fallos de Red
 
-La PWA emplea IndexedDB envuelta en promesas con la librería Dexie.js (archivo `dbService.ts`), estructurada en *stores*: `configuracion`, `ingresos_pendientes` y `historial`.
+La PWA emplea IndexedDB envuelta en promesas con la librería Dexie.js (archivo `dbService.ts`), estructurada en *stores*: `configuracion`, `ingresos_pendientes`, `historial` y `blacklist`. `ingresos_pendientes` es la cola que se envía al servidor; `historial` es solo lo que ve el guardia (ver 5.4).
 
 ### 5.1. Bootstrap y Lista Negra
 
@@ -205,6 +205,33 @@ La PWA emplea IndexedDB envuelta en promesas con la librería Dexie.js (archivo 
 
 
 * **Hora del escaneo:** se guarda la hora en que se escaneó, no la de la sincronización, en UTC (`timestamptz`). El sistema confía en el reloj del celular del guardia; ver [zonas-horarias.md](./zonas-horarias.md).
+
+
+* **Arranque (Issue 26.4):** `LayoutAcceso.tsx` inicia la sincronización de fondo, así funciona en cualquier pantalla de la PWA. `iniciarBackgroundSync()` es idempotente: volver a llamarla no suma listeners ni intervalos.
+
+
+* **Última sincronización (Issue 26.3):** con cada respuesta OK de `bulk-sync` (también con éxito parcial), `syncService.ts` guarda la hora en `configuracion` (`ultima_sincronizacion`, ISO en UTC). Ante un error no la cambia.
+
+
+* **Aviso de sesión vencida (Issue 26.3):** el 401 emite `AUTH_EXPIRED_EVENT` con `detail.mensaje`; `AuthContext` lo guarda al cerrar la sesión y el login del guardia lo muestra. Los cierres sin mensaje (por ejemplo, desde el panel) no muestran aviso.
+
+
+
+### 5.4. Historial del Dispositivo y Estado de la Conexión (Issue 26)
+
+* **Cola y vista separadas:** cada ingreso aceptado (QR o manual) se guarda en `ingresos_pendientes` y en `historial` dentro de la misma transacción. El historial se recorta a `MAX_HISTORIAL` (50, en `dbService.ts`) borrando los más viejos **solo** de `historial`: un ingreso sin sincronizar se sigue enviando aunque ya no aparezca en la lista. El historial no guarda nombre, DNI ni monto.
+
+
+* **Confirmación:** `marcarComoSincronizados()` borra de la cola los `jti` de `sincronizados_jti` y los marca como `sincronizado` en `historial`, en una sola transacción. Si falla, la cola queda intacta y el reenvío no duplica nada, porque el backend reconoce el mismo `jti`.
+
+
+* **Migración a `version(4)`:** solo se redeclara `historial` (índice `jti`, `reserva_id` pasa a texto); las demás tablas y la clave primaria no cambian, así la actualización no toca la cola. Los pendientes de antes de la v4 se envían igual, pero no aparecen en el historial.
+
+
+* **Reactividad:** `hooks/useConexion.ts` combina los eventos `online`/`offline`, el conteo de pendientes con `useLiveQuery` de Dexie (se actualiza solo cuando cambia la tabla, sin *polling*) y el evento `sync-status` para saber si hay un envío en curso. Lo usan la barra superior y Estado de sincronización.
+
+
+* **Rutas sin conexión:** `/acceso`, `/acceso/manual`, `/acceso/historial` y `/acceso/sincronizacion` comparten `LayoutAcceso` y están protegidas para `SEGURIDAD`. Funcionan offline porque el service worker (Workbox, `NavigationRoute`) responde cualquier navegación con el `index.html` guardado.
 
 
 
@@ -333,7 +360,7 @@ Las pantallas del cliente, la PWA del guardia y el panel del administrador convi
 * **Agregar una pantalla:** Cada pantalla se registra con una entrada en `pages/admin/routes.tsx` (`path`, `titulo`, `icono`, `element`). El menú y las rutas se arman a partir de esa lista, por lo que no hace falta tocar `App.tsx` ni el layout.
 
 
-* **Pantallas actuales:** Inicio (monitor de ocupación, personas esperadas y resumen de cobros), Gestión de reservas, Socios, Descuentos, Incidentes, Egresos, Alertas, Tipos de reserva y Configuración. Las entradas con `alPie: true` (hoy, Configuración) se muestran al final del menú, encima de "Cerrar sesión".
+* **Pantallas actuales:** Inicio (banner de alertas, monitor de ocupación, personas esperadas y resumen de cobros), Gestión de reservas, Socios, Descuentos, Historial de ingresos, Egresos, Alertas, Tipos de reserva y Configuración. Las entradas con `alPie: true` (hoy, Configuración) se muestran al final del menú, encima de "Cerrar sesión".
 
 
 * **Instalable (Issue 23.1):** el panel se puede instalar como app separada de la del guardia. Mientras está abierto, `hooks/useManifest.ts` cambia el manifest de la página por `public/manifest-admin.webmanifest` ("Qamp Admin", `start_url` y `scope` en `/admin/`). El service worker sigue siendo uno solo para todo el sitio.
@@ -378,7 +405,7 @@ Las pantallas del cliente, la PWA del guardia y el panel del administrador convi
 * **Marca:** el panel y la PWA dicen "Qamp". La web de reservas muestra el nombre y los datos de contacto del camping que contrató el sistema, tomados de las variables `VITE_CAMPING_*` del `.env` del frontend (`src/lib/camping.ts`), así se adapta a otro camping sin tocar código.
 
 
-* **PWA del guardia:** `components/layout/LayoutAcceso.tsx` arma una barra superior (menú ☰ con el estado de sincronización y "Cerrar sesión", título e indicador Online/Offline) y una barra inferior con Historial (`/acceso/historial`), Escáner (`/acceso`) y Registro manual (`/acceso/manual`).
+* **PWA del guardia (Issue 26):** `components/layout/LayoutAcceso.tsx` arma una barra superior (título, indicador Online/Offline y contador de pendientes) y `BarraNavegacionInferior.tsx`, con Historial, Registro manual, Escáner, Sincronización y Cerrar sesión. La pantalla actual se marca con `aria-current="page"`. El registro manual es una pantalla propia (`RegistroManual.tsx`) con la confirmación "Ingreso registrado" y el ID local.
 
 
 * **Accesibilidad:** todos los textos cumplen un contraste mínimo de 4,5:1, el foco del teclado se ve siempre y ningún estado se comunica solo con color (se suma ícono y texto).
@@ -433,6 +460,9 @@ Permite al administrador saber cuántas personas hay dentro del camping y cuánt
 * El Inicio muestra la ocupación sobre la capacidad, el porcentaje y el tramo de la barra reservado al buffer offline. Se actualiza cada 30 segundos y al registrar un egreso.
 
 
+* **Banner de alertas (Issue 26.5):** arriba del monitor. Sus cuatro estados (cargando, sin incidentes, error y con incidentes) usan la misma caja con alto mínimo, así la respuesta de la API no desplaza el monitor (CLS).
+
+
 * **Colores:** Verde por debajo del 70 %, amarillo desde el 70 % y rojo desde el 90 % (`lib/ocupacion.ts`). El nivel también se muestra en texto ("normal", "alta", "crítica").
 
 
@@ -449,6 +479,21 @@ Permite al administrador saber cuántas personas hay dentro del camping y cuánt
 
 
 * **No se suma a la ocupación**, que solo cuenta a quienes ya entraron. Igual que la ocupación, un escaneo hecho sin conexión se descuenta recién cuando la PWA sincroniza.
+
+
+
+### 9.6. Historial de Ingresos (Issue 26.6)
+
+* `GET /api/v1/admin/ingresos` (`api/admin_ingresos.py` + `services/ingresos_admin_service.py`) devuelve los ingresos aceptados, del más nuevo al más viejo, paginados con `skip`/`limit` y con el total. Es de solo lectura y está separado del router transaccional de `bulk-sync`.
+
+
+* **Días de Buenos Aires:** `limites_dias_negocio()` (`core/tiempo.py`) convierte el rango en un intervalo semiabierto, de las 00:00 del primer día a las 00:00 del día siguiente al último, con zona. Se compara contra la columna sin envolverla, así el corte cae en la medianoche argentina y se usa el índice.
+
+
+* **Qué no muestra:** los QR rechazados por clonación nunca llegan a `ingresos_fisicos` (quedan en `conflictos_sincronizacion`), por eso no hace falta filtrarlos. Tampoco hay estado de sincronización: el servidor solo conoce lo que ya llegó, y la pantalla lo aclara.
+
+
+* **Tipo de cliente:** con reserva, la misma regla que Gestión de reservas (`es_reserva_de_socio()`); en los manuales, socio si el DNI es de un socio activo.
 
 
 
