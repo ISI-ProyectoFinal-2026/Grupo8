@@ -99,6 +99,15 @@ Estos endpoints estructuran la operación principal del sistema de reservas y su
 * **`GET /reservas/{id}/qr`**
 * **Descripción:** Devuelve el QR de acceso de la reserva como imagen PNG descargable (`Content-Disposition: attachment`). Es el mismo QR del correo de confirmación: el `jti` se guarda en `reservas.jwt_jti` al confirmar el pago y la descarga usa ese mismo valor, así cada reserva tiene un único QR válido. Las reservas pagadas antes de guardar el `jti` reciben uno la primera vez que se descarga el QR.
 * **Seguridad:** Exige sesión (401 sin token). Si la reserva no existe o es de otro usuario, devuelve 404; si no está pagada o fue cancelada, 403.
+* **`GET /reservas/{id}/qr-pago?payment_id=...`**
+* **Descripción:** El mismo QR que `GET /reservas/{id}/qr`, pero sin sesión. Lo usa la pantalla `/pago/exito`, que recibe de Mercado Pago la reserva (`external_reference`) y el pago (`payment_id`). Así lo pueden descargar también los visitantes, que reservan sin cuenta.
+* **Seguridad:** Con el id de la reserva no alcanza: el `payment_id` tiene que estar registrado en la tabla `pagos`, aprobado y a nombre de esa reserva.
+* **Respuestas:**
+  * 200: PNG del QR (`Content-Disposition: attachment`).
+  * 409 ("Tu QR todavía se está generando..."): el aviso de Mercado Pago todavía no llegó, el pago sigue en proceso o la reserva todavía no se confirmó. Se puede reintentar.
+  * 404: la reserva no existe, o el pago es de otra reserva o no está aprobado.
+  * 403: la reserva fue cancelada.
+  * 422: falta `payment_id` o el id de la reserva no es válido.
 * **`GET /reservas/`**
 * **Descripción:** Listado de la pantalla Gestión de reservas del panel (Issue 23.3). Las más nuevas primero.
 * **Seguridad:** Solo `ADMIN` (`require_role`): sin token devuelve 401 y con otro rol, 403.

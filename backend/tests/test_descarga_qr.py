@@ -1,4 +1,5 @@
-"""Descarga del QR desde Mis reservas: GET /reservas/{id}/qr con el mismo jti que el correo."""
+"""Descarga del QR con el mismo jti que el correo: desde Mis reservas (GET /reservas/{id}/qr)
+y desde la pantalla de pago exitoso, sin sesión (GET /reservas/{id}/qr-pago)."""
 import random
 import uuid
 from datetime import date
@@ -144,13 +145,13 @@ def _headers(usuario_id) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _pagar(mp, reserva_id):
-    """Simula el aviso de Mercado Pago de un pago aprobado para la reserva."""
+def _pagar(mp, reserva_id, estado="approved"):
+    """Simula el aviso de Mercado Pago de un pago para la reserva (aprobado si no se indica otro estado)."""
     payment_id = str(random.randint(10**11, 10**12 - 1))
     mp.pagos[payment_id] = {
         "id": int(payment_id),
-        "status": "approved",
-        "status_detail": "accredited",
+        "status": estado,
+        "status_detail": "accredited" if estado == "approved" else estado,
         "external_reference": str(reserva_id),
         "transaction_amount": 15000,
         "currency_id": "ARS",
@@ -158,6 +159,7 @@ def _pagar(mp, reserva_id):
     }
     response = client.post("/api/payments/webhook", json={"type": "payment", "data": {"id": payment_id}})
     assert response.status_code == 200
+    return payment_id
 
 
 def _jti_guardado(reserva_id):
@@ -290,3 +292,125 @@ def test_sin_sesion_devuelve_401(datos):
     response = client.get(f"/reservas/{reserva_id}/qr")
 
     assert response.status_code == 401
+
+
+# ---------- Descarga sin sesión desde la pantalla de pago exitoso ----------
+
+def _qr_pago(reserva_id, payment_id):
+    return client.get(f"/reservas/{reserva_id}/qr-pago", params={"payment_id": payment_id})
+
+
+def test_visitante_descarga_el_qr_con_el_pago_aprobado(mp, datos, espia_qr, claves_es256):
+    _, crear_reserva = datos
+    reserva_id = crear_reserva(None)  # visitante: reserva sin cuenta
+    payment_id = _pagar(mp, reserva_id)
+
+    response = _qr_pago(reserva_id, payment_id)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert "attachment" in response.headers["content-disposition"]
+    assert response.content.startswith(FIRMA_PNG)
+    # Es el mismo QR del correo
+    correo = _claims(espia_qr[0]["jwt"], claves_es256)
+    descarga = _claims(espia_qr[1]["jwt"], claves_es256)
+    assert descarga["jti"] == correo["jti"] == _jti_guardado(reserva_id)
+
+
+def test_el_pago_de_otra_reserva_no_sirve(mp, datos):
+    _, crear_reserva = datos
+    reserva_id = crear_reserva(None)
+    otra_reserva = crear_reserva(None)
+    _pagar(mp, reserva_id)
+    pago_de_otra = _pagar(mp, otra_reserva)
+
+    response = _qr_pago(reserva_id, pago_de_otra)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "No encontramos un pago aprobado de esta reserva."
+
+
+def test_un_pago_rechazado_no_sirve(mp, datos):
+    _, crear_reserva = datos
+    reserva_id = crear_reserva(None)
+    rechazado = _pagar(mp, reserva_id, estado="rejected")
+
+    response = _qr_pago(reserva_id, rechazado)
+
+    assert response.status_code == 404
+    assert _jti_guardado(reserva_id) is None
+
+
+def test_un_pago_en_proceso_avisa_que_el_qr_se_esta_generando(mp, datos):
+    _, crear_reserva = datos
+    reserva_id = crear_reserva(None)
+    en_proceso = _pagar(mp, reserva_id, estado="in_process")
+
+    response = _qr_pago(reserva_id, en_proceso)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Tu QR todavía se está generando. Intentá de nuevo en unos segundos o revisá tu correo."
+    )
+
+
+def test_si_el_aviso_de_mercado_pago_no_llego_avisa_que_el_qr_se_esta_generando(datos):
+    _, crear_reserva = datos
+    reserva_id = crear_reserva(None)
+
+    response = _qr_pago(reserva_id, "123456789012")
+
+    assert response.status_code == 409
+
+
+def test_con_el_pago_registrado_pero_la_reserva_sin_confirmar_avisa_que_el_qr_se_esta_generando(datos):
+    # El pago se registra y la reserva se confirma en pasos separados
+    _, crear_reserva = datos
+    reserva_id = crear_reserva(None)
+    payment_id = str(uuid.uuid4().int)[:12]
+    db = SessionLocal()
+    try:
+        db.add(Pago(reserva_id=reserva_id, mp_payment_id=payment_id, estado="approved", respuesta_mp={}))
+        db.commit()
+    finally:
+        db.close()
+
+    response = _qr_pago(reserva_id, payment_id)
+
+    assert response.status_code == 409
+
+
+def test_reserva_cancelada_no_tiene_qr_aunque_el_pago_este_aprobado(mp, datos):
+    _, crear_reserva = datos
+    reserva_id = crear_reserva(None)
+    payment_id = _pagar(mp, reserva_id)
+    db = SessionLocal()
+    try:
+        reserva = db.get(Reserva, reserva_id)
+        reserva.estado_reserva = EstadoReservaEnum.CANCELADA
+        reserva.estado_pago = EstadoPagoEnum.CANCELADO
+        db.commit()
+    finally:
+        db.close()
+
+    response = _qr_pago(reserva_id, payment_id)
+
+    assert response.status_code == 403
+
+
+def test_reserva_inexistente_con_un_pago_real_devuelve_404(mp, datos):
+    _, crear_reserva = datos
+    payment_id = _pagar(mp, crear_reserva(None))
+
+    response = _qr_pago(uuid.uuid4(), payment_id)
+
+    assert response.status_code == 404
+
+
+def test_sin_payment_id_no_se_descarga(datos):
+    _, crear_reserva = datos
+    reserva_id = crear_reserva(None, EstadoPagoEnum.PAGADO, EstadoReservaEnum.CONFIRMADA)
+
+    response = client.get(f"/reservas/{reserva_id}/qr-pago")
+
+    assert response.status_code == 422

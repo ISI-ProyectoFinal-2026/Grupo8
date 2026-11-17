@@ -28,6 +28,7 @@ from models.reserva import (
     Reserva, ReservaPersona, EstadoPagoEnum, EstadoReservaEnum,
 )
 from models.configuracion import ConfiguracionCamping
+from models.pago import Pago
 from models.tipo_reserva import FormaCobroEnum, TipoReserva
 from services.cancelacion_service import (
     CancelacionNoPermitidaError,
@@ -356,6 +357,62 @@ def descargar_qr(
             detail="El QR solo está disponible para reservas pagadas.",
         )
 
+    return _respuesta_qr(db, reserva)
+
+
+# Respuestas de la descarga del QR sin sesión
+QR_EN_PREPARACION = (
+    "Tu QR todavía se está generando. Intentá de nuevo en unos segundos o revisá tu correo."
+)
+PAGO_NO_COINCIDE = "No encontramos un pago aprobado de esta reserva."
+QR_NO_DISPONIBLE = "El QR solo está disponible para reservas pagadas."
+
+# Estados de Mercado Pago de un pago que todavía se puede aprobar
+_PAGO_EN_PROCESO = {"pending", "in_process", "authorized"}
+
+
+@router.get(
+    "/{reserva_id}/qr-pago",
+    response_class=Response,
+    responses={200: {"content": {"image/png": {}}, "description": "Imagen PNG del QR de acceso."}},
+)
+def descargar_qr_con_pago(
+    reserva_id: UUID,
+    payment_id: str = Query(..., min_length=1, max_length=64),
+    db: Session = Depends(get_db),
+):
+    """
+    QR de la reserva recién pagada, sin sesión. Lo usa la pantalla a la que vuelve Mercado Pago,
+    que conoce la reserva (external_reference) y el pago (payment_id). Con el id de la reserva
+    solo no alcanza: el pago tiene que estar registrado en la tabla pagos, aprobado y a nombre
+    de esa reserva.
+    """
+    reserva = db.query(Reserva).filter(Reserva.id == reserva_id).first()
+    if reserva is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=PAGO_NO_COINCIDE)
+
+    pago = db.query(Pago).filter(Pago.mp_payment_id == payment_id).first()
+    # El aviso de Mercado Pago puede llegar unos segundos después de que el cliente vuelve a la web
+    if pago is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=QR_EN_PREPARACION)
+    if pago.reserva_id != reserva.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=PAGO_NO_COINCIDE)
+    if pago.estado in _PAGO_EN_PROCESO:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=QR_EN_PREPARACION)
+    if pago.estado != "approved":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=PAGO_NO_COINCIDE)
+
+    if reserva.estado_reserva == EstadoReservaEnum.CANCELADA or reserva.estado_pago == EstadoPagoEnum.CANCELADO:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=QR_NO_DISPONIBLE)
+    # El pago ya está registrado, pero la reserva se confirma en un paso aparte
+    if reserva.estado_pago != EstadoPagoEnum.PAGADO:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=QR_EN_PREPARACION)
+
+    return _respuesta_qr(db, reserva)
+
+
+def _respuesta_qr(db: Session, reserva: Reserva) -> Response:
+    """PNG del QR de una reserva pagada, con el mismo jti que el correo."""
     # Las reservas pagadas antes de guardar el jti reciben uno la primera vez. La fila se bloquea
     # para que dos descargas simultáneas no generen dos jti distintos
     if reserva.jwt_jti is None:
