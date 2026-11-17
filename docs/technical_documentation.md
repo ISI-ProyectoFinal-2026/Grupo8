@@ -61,7 +61,7 @@ La base de datos relacional PostgreSQL administra las transacciones del sistema 
 
 ### 2.2. Entidades Principales
 
-* **Modelo Usuario (`models/user.py`):** Utiliza UUID como identificador único principal. Incluye atributos clave como correo electrónico, hash de contraseña, DNI, indicador de membresía (`is_socio`), marcas de auditoría (`created_at`, `updated_at`) y un rol de sistema basado en `RoleEnum` (Admin, Seguridad, Cliente).
+* **Modelo Usuario (`models/user.py`):** Utiliza UUID como identificador único principal. Incluye atributos clave como correo electrónico, hash de contraseña, DNI, indicador de membresía (`is_socio`), fecha de vencimiento de la cuota (`membresia_vence`, Issue 13.3), baja lógica (`activo`), marcas de auditoría (`created_at`, `updated_at`) y un rol de sistema basado en `RoleEnum` (Admin, Seguridad, Cliente).
 
 
 * **Modelo Reserva (`models/reserva.py`):** Almacena el ID (`UUID`), una clave foránea (`user_id`), fecha y hora, cantidad de personas y el `jwt_jti` (identificador único para el código QR). Controla su avance mediante `EstadoPagoEnum` (Pendiente, Pagado, Cancelado).
@@ -110,6 +110,18 @@ El núcleo (FastAPI) está organizado de forma modular (`api/`, `core/`, `models
 
 
 * Este token de sesión interno se firma con el algoritmo simétrico HS256 utilizando `AUTH_SECRET_KEY`.
+
+
+* **Inicio de sesión (Issue 13.1):** `POST /auth/login` (`api/auth.py` y `services/auth_service.py`) recibe DNI o correo y contraseña. Las contraseñas se guardan con bcrypt (mínimo 8 caracteres y máximo 72 bytes) y cualquier falla responde 401 con el mismo mensaje. Si el usuario no existe se compara contra un hash ficticio, para que el tiempo de respuesta no delate qué cuentas existen. No hay registro público: las cuentas las da de alta el administrador.
+
+
+* **Duración de la sesión:** el token dura `AUTH_TOKEN_EXPIRE_MINUTES` (60 minutos) para clientes, socios y administradores, y `GUARD_TOKEN_EXPIRE_HOURS` (168 horas) para el guardia. No hay *refresh token*: al vencer, se vuelve a iniciar sesión.
+
+
+* **Autorización por rol (Issue 13.2):** `get_current_user_optional` (sin token devuelve `None`; con un token inválido o vencido responde 401) y `require_role(*roles)`, que acepta uno o varios roles. Solo se aceptan tokens HS256: los tokens ES256 de los QR no sirven para iniciar sesión. El rol se lee de la base en cada petición, así que el claim `rol` del token nunca da permisos.
+
+
+* **`bulk-sync` solo para el guardia (Issue 13.5):** `POST /api/v1/ingresos/bulk-sync` exige el rol `SEGURIDAD`. Sin token responde 401 y con otro rol, incluido `ADMIN`, 403; en ambos casos no se guarda nada del lote.
 
 
 * **Usuarios dados de baja:** un JWT no se puede anular, pero el backend busca al usuario en cada petición. Si está inactivo responde 401, así que una sesión abierta deja de valer en la petición siguiente, sin lista de tokens revocados. En el login, el inactivo se rechaza después de comprobar la contraseña, con el mismo "Credenciales inválidas", para no revelar si la cuenta existe.
@@ -178,6 +190,9 @@ La PWA emplea IndexedDB envuelta en promesas con la librería Dexie.js (archivo 
 
 
 * **El `jti` se genera una sola vez**, al registrar el ingreso (`crypto.randomUUID()`), y viaja igual en cada reintento. Así un reintento nunca duplica un cobro.
+
+
+* **Sesión del guardia al sincronizar (Issue 13.5):** cada lote viaja con `Authorization: Bearer <token>`. El token del guardia dura 168 horas y, sin conexión, su vencimiento no interrumpe nada: escanear QR e ingresar personas a mano son operaciones locales que no usan el token, y los ingresos quedan en la cola de IndexedDB. Si la app se abre sin red con el token vencido, la sesión se conserva (solo para el guardia y solo sin conexión; con conexión un token vencido se descarta). Al volver la red, si el servidor responde 401, `syncService.ts` pausa el envío sin reintentos con *backoff* (con el mismo token fallarían igual), conserva toda la cola, avisa "Iniciá sesión de nuevo para sincronizar" y emite `AUTH_EXPIRED_EVENT` para llevar al guardia al login. Con 403 conserva la cola sin cerrar la sesión, y sin token guardado no envía nada. Después de iniciar sesión, la cola sale en el siguiente evento `online` o en el chequeo periódico de 5 minutos, ya con el token nuevo; como el `jti` no cambia, no se duplica ningún ingreso.
 
 
 * **QR clonado (doble gasto offline):** la columna `jti` es única, así que la base es el árbitro final, incluso con dos pedidos simultáneos. El mismo `jti` desde el mismo `dispositivo_id` es un reintento de red; desde otro dispositivo es un clon: el primero que llegó queda como ingreso, el segundo se guarda en `conflictos_sincronizacion` y la reserva pasa a `ALERTA_CLONACION`. No se expulsa a nadie automáticamente, porque el titular real puede ser el que sincronizó segundo: decide un administrador.
@@ -348,7 +363,7 @@ Las pantallas del cliente, la PWA del guardia y el panel del administrador convi
 * **Filtros y paginación en el backend:** estado de pago, estado de la reserva, rango de fechas de ingreso, socio o visitante y un campo de búsqueda. La respuesta trae `total` e `items`, y el panel pide de a 20.
 
 
-* **Búsqueda:** por titular (cada palabra, en cualquier orden), email o comienzo del número de reserva (con o sin `#`), sin importar acentos ni mayúsculas. Reutiliza la misma tabla de letras que la búsqueda del padrón de socios (ver 10.2). La lógica vive en `services/reservas_admin_service.py`.
+* **Búsqueda:** por titular (cada palabra, en cualquier orden), email o comienzo del número de reserva (con o sin `#`), sin importar acentos ni mayúsculas. Reutiliza la misma tabla de letras que la búsqueda del padrón de socios (ver 10.3). La lógica vive en `services/reservas_admin_service.py`.
 
 
 * **Socio o visitante:** una reserva es "de socio" si la hizo una cuenta con sesión o si el titular se cargó como socio. La misma regla se usa en el filtro (SQL) y en el campo `tipo_cliente` de la respuesta, para que nunca den resultados distintos.
@@ -454,7 +469,15 @@ Permite al administrador saber cuántas personas hay dentro del camping y cuánt
 * **El descuento de socio lo decide el backend:** al crear una reserva, cada persona marcada como socia se valida con esa regla. Si no vale, se responde 422 con el DNI y el motivo, en vez de cobrarla como visitante sin avisar.
 * **Editar no es lo mismo que renovar o dar de baja:** el `PUT` solo corrige datos personales. El vencimiento y la baja tienen sus propias operaciones, con sus reglas, para que nadie las saltee cambiando un campo.
 
-### 10.2. Búsqueda del padrón
+### 10.2. Alta de socios (Issue 13.4)
+
+* `POST /admin/socios` crea un usuario con rol `CLIENTE` y `is_socio = true`; el body no puede cambiar ninguno de los dos. La fecha `membresia_vence` es obligatoria: sin ella el socio nacería con la cuota vencida.
+* Validaciones (`SocioCreate`): nombre de 2 a 100 caracteres, DNI de 7 u 8 dígitos (la misma regla que el frontend y las reservas), correo válido (`EmailStr`) y contraseña de 8 a 72 bytes.
+* **La contraseña no se recorta:** el socio tiene que poder entrar con exactamente lo que cargó el administrador. El resto de los textos sí se recortan.
+* Un DNI o un correo repetido responde 409. El correo se compara sin distinguir mayúsculas y se guarda en minúsculas. Si dos altas iguales llegan a la vez, la restricción única de la base frena a la segunda y también se responde 409.
+* La lógica está en `services/alta_socio_service.py` y no en `socio_service.py`, para que `auth_service.py` pueda importar la regla de vigencia sin un import circular.
+
+### 10.3. Búsqueda del padrón
 
 * Un solo campo de búsqueda: si son números (con o sin puntos), busca DNI que empiecen así; si tiene letras, cada palabra tiene que aparecer en el nombre, en cualquier orden.
 * No distingue acentos ni mayúsculas. Se usa `translate()` con la misma tabla de letras en Python y en SQL, sin la extensión `unaccent`, que pide permisos de superusuario.

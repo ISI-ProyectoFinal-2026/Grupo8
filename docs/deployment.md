@@ -78,6 +78,9 @@ Se usa Neon y no la base gratuita de Render porque esta vence a los 30 días de 
 | `ARREPENTIMIENTO_SECRET_KEY` | Obligatoria. Texto aleatorio largo, distinto de `AUTH_SECRET_KEY`: firma los enlaces del botón de arrepentimiento. Sin ella el backend no arranca |
 | `ARREPENTIMIENTO_TOKEN_MINUTOS` | Opcional, `60` por defecto: validez de cada enlace |
 | `ARREPENTIMIENTO_DIAS` | Opcional, `10` por defecto: días corridos del plazo de arrepentimiento (art. 34 de la Ley 24.240) |
+| `AUTH_TOKEN_EXPIRE_MINUTES` | Opcional, `60` por defecto: duración de la sesión de clientes, socios y administradores |
+| `GUARD_TOKEN_EXPIRE_HOURS` | Opcional, `168` por defecto: duración de la sesión del guardia, que puede trabajar días sin conexión |
+| `RESERVA_PENDIENTE_TTL_MINUTES` | Opcional, `10` por defecto: minutos que una reserva pendiente ocupa cupo mientras espera el pago |
 
 El resto de las variables de `.env.example` tienen valores por defecto en `core/config.py`.
 

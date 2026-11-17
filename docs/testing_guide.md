@@ -45,6 +45,13 @@ El backend implementa una suite de pruebas automatizadas utilizando `pytest` jun
 
 * Los tests que crean filas sin esta transacción (por ejemplo, los de `bulk-sync` o egresos) deben borrar al terminar lo que crearon, incluidos los ingresos manuales, que no tienen reserva asociada.
 
+### 1.6. Autenticación, Permisos y Cupo (Issue 13)
+
+* **Login (`test_auth.py`):** ingreso con DNI y con correo (sin distinguir mayúsculas ni espacios), claims y duración del token (60 minutos, y 168 horas para el guardia), `GET /auth/me`, y que toda credencial inválida (usuario inexistente, contraseña incorrecta o muy larga, hash malformado) dé el mismo 401 sin revelar la causa.
+* **Permisos (`test_autorizacion.py`):** las rutas de administrador responden 401 sin token, 403 con otro rol y 200 con `ADMIN`. Se prueba que el rol sale de la base y no del token, que se rechazan los tokens vencidos, sin firma, de otro algoritmo o con un `sub` inválido, y `require_role` con uno o varios roles. También cubre `bulk-sync`: 401 sin token o vencido, 403 para `ADMIN` y `CLIENTE` (sin guardar nada del lote) y 200 para el guardia.
+* **Membresía y socios (`test_socios.py`, `test_admin_socios.py`):** los cuatro resultados de `GET /socios/validar/{dni}`, el borde del vencimiento con fecha fija (el día del vencimiento todavía vale), y el alta de socios (hash de la contraseña, 409 por DNI o correo repetido, 422 por datos inválidos y 401/403 según el rol). Un test verifica que Alembic tenga un único *head*.
+* **Cupo (`test_capacity_service.py`):** casos límite de `lugares_ocupados` con una "hora actual" fija: canceladas, pendientes dentro y fuera del plazo, el límite exacto del plazo y un segundo después, plazo tomado de la configuración y solapamiento de fechas. `test_cupo_depende_del_estado_de_reserva_y_no_del_pago` lo comprueba por la API.
+* **Fixtures:** los módulos que no prueban la autenticación usan `como_admin` o `como_guardia` (`conftest.py`), que reemplazan al usuario de la sesión solo durante el test y lo restauran al terminar.
 
 ## 2. Pruebas de Frontend (`vitest`)
 
@@ -78,6 +85,11 @@ La PWA emplea `vitest` para ejecutar pruebas unitarias y de integración que val
 
 * El proceso de reintento mitiga un defecto de bloqueo conocido (donde `isSyncing` quedaba en verdadero permanentemente) reseteando `syncService.isSyncing = false` manualmente en el bloque `beforeEach` del test.
 
+### 2.4. Rutas Protegidas y Sesión (Issue 13.5)
+
+* **`src/__tests__/rutasProtegidas.test.tsx`:** sin sesión, `/acceso` y `/admin` redirigen al login; con un rol incorrecto muestran "Acceso denegado" (y el enlace "Ir a mi pantalla" lleva a la del propio rol); con el rol correcto se entra. Cubre además el token vencido del guardia: con conexión se descarta y se pide el login, sin conexión la sesión se conserva, y para cualquier otro rol no se conserva.
+* **`src/pages/admin/AdminRoutes.test.tsx`:** el panel solo se abre con `ADMIN`.
+* **`src/services/syncService.test.ts`:** el lote viaja con el token en `Authorization`; sin sesión no se envía nada; un 401 conserva la cola, no reintenta y cierra la sesión; un 403 conserva la cola; y con un token nuevo la cola pendiente se sincroniza sin duplicar ingresos.
 
 ## 3. Pruebas End-to-End (E2E) y Dispositivos Reales
 

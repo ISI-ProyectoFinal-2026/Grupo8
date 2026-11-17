@@ -28,7 +28,7 @@ Finalizado el proceso, el usuario será redirigido a una vista específica (éxi
 Los clientes pueden iniciar sesión en el portal utilizando su DNI o correo electrónico; al ingresar van directamente a "Mis Reservas". Este inicio de sesión es solo para clientes y socios: los guardias y los administradores tienen el suyo, en su propia app (ver secciones 2.2 y 3).
 La web muestra el nombre, los horarios y los datos de contacto del camping. El pie de página incluye el enlace "Botón de arrepentimiento".
 Las secciones "Perfil" y "Mis Reservas" son exclusivas para socios. Se puede reservar sin iniciar sesión, pero esas reservas no aparecen en ningún listado personal.
-Dentro del apartado "Perfil", los usuarios pueden visualizar el estado de su cuenta, identificado con etiquetas como "Activo" o "Inactivo".
+Dentro del apartado "Perfil", los socios pueden visualizar el estado de su membresía: "Membresía vigente" (con la fecha hasta la que está al día) o "Membresía vencida". Un socio con la cuota vencida igualmente puede iniciar sesión, para ver su estado.
 En la sección "Mis Reservas", el sistema ofrece un historial clasificado en pestañas para reservas "Próximas", "Finalizadas" y "Canceladas".
 En las reservas "Próximas", el botón "Descargar QR" baja el mismo código QR de acceso que llegó por correo, por si el cliente no encuentra el mensaje. También se puede descargar apenas se paga, desde la pantalla "¡Reserva Realizada!", con o sin cuenta. Esa pantalla consulta el estado real del pago: muestra "¡Reserva Realizada!" solo cuando la reserva quedó confirmada; mientras Mercado Pago lo confirma, muestra "Estamos confirmando tu pago" y vuelve a consultar sola. El botón "Cancelar" muestra hasta cuándo se puede cancelar y cuánto se devuelve, y pide confirmación ("¿Está seguro que desea cancelar?").
 Adicionalmente, existe una pestaña de "Pendientes" con un botón de "Verificar Pago", el cual permite auditar manualmente transacciones que hayan quedado demoradas por intermitencias de red. Si el pago se confirma así, el código QR llega por correo igual que con la confirmación automática.
@@ -63,7 +63,7 @@ Si la aplicación no refleja los últimos cambios visuales (debido al guardado e
 ### 2.2. Preparación del Turno (Modo Online)
 
 Antes de comenzar a operar en la barrera de entrada, el guardia debe iniciar sesión en `/acceso/login` con su usuario estando conectado a internet; al hacerlo, el sistema lo lleva directamente al escáner. Ese inicio de sesión es solo para guardias: con un usuario de otro rol se muestra "Acceso denegado".
-Si su sesión vence mientras no hay conexión, puede seguir escaneando; al volver la red, el sistema le pedirá iniciar sesión nuevamente para enviar los ingresos pendientes.
+La sesión del guardia dura 7 días. Si vence mientras no hay conexión, puede seguir escaneando y registrando ingresos sin problema; al volver la red, el sistema le pedirá iniciar sesión nuevamente y los ingresos pendientes se envían después, sin perderse ninguno.
 En esta carga inicial, la aplicación descargará en la base de datos local del dispositivo la configuración de capacidad máxima, la clave criptográfica para leer los QR y una lista negra con las reservas que fueron canceladas.
 
 Para moverse dentro de la app:
@@ -131,6 +131,7 @@ La pantalla es solo de consulta: desde ahí no se modifica ninguna reserva.
 La sección "Socios" muestra el padrón con el estado de cada socio: Vigente, Vencida o De baja.
 
 * **Buscar:** un solo campo, por DNI (con o sin puntos) o por nombre, sin importar acentos ni mayúsculas. La lista se actualiza sola mientras se escribe. El selector de estado filtra vigentes, vencidos o dados de baja.
+* **Nuevo socio:** el administrador carga nombre, DNI, correo, contraseña inicial y la fecha hasta la que la cuota está al día. Si el DNI o el correo ya existen, el sistema avisa y no crea nada. El socio entra con su DNI o su correo y esa contraseña. No hay registro desde la web: las altas se hacen solo desde el panel.
 * **Editar:** corrige nombre, DNI o email.
 * **Renovar:** propone un año más desde el vencimiento actual, o desde hoy si ya venció. No acepta fechas pasadas.
 * **Dar de baja:** pide confirmación. El socio no puede iniciar sesión ni validar como socio, pero sus reservas se conservan. Se deshace con "Reactivar".
