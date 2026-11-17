@@ -22,6 +22,9 @@
       <div class="alert-box">
         Motivo de la cancelación: {{ motivo_cancelacion }}
       </div>
+      {% if codigo_gestion %}
+      <p>Código de gestión: <strong>{{ codigo_gestion }}</strong>. Guardalo por si tenés que hacer un reclamo.</p>
+      {% endif %}
       {% if detalle_devolucion %}
       <p>{{ detalle_devolucion }}</p>
       {% endif %}

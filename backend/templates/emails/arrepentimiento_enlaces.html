@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f5; margin: 0; padding: 20px; }
+    .container { background-color: #ffffff; max-width: 600px; margin: 0 auto; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .header { text-align: center; color: #2d3748; border-bottom: 2px solid #edf2f7; padding-bottom: 15px; margin-bottom: 20px; }
+    .content { color: #4a5568; line-height: 1.6; font-size: 16px; }
+    .reserva { border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin: 15px 0; }
+    .boton { display: inline-block; background-color: #c53030; color: #ffffff; text-decoration: none; padding: 10px 18px; border-radius: 6px; font-weight: bold; margin-top: 8px; }
+    .footer { text-align: center; font-size: 12px; color: #a0aec0; margin-top: 30px; border-top: 1px solid #edf2f7; padding-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2 class="header">Botón de arrepentimiento</h2>
+    <div class="content">
+      <p>Hola,</p>
+      <p>Pediste cancelar una reserva en Qamp. Estas son tus reservas pagadas y próximas. Cada enlace cancela solo esa reserva; antes de confirmar vas a ver cuánto se te devuelve.</p>
+      {% for r in reservas %}
+      <div class="reserva">
+        <strong>Reserva {{ r.reserva_id }}</strong><br>
+        Ingreso: {{ r.fecha_ingreso }} · Egreso: {{ r.fecha_egreso }}<br>
+        Personas: {{ r.cantidad_personas }} · Monto: {{ r.monto }}<br>
+        <a class="boton" href="{{ r.enlace }}">Cancelar esta reserva</a>
+      </div>
+      {% endfor %}
+      <p><small>Los enlaces vencen en {{ minutos }} minutos. Si vencen, pedí otros desde el botón de arrepentimiento. Si no pediste cancelar, ignorá este correo: tus reservas no cambian.</small></p>
+    </div>
+    <div class="footer">Qamp - Sistema de Gestión y Control de Accesos</div>
+  </div>
+</body>
+</html>

@@ -22,7 +22,7 @@ from core.tiempo import a_zona_negocio, ahora_utc
 from models.ingreso_fisico import IngresoFisico
 from models.pago import DEVOLUCION_PENDIENTE_REVISION, DEVOLUCION_REALIZADA, Pago
 from models.reserva import EstadoPagoEnum, EstadoReservaEnum, Reserva
-from schemas.reserva import hoy_argentina
+from schemas.reserva import CancelacionCondiciones, CancelacionResultado, ReservaResponse, hoy_argentina
 from services.camping_service import obtener_o_crear_camping
 from services.email_service import email_service
 from services.payment_service import reembolsar
@@ -219,6 +219,8 @@ def _programar_correo(
         datos_reserva={
             "nombre_cliente": reserva.titular,
             "reserva_id": str(reserva.id),
+            # El id de la reserva es el código de gestión de la cancelación
+            "codigo_gestion": str(reserva.id),
             "motivo_cancelacion": motivo,
             "detalle_devolucion": detalle,
         },
@@ -253,3 +255,37 @@ def cancelar_reserva(
 
     _programar_correo(reserva, condiciones, realizada, motivo, background_tasks)
     return ResultadoCancelacion(reserva=reserva, condiciones=condiciones, devolucion_realizada=realizada)
+
+
+def condiciones_out(condiciones: CondicionesCancelacion) -> CancelacionCondiciones:
+    return CancelacionCondiciones(
+        puede_cancelar=condiciones.puede_cancelar,
+        dias_minimos=condiciones.dias_cancelacion,
+        fecha_limite=condiciones.fecha_limite,
+        porcentaje_devolucion=condiciones.porcentaje_devolucion,
+        monto_devolucion=float(condiciones.monto_a_devolver),
+        mensaje=condiciones.motivo,
+        arrepentimiento=condiciones.arrepentimiento,
+    )
+
+
+def resultado_out(resultado: ResultadoCancelacion) -> CancelacionResultado:
+    """La reserva ya cancelada, lo que se devolvió y el mensaje para mostrar."""
+    condiciones = resultado.condiciones
+    monto = formatear_pesos(condiciones.monto_a_devolver)
+    if condiciones.monto_a_devolver == 0:
+        mensaje = "La reserva quedó cancelada. Según las condiciones del camping, no corresponde devolución."
+    elif resultado.devolucion_realizada:
+        mensaje = f"La reserva quedó cancelada. Te devolvimos {monto} por Mercado Pago."
+    else:
+        mensaje = (
+            f"La reserva quedó cancelada. Estamos procesando la devolución de {monto}; "
+            "te avisamos por correo."
+        )
+    reserva = ReservaResponse.model_validate(resultado.reserva).model_dump()
+    return CancelacionResultado(
+        **reserva,
+        monto_devuelto=float(condiciones.monto_a_devolver),
+        devolucion_realizada=resultado.devolucion_realizada,
+        mensaje=mensaje,
+    )

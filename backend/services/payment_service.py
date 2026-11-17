@@ -251,6 +251,7 @@ def _programar_correo_con_qr(reserva: Reserva, background_tasks: BackgroundTasks
         "email": reserva.email,
         "fecha_ingreso": str(reserva.fecha_ingreso),
         "cantidad_personas": reserva.cantidad_personas,
+        "url_arrepentimiento": f"{settings.FRONTEND_URL.rstrip('/')}/arrepentimiento",
     }
     # El correo se manda después de responder, para no demorar la respuesta
     background_tasks.add_task(
