@@ -1,10 +1,11 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
 
-from core.tiempo import a_utc, a_zona_negocio
+import core.tiempo as tiempo
+from core.tiempo import a_utc, a_zona_negocio, limites_dias_negocio
 from security.sync_schemas import ingreso_item_adapter
 
 
@@ -53,3 +54,25 @@ def test_el_schema_normaliza_la_fecha_del_escaneo_a_utc():
 def test_el_schema_rechaza_la_fecha_sin_zona():
     with pytest.raises(ValidationError):
         ingreso_item_adapter.validate_python(_item("2026-10-25T14:30:00"))
+
+# ---------- Días de Buenos Aires para filtrar (26.6) ----------
+
+def test_limites_de_un_dia_van_de_medianoche_a_medianoche_argentina():
+    inicio, fin = limites_dias_negocio(date(2026, 11, 17), date(2026, 11, 17))
+
+    assert inicio.astimezone(timezone.utc) == datetime(2026, 11, 17, 3, 0, tzinfo=timezone.utc)
+    assert fin.astimezone(timezone.utc) == datetime(2026, 11, 18, 3, 0, tzinfo=timezone.utc)
+
+
+def test_limites_de_un_rango_incluyen_el_ultimo_dia_completo():
+    inicio, fin = limites_dias_negocio(date(2026, 11, 1), date(2026, 11, 30))
+
+    assert inicio.astimezone(timezone.utc) == datetime(2026, 11, 1, 3, 0, tzinfo=timezone.utc)
+    assert fin.astimezone(timezone.utc) == datetime(2026, 12, 1, 3, 0, tzinfo=timezone.utc)
+
+
+def test_hoy_negocio_ya_es_el_dia_anterior_a_utc_despues_de_las_21(monkeypatch):
+    # 17/11 a las 01:30 UTC son las 22:30 del 16/11 en Buenos Aires
+    monkeypatch.setattr(tiempo, "ahora_utc", lambda: datetime(2026, 11, 17, 1, 30, tzinfo=timezone.utc))
+
+    assert tiempo.hoy_negocio() == date(2026, 11, 16)

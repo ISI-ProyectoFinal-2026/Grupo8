@@ -45,7 +45,7 @@ class DetalleReserva:
     fecha_primer_ingreso: Optional[datetime]
 
 
-def _es_de_socio() -> ColumnElement[bool]:
+def es_reserva_de_socio() -> ColumnElement[bool]:
     """
     Una reserva es de socio si la hizo un socio con la sesión iniciada o si el titular
     (la primera persona) se cargó como socio. Misma regla que ReservaAdmin.tipo_cliente.
@@ -92,9 +92,9 @@ def _aplicar_filtros(query: Query, filtros: FiltrosReservas) -> Query:
     if filtros.fecha_hasta:
         query = query.filter(Reserva.fecha_ingreso <= filtros.fecha_hasta)
     if filtros.tipo_cliente == TipoClienteEnum.socio:
-        query = query.filter(_es_de_socio())
+        query = query.filter(es_reserva_de_socio())
     elif filtros.tipo_cliente == TipoClienteEnum.visitante:
-        query = query.filter(~_es_de_socio())
+        query = query.filter(~es_reserva_de_socio())
     if filtros.busqueda:
         condicion = _condicion_busqueda(filtros.busqueda)
         if condicion is not None:
