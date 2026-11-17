@@ -14,6 +14,8 @@ export interface OpcionesReserva {
   fecha?: string;
   /** Token del socio: con sesión la reserva queda a su nombre y aparece en Mis reservas */
   tokenSocio?: string;
+  /** Email de contacto. Por defecto uno nuevo; se repite para tener varias reservas del mismo email */
+  email?: string;
 }
 
 /**
@@ -28,7 +30,7 @@ export async function crearReservaPagada(
   nombres: string[],
   opciones: OpcionesReserva = {}
 ): Promise<{ reservaId: string; email: string; tokenQr: string }> {
-  const email = `reserva-${Date.now()}@example.com`;
+  const email = opciones.email ?? `reserva-${Date.now()}@example.com`;
   const fecha = opciones.fecha ?? hoyEnArgentina();
   const sesion = opciones.tokenSocio
     ? { Authorization: `Bearer ${opciones.tokenSocio}` }
@@ -76,6 +78,6 @@ export async function crearReservaPagada(
 
   expect((await enviarAvisoDePago(request, paymentId!)).status()).toBe(200);
 
-  const tokenQr = leerQr(await esperarQrDelCorreo(request, email));
+  const tokenQr = leerQr(await esperarQrDelCorreo(request, email, reservaId));
   return { reservaId, email, tokenQr };
 }

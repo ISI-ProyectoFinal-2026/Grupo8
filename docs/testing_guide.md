@@ -212,6 +212,17 @@ Pendientes detectados (no se modificaron porque están fuera del alcance):
 * La lista de canceladas solo se descarga al abrir la app o al volver la conexión. Si el guardia tiene la app abierta desde antes de la cancelación y pierde la red sin recargar, el QR cancelado se acepta.
 * La PWA no revisa la fecha de ingreso del QR (`dat`), solo el vencimiento: el QR de una reserva futura se acepta hoy.
 
+### 3.5.1. Botón de arrepentimiento con Playwright (Issue 25.3)
+
+La prueba `frontend/pwa-acceso/e2e/arrepentimiento.spec.ts` corre con el mismo comando. Prepara por API dos reservas pagadas del mismo email (con ingreso en 3 y en 5 días, así están dentro del plazo de arrepentimiento) y después, como visitante y sin iniciar sesión:
+
+* Entra desde el enlace "Botón de arrepentimiento" del pie, escribe el email y ve "Si hay reservas con ese email, te enviamos un correo con un enlace para cada una."
+* Lee el correo en el Resend falso y comprueba que trae un enlace distinto por reserva.
+* Abre el enlace de una de las reservas, ve las condiciones (100 % por arrepentimiento) y confirma: aparece "Reserva cancelada" con el código de gestión.
+* Comprueba por API que el enlace de la otra reserva todavía permite cancelarla, y que volver a abrir el enlace usado muestra "La reserva ya está cancelada."
+
+`crearReservaPagada` acepta la opción `email` para repetir el mismo email en varias reservas; por eso `esperarQrDelCorreo` busca el correo con el QR por el id de la reserva.
+
 ### 3.6. Accesibilidad automática con axe y jsx-a11y (Issue 27.1)
 
 El objetivo es que las tres apps cumplan WCAG 2.2 nivel AA (cumplir la 2.2 implica cumplir la 2.0 y la 2.1, que es la que toma la Ley 26.653). Hay dos revisiones automáticas que se complementan:
@@ -249,7 +260,7 @@ Abre cada pantalla como lo haría una persona (con el login que corresponda), co
 
 La prueba falla si axe encuentra problemas **graves o críticos**. Los moderados y leves no la hacen fallar, pero aparecen como anotaciones en el informe. El detalle completo de cada pantalla queda adjunto en el informe HTML (`npm run test:e2e:informe`, archivo `axe-problemas.json`).
 
-Las pantallas que todavía no están integradas (botón de arrepentimiento, 25.3; Historial de ingresos, 26.6) están marcadas con `pendiente` y Playwright las muestra como salteadas. Al integrarlas se borra esa línea.
+Las pantallas que todavía no están integradas (Historial de ingresos, 26.6) están marcadas con `pendiente` y Playwright las muestra como salteadas. Al integrarlas se borra esa línea.
 
 Desde la 27.2 la prueba también revisa Disponibilidad, Reservas con los errores a la vista, Iniciar sesión, Mi perfil, Beneficios, Acerca de y Contacto. Además, tiene tres pruebas de teclado de la web de reservas:
 
