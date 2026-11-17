@@ -274,6 +274,12 @@ Desde la 27.3 también revisa las secciones del panel (Socios, Egresos, Descuent
 * "Ver detalle" abre la reserva en una ventana con el foco adentro, y Esc la cierra devolviendo el foco al botón.
 * "Editar" en un socio lleva el foco al primer campo y "Cancelar" lo devuelve al botón de la fila.
 
+Desde la 27.4 también revisa la PWA del guardia: el escáner abierto, el escáner con un resultado a la vista, Registro manual, Estado de sincronización y el login del guardia. Suma tres pruebas de teclado de la PWA:
+
+* "Escanear QR" con Enter lleva el foco a la indicación; con Tab se llega al campo del token, y al validar el resultado se anuncia y el foco vuelve a "Escanear QR".
+* La barra inferior se usa con el teclado: lleva el foco a la pantalla elegida y la marca con `aria-current`.
+* Las cinco opciones de la barra inferior miden al menos 24 × 24 px (WCAG 2.5.8).
+
 Lo que se cumple en cada app y las diferencias que quedan con WCAG 2.2 AA están en `docs/accesibilidad.md`.
 
 #### Títulos de la pestaña

@@ -244,3 +244,47 @@ describe('ControlAcceso — solo el escáner (26.4)', () => {
     expect(screen.queryByRole('button', { name: /Ingreso Manual/ })).toBeNull();
   });
 });
+
+describe('ControlAcceso — foco al abrir y cerrar el escáner (27.4)', () => {
+  beforeEach(async () => {
+    await db.configuracion.clear();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', sinRed());
+  });
+
+  afterEach(async () => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    await db.configuracion.clear();
+  });
+
+  it('al abrir el escáner el foco va a la indicación, y al leer un código vuelve a "Escanear QR"', async () => {
+    vi.mocked(verifyQRToken).mockResolvedValue(null);
+    renderizar(<ControlAcceso />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Escanear QR/ }));
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: 'Apunte al código del visitante' })
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Leer código de prueba' }));
+
+    // El resultado se anuncia solo y el guardia queda listo para el próximo visitante
+    expect((await screen.findByRole('alert')).textContent).toContain('Acceso Denegado');
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: /Escanear QR/ }))
+    );
+  });
+
+  it('"Cancelar" cierra el escáner y devuelve el foco a "Escanear QR"', async () => {
+    renderizar(<ControlAcceso />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Escanear QR/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: /Escanear QR/ }))
+    );
+  });
+});

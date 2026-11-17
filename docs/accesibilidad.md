@@ -71,4 +71,23 @@ Este documento anota qué se hizo en cada app y las diferencias con WCAG 2.2 AA 
 
 ## PWA de acceso (27.4)
 
-Pendiente.
+La PWA se usa al aire libre y con apuro: además de WCAG, mantiene los botones grandes y el alto contraste de la 24.5. Buena parte ya venía resuelta de la 26.1 a la 26.4; esta sub-issue la verificó y completó lo que faltaba.
+
+| Pauta | Cómo se cumple |
+|---|---|
+| 4.1.3 Resultado del escaneo | Se anuncia con `role="alert"` y combina color (borde verde o rojo), ícono (tilde o cruz) y texto ("INGRESO CONFIRMADO", "Acceso Denegado…", "Reserva Cancelada / Acceso Revocado") |
+| 4.1.3 Conexión y pendientes | La barra superior anuncia "Online"/"Offline" y el contador de pendientes en dos regiones `role="status"` separadas, así cada escaneo solo anuncia el contador (26.1). El aviso "Sincronizando…" del escáner ya no se anuncia, porque lo repetía; sí se anuncian el resultado y los errores |
+| 2.5.8 Tamaño de los objetivos | Mínimo 24 × 24 px. En la práctica, los botones de la PWA miden 48 px o más de alto (Escanear 64 px, barra inferior 56 px) |
+| 1.4.3 Contraste | Revisado con los colores de la 24.5: el texto más bajo es el gris secundario sobre el fondo claro de los datos (6,2:1). El blanco sobre la barra superior da 10,5:1 |
+| 1.3.1 y 3.3.2 Etiquetas | El campo del token tenía solo `aria-label` y texto de ejemplo: ahora tiene la etiqueta visible "Token del QR" |
+| 2.4.3 Foco en el escáner | Al abrir el escáner, el foco va a la indicación "Apunte al código del visitante" y no al campo del token, para que en el celular no aparezca el teclado tapando la cámara. Al leer un código o cancelar, vuelve a "Escanear QR", listo para el próximo visitante |
+| 2.4.3 Cambio de pantalla | Al tocar una opción de la barra inferior, el foco pasa a la pantalla nueva. La barra marca la actual con `aria-current="page"` |
+| 2.3.3 Movimiento | Los íconos que giran mientras se sincroniza respetan "reducir movimiento" del sistema (`motion-safe`). Es nivel AAA; se hizo porque no tenía costo |
+
+### Diferencias que quedan
+
+| Pantalla | Diferencia | Motivo |
+|---|---|---|
+| Escáner | El número de lugares libres ("57 / 100") es un `h2` | Lo usa la prueba E2E de cancelación para leer la capacidad. Conviene pasarlo a texto común y cambiar esa prueba en una issue aparte |
+| Escáner | La vista de la cámara la dibuja `html5-qrcode` | No se controla su marcado; el campo del token es la alternativa accesible y siempre está visible |
+| Escáner | No hay "Saltar al contenido" | La barra superior no tiene nada que se use con Tab, así que no hay bloque que saltar |
