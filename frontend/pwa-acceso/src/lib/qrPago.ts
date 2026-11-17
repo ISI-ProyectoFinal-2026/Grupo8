@@ -7,7 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
 export const MENSAJE_QR_GENERANDO =
   'Tu QR todavía se está generando. Intentá de nuevo en unos segundos o revisá tu correo.';
 export const MENSAJE_DATOS_FALTANTES =
-  'No pudimos identificar tu reserva con los datos que envió Mercado Pago. Igual te enviamos el QR por correo electrónico.';
+  'No pudimos identificar tu reserva con los datos que envió Mercado Pago. Si ya pagaste, te enviamos el QR por correo electrónico.';
 export const MENSAJE_QR_NO_ENCONTRADO =
   'No encontramos el QR de esta reserva. Igual te lo enviamos por correo electrónico.';
 export const MENSAJE_ERROR_DESCARGA =
