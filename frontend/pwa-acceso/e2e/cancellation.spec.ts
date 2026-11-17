@@ -17,6 +17,10 @@ import {
  * El plazo lo decide el backend con su propia fecha (hora de Argentina), no el navegador.
  * Por eso no se manipula el reloj: se fija el plazo N y se crean reservas con fechas relativas
  * a hoy, justo en el límite del plazo (análisis de valores límite).
+ *
+ * Las reservas se crean por API y siempre son de hoy, así que caen en el plazo de arrepentimiento
+ * (25.1), que está por encima de la configuración hasta el día anterior al ingreso. El porcentaje
+ * del camping fuera de ese plazo lo cubren los tests del backend (test_cancelacion_reservas.py).
  */
 
 const PLAZO_DIAS = 3;
@@ -56,21 +60,27 @@ test.describe('Bloque 1: plazo de cancelación', () => {
     });
   });
 
-  test(`el socio cancela el último día del plazo (ingreso dentro de ${PLAZO_DIAS} días) y ve la confirmación`, async ({
+  test('el día anterior al ingreso cancela con devolución total por el arrepentimiento', async ({
     page,
     request,
   }) => {
-    // Valor límite: hoy es el último día en que se puede cancelar
+    // Valor límite del arrepentimiento: el ingreso es mañana. Por las reglas del camping (N días
+    // y 50 %) ya estaría fuera de plazo, pero rige el arrepentimiento
     const tokenSocio = await tokenPorApi(request, CREDENCIALES.socio);
     const { reservaId } = await crearReservaPagada(request, ['Fede Plazo'], {
-      fecha: diasDesdeHoy(PLAZO_DIAS),
+      fecha: diasDesdeHoy(1),
       tokenSocio,
     });
 
     await iniciarSesion(page, LOGIN.cliente, CREDENCIALES.socio);
     const dialogo = await abrirCancelacion(page, reservaId);
 
-    await expect(dialogo.getByText('50 % de lo que pagaste')).toBeVisible();
+    await expect(
+      dialogo.getByText(
+        'Estás dentro del plazo de arrepentimiento: se te devuelve el total.'
+      )
+    ).toBeVisible();
+    await expect(dialogo.getByText('100 % de lo que pagaste')).toBeVisible();
     await expect(
       dialogo.getByText('¿Está seguro que desea cancelar?')
     ).toBeVisible();
@@ -78,7 +88,7 @@ test.describe('Bloque 1: plazo de cancelación', () => {
       .getByRole('button', { name: 'Confirmar cancelación' })
       .click();
 
-    // El diálogo se cierra y queda el mensaje del backend con la devolución parcial
+    // El diálogo se cierra y queda el mensaje del backend con la devolución
     await expect(dialogo).toBeHidden();
     await expect(
       page.getByRole('status').filter({
@@ -96,14 +106,15 @@ test.describe('Bloque 1: plazo de cancelación', () => {
     ).toBeVisible();
   });
 
-  test('un día después del plazo ve el mensaje "Lo sentimos…" y no puede confirmar', async ({
+  test('el mismo día del ingreso ve el mensaje "Lo sentimos…" y no puede confirmar', async ({
     page,
     request,
   }) => {
-    // Valor límite: el plazo venció ayer (ingreso dentro de N - 1 días)
+    // Valor límite del arrepentimiento: vale hasta el día anterior al ingreso, así que hoy
+    // rigen las reglas del camping y con N días ya está fuera de plazo
     const tokenSocio = await tokenPorApi(request, CREDENCIALES.socio);
     const { reservaId } = await crearReservaPagada(request, ['Gise Tarde'], {
-      fecha: diasDesdeHoy(PLAZO_DIAS - 1),
+      fecha: hoyEnArgentina(),
       tokenSocio,
     });
 

@@ -288,6 +288,8 @@ class CancelacionCondiciones(BaseModel):
     monto_devolucion: float
     # Por qué no se puede cancelar; nulo si se puede
     mensaje: Optional[str] = None
+    # True si rige el arrepentimiento: devolución total hasta fecha_limite, sin importar la configuración
+    arrepentimiento: bool
 
 
 class CancelacionResultado(ReservaResponse):

@@ -156,6 +156,8 @@ export interface CondicionesCancelacion {
   monto_devolucion: number;
   /** Por qué no se puede cancelar; null si se puede. */
   mensaje: string | null;
+  /** Dentro del plazo de arrepentimiento: se devuelve el total hasta `fecha_limite`, sin importar la configuración. */
+  arrepentimiento: boolean;
 }
 
 /** Respuesta de POST /reservas/{id}/cancelar: la reserva ya cancelada y lo que se devolvió. */

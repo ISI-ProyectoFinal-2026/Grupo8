@@ -37,11 +37,14 @@ Se fijan antes de programar para que D escriba las pruebas y C y B trabajen con 
   "fecha_limite": "2026-11-20",
   "porcentaje_devolucion": 100,
   "monto_devolucion": 25000.0,
-  "mensaje": null
+  "mensaje": null,
+  "arrepentimiento": false
 }
 ```
 
 Si `puede_cancelar` es `false`, `mensaje` trae el texto que muestra el diálogo.
+
+`arrepentimiento` (agregado en la 25.1) es `true` cuando la reserva está dentro del plazo de arrepentimiento: se devuelve el 100 % hasta `fecha_limite` (el día anterior al ingreso o el día 10 desde la reserva, lo que llegue primero), sin importar `dias_minimos` ni el porcentaje configurado.
 
 **`POST /reservas/{id}/cancelar`** (dueño de la reserva): responde `200` con la reserva actualizada (`estado_reserva = CANCELADA`) y `monto_devuelto`. Fuera del plazo, `422` con `detail` igual al mensaje de §4.
 
