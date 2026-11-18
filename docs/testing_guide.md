@@ -60,6 +60,12 @@ El backend implementa una suite de pruebas automatizadas utilizando `pytest` jun
 * **Reserva según el tipo (`test_reserva_por_tipo.py`):** cada forma de cobro (por persona con descuentos, por unidad como precio × noches), precio del momento, máximo del tipo y máximo general, mínimo de una noche, unidades agotadas contadas noche por noche (el día de egreso libera la unidad; las canceladas y las pendientes vencidas no ocupan) y que las personas de una cabaña cuenten para la capacidad total.
 * **Fixtures (`conftest.py`):** `configuracion_del_env` (automática, para toda la corrida) deja la configuración con los valores del `.env`, aunque se hayan cambiado desde el panel en la base local, y los restaura al terminar. `configurar_camping` cambia la configuración solo durante un test.
 
+### 1.8. Cancelación de Reservas (Issue 22)
+
+* **Cancelación (`test_cancelacion_reservas.py`):** Mercado Pago y el correo se reemplazan por dobles de prueba. Cubre dentro y fuera de plazo (con el mensaje exacto para 0, 1 y N días), el último día del plazo, otro usuario (404), sin token (401), reserva sin pagar, en alerta o con un ingreso registrado (422), reembolso total, parcial (solo el porcentaje, redondeado hacia abajo) y con 0 % (sin llamar a Mercado Pago), reembolso fallido (cancelada igual y `pendiente_revision`), cancelar dos veces (una sola devolución), cupo liberado, reserva en la lista de canceladas del bootstrap, QR que ya no se descarga y que un aviso posterior de Mercado Pago no la vuelve a confirmar. Los casos del arrepentimiento (Issue 25) están en el mismo archivo.
+* **Reglas configurables (`test_configuracion_camping.py`):** `dias_cancelacion` entre 0 y 365, `porcentaje_devolucion` entre 0 y 100, valores por defecto (1 y 100) y que un camping creado sin esos campos los toma.
+* **Devoluciones en otros módulos:** `test_plazo_de_pago.py` comprueba la marca de devolución del pago tardío (17.5) y `test_cobros_api.py`, que el resumen de cobros resta las devoluciones parciales.
+
 ## 2. Pruebas de Frontend (`vitest`)
 
 La PWA emplea `vitest` para ejecutar pruebas unitarias y de integración que validan el comportamiento desconectado de la red, la criptografía en el navegador y el motor transaccional local.
@@ -114,6 +120,13 @@ La PWA emplea `vitest` para ejecutar pruebas unitarias y de integración que val
 * **`src/pages/ReservasPorUnidad.test.tsx`:** con un tipo por unidad se pide titular y cantidad, sin lista de personas; se cotiza y se reserva con esos datos, y se muestra el motivo del backend cuando no se puede cotizar.
 * **`src/pages/admin/Configuracion.test.tsx`:** valores guardados, buffer recomendado, lugares online y para la puerta, validaciones y errores del backend.
 * **`src/pages/admin/TiposReserva.test.tsx`:** carga, error y vacío, validaciones del formulario, errores del backend (409 y 422), edición y activar o desactivar sin borrado.
+
+### 2.7. Cancelación en Mis Reservas y en el Panel (Issue 22)
+
+* **`src/components/DialogoCancelacion.test.tsx`:** carga, condiciones dentro del plazo (fecha, porcentaje y monto), fuera de plazo con solo "Volver", confirmación con el botón deshabilitado mientras cancela, motivo del backend si la cancelación falla, error con "Reintentar", sin conexión y sesión vencida.
+* **`src/pages/MisReservas.test.tsx`:** "Cancelar" solo en las próximas; al confirmar, la reserva pasa a "Canceladas" sin volver a pedir la lista.
+* **`src/lib/misReservas.test.ts`:** las llamadas de cancelación (token, `POST`, motivo del 422, 404 y 401).
+* **`src/pages/admin/Configuracion.test.tsx`:** el apartado "Cancelaciones" muestra, valida y guarda los dos valores, con el resumen para 0, 1 y N días.
 
 ## 3. Pruebas End-to-End (E2E) y Dispositivos Reales
 

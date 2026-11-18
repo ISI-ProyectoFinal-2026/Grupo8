@@ -167,6 +167,13 @@ En "Configuración", el apartado "Cupo y reservas" define tres valores:
 
 Debajo se ve, a medida que se escribe, cuántos lugares se venden online y cuántos quedan para la puerta. Bajar el cupo no modifica las reservas ya hechas: solo se deja de vender hasta que se libere lugar.
 
+El apartado "Cancelaciones" define las condiciones para cancelar una reserva pagada:
+
+* **Cancelar hasta (días antes del ingreso):** por defecto, 1. Con 0 se puede cancelar hasta el mismo día del ingreso.
+* **Devolución (%):** la parte de lo pagado que se devuelve por Mercado Pago. Por defecto, 100 %.
+
+Debajo se ve cómo lo va a leer el socio, por ejemplo: "Los socios pueden cancelar hasta 1 día antes del ingreso y se les devuelve el 100 % de lo que pagaron." Los dos apartados se guardan juntos con un solo botón "Guardar". Dentro de los 10 días del plazo de arrepentimiento se devuelve siempre el total, aunque acá se configure otra cosa (ver sección 1.3.1).
+
 ### 3.9. Tipos de Reserva
 
 La sección "Tipos de reserva" lista todo lo que se puede reservar desde la web, incluidos los tipos desactivados, con su precio, el máximo de personas y las unidades.

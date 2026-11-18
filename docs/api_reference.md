@@ -241,17 +241,17 @@ Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las ho
 
 ### `GET /api/v1/admin/configuracion`
 
-* **Descripción:** Cupo máximo del camping, porcentaje de buffer offline y máximo de personas por reserva, tal como están guardados en `configuracion_camping`. Si la fila no existe, se crea con los valores del `.env`.
+* **Descripción:** Cupo máximo del camping, porcentaje de buffer offline, máximo de personas por reserva y reglas de cancelación (Issue 22.1), tal como están guardados en `configuracion_camping`. Si la fila no existe, se crea con los valores del `.env`.
 * **Respuesta Exitosa (200 OK):**
 ```json
-{ "capacidad_total": 50, "porcentaje_buffer_offline": 20, "max_personas_por_reserva": 10, "porcentaje_buffer_recomendado": 20 }
+{ "capacidad_total": 50, "porcentaje_buffer_offline": 20, "max_personas_por_reserva": 10, "dias_cancelacion": 1, "porcentaje_devolucion": 100, "porcentaje_buffer_recomendado": 20 }
 ```
 * `porcentaje_buffer_recomendado` es la sugerencia que muestra el formulario (20 %, que equivale a 10 lugares sobre 50); no se guarda.
 
 ### `PUT /api/v1/admin/configuracion`
 
-* **Descripción:** Guarda los tres valores juntos. Las reservas ya hechas no se modifican: si el cupo baja por debajo de lo reservado, se deja de vender hasta que se libere lugar.
-* **Request Body (`ConfiguracionUpdate`):** `capacidad_total` (entero estricto entre 1 y 1.000.000), `porcentaje_buffer_offline` (entero estricto entre 0 y 100) y `max_personas_por_reserva` (entero estricto mayor a 0, que no supere el cupo online).
+* **Descripción:** Guarda los cinco valores juntos. Las reservas ya hechas no se modifican: si el cupo baja por debajo de lo reservado, se deja de vender hasta que se libere lugar.
+* **Request Body (`ConfiguracionUpdate`):** `capacidad_total` (entero estricto entre 1 y 1.000.000), `porcentaje_buffer_offline` (entero estricto entre 0 y 100), `max_personas_por_reserva` (entero estricto mayor a 0, que no supere el cupo online), `dias_cancelacion` (entero estricto entre 0 y 365: hasta cuántos días antes del ingreso se puede cancelar; 0 = hasta el mismo día) y `porcentaje_devolucion` (entero estricto entre 0 y 100).
 * **Cupo online:** `capacidad_total` menos el buffer en personas (`porcentaje × capacidad / 100`, redondeado hacia arriba). Es lo que se puede vender por la web; el resto queda para la puerta.
 * **Errores:** 422 si algún valor es inválido o falta (no se guarda nada).
 * **Respuesta Exitosa (200 OK):** La configuración guardada, con el mismo formato del `GET`.
@@ -295,7 +295,7 @@ Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las ho
 * **Descripción:** Lo cobrado por día, separado en efectivo y Mercado Pago, con los totales del período.
 * **Parámetros Query:** `desde` y `hasta` (AAAA-MM-DD, ambos incluidos). Sin fechas devuelve la última semana, contando hoy. El rango máximo es de 92 días; un rango invertido o más largo devuelve 422.
 * **Efectivo:** `monto_cobrado` de los ingresos manuales, en el día en que se escaneó el ingreso.
-* **Mercado Pago:** Solo pagos de la tabla `pagos` con estado `approved`, en el día de la aprobación (o el de creación, si no hay fecha de aprobación). Si un pago se reembolsa, cambia de estado y deja de contarse.
+* **Mercado Pago:** Solo pagos de la tabla `pagos` con estado `approved`, en el día de la aprobación (o el de creación, si no hay fecha de aprobación). Si un pago se reembolsa entero, cambia de estado y deja de contarse. En una devolución parcial (cancelación con menos del 100 %) Mercado Pago lo deja aprobado, así que se cuenta el monto menos lo devuelto.
 * **Respuesta (200 OK):** Incluye todos los días del rango, también los que no tuvieron cobros.
 ```json
 {
