@@ -8,9 +8,9 @@ Esta documentación está estructurada bajo el modelo *Docs as Code* para acompa
 Manual operativo del software. Cubre:
 - El ciclo de vida de una reserva y la emisión del código QR.
 - Cómo los guardias deben operar la aplicación móvil (PWA) sin conexión a internet: barra de navegación, registro manual, historial del dispositivo y estado de sincronización.
-- Navegación del cliente en el buscador, pasarela de pagos (con el plazo de 10 minutos para pagar) y autogestión de perfil.
+- Navegación del cliente en el buscador (con la elección del tipo de reserva), pasarela de pagos (con el plazo de 10 minutos para pagar) y autogestión de perfil.
 - Cancelación desde Mis reservas y "Botón de arrepentimiento" sin cuenta.
-- Uso del panel de administración: alertas, monitor de ocupación, personas esperadas, gestión de reservas, historial de ingresos, egresos y resumen de cobros.
+- Uso del panel de administración: alertas, monitor de ocupación, personas esperadas, gestión de reservas, historial de ingresos, egresos, resumen de cobros, configuración del camping y tipos de reserva.
 
 ### 2. [Documentación Técnica](./technical_documentation.md)
 Arquitectura y decisiones de diseño interno:
@@ -19,6 +19,7 @@ Arquitectura y decisiones de diseño interno:
 - **Seguridad Offline:** Criptografía asimétrica (ES256), IndexedDB, Dexie.js y el motor de validación local mediante la *Web Crypto API*; cola de envío separada del historial del dispositivo y su migración sin pérdida de datos.
 - **Comunicaciones:** Orquestación asíncrona para la generación de correos electrónicos y códigos QR en memoria RAM (Resend + Jinja2).
 - **Sesiones y permisos:** inicio de sesión con DNI o correo, roles, protección de rutas, sesión del guardia sin conexión y alta de socios.
+- **Configuración y tipos de reserva:** cupo, buffer offline y máximo por reserva editables desde el panel; tipos que se cobran por persona o por unidad (cabaña), con control de unidades por noche.
 - **Socios y clonación:** baja lógica y regla única de vigencia; detección de QR clonados y resolución de alertas.
 - **Pagos:** registro de cada pago de Mercado Pago, firma de los avisos, control del importe y plazo de pago de 10 minutos con reembolso de los pagos tardíos.
 - **Cancelaciones:** reglas del camping, plazo de arrepentimiento (Ley 24.240 y Disposición 954/2025) y enlaces firmados por correo para cancelar sin cuenta.
@@ -36,7 +37,7 @@ Definición estricta de contratos de datos y endpoints:
 - Modelos principales (Usuarios, Reservas, Configuraciones).
 - Motor de reglas, cálculo dinámico de tarifas y validaciones de cupos.
 - Endpoints de sincronización transaccional (`/bootstrap`, `/bulk-sync`) y webhooks financieros (Mercado Pago).
-- Endpoints del panel: ocupación, personas esperadas, gestión de reservas, egresos, resumen de cobros e historial de ingresos.
+- Endpoints del panel: ocupación, personas esperadas, gestión de reservas, egresos, resumen de cobros, historial de ingresos, configuración del camping y tipos de reserva.
 - Inicio de sesión (`/auth/login`, `/auth/me`), token de sesión y permisos por rol.
 - Socios y membresías (padrón, renovación y baja) y alertas de clonación.
 - Cancelación de reservas y botón de arrepentimiento.

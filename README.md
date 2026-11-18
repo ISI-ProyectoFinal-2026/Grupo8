@@ -204,7 +204,7 @@ Completar:
 * `VITE_PUBLIC_KEY`: la misma línea del paso 3 del backend, en una sola línea y con los `\n`:
   `VITE_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"`
 * `VITE_API_URL`: dirección de la API (`http://127.0.0.1:8000` en local).
-* `VITE_MAX_PERSONAS` y `VITE_MAX_NOCHES`: tienen que coincidir con `MAX_PERSONAS_POR_RESERVA` y `MAX_NOCHES_POR_RESERVA` del backend.
+* `VITE_MAX_NOCHES`: tiene que coincidir con `MAX_NOCHES_POR_RESERVA` del backend. El máximo de personas ya no sale de `VITE_MAX_PERSONAS`: lo define cada tipo de reserva en el panel.
 * `VITE_CAMPING_*`: nombre, contacto, horarios y redes que muestra la web de reservas. Los que quedan vacíos no se muestran.
 
 > Vite lee estas variables al arrancar: después de cambiarlas hay que reiniciar `npm run dev`.

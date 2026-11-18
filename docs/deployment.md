@@ -81,6 +81,7 @@ Se usa Neon y no la base gratuita de Render porque esta vence a los 30 días de 
 | `AUTH_TOKEN_EXPIRE_MINUTES` | Opcional, `60` por defecto: duración de la sesión de clientes, socios y administradores |
 | `GUARD_TOKEN_EXPIRE_HOURS` | Opcional, `168` por defecto: duración de la sesión del guardia, que puede trabajar días sin conexión |
 | `RESERVA_PENDIENTE_TTL_MINUTES` | Opcional, `10` por defecto: minutos que una reserva pendiente ocupa cupo mientras espera el pago |
+| `CAMPING_TOTAL_CAPACITY`, `CAMPING_PORCENTAJE_BUFFER_OFFLINE`, `MAX_PERSONAS_POR_RESERVA` | Opcionales (`50`, `20` y `10` por defecto). Solo crean la configuración del camping la primera vez; después se cambian desde el panel (Configuración) y estas variables ya no tienen efecto |
 
 El resto de las variables de `.env.example` tienen valores por defecto en `core/config.py`.
 
