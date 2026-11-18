@@ -67,13 +67,13 @@ La base de datos relacional PostgreSQL administra las transacciones del sistema 
 * **Modelo Reserva (`models/reserva.py`):** Almacena el ID (`UUID`), una clave foránea (`user_id`), fecha y hora, cantidad de personas y el `jwt_jti` (identificador único para el código QR). Controla su avance mediante `EstadoPagoEnum` (Pendiente, Pagado, Cancelado). Desde la Issue 19.3 guarda también el tipo elegido (`tipo_reserva_id`) y su precio en ese momento (`precio_tipo`); las reservas anteriores los tienen en nulo.
 
 
-* **Configuración del camping (`models/configuracion.py`):** una fila por camping con `capacidad_total`, `porcentaje_buffer_offline` y `max_personas_por_reserva` (Issue 19.1), además de las reglas de cancelación (Issue 22.1). El administrador la edita desde el panel; los valores del `.env` solo se usan para crearla la primera vez.
+* **Configuración del camping (`models/configuracion.py`):** una fila por camping con `capacidad_total`, `porcentaje_buffer_offline` y `max_personas_por_reserva` (Issue 19.1), además de las reglas de cancelación (Issue 22.1): `dias_cancelacion` (1 por defecto) y `porcentaje_devolucion` (100 por defecto). El administrador la edita desde el panel; los valores del `.env` solo se usan para crearla la primera vez.
 
 
 * **Modelo Tipo de Reserva (`models/tipo_reserva.py`, Issue 19.2):** `nombre` (único sin distinguir mayúsculas), `precio`, `forma_cobro` (`POR_PERSONA` o `POR_UNIDAD`), `max_personas`, `cantidad_unidades` (vacío = sin límite; siempre vacío en los tipos por persona) y `activo`. La migración crea Entrada general, Carpa y Cabaña.
 
 
-* **Modelo Pago (`models/pago.py`, Issue 17.1):** Un registro por cada pago que informa Mercado Pago, aprobado o no: `reserva_id`, `mp_payment_id` (único), estado, detalle, monto, moneda, medio de pago, fechas y `respuesta_mp` (JSONB). Si se borra la reserva, el pago se conserva con `reserva_id` en nulo.
+* **Modelo Pago (`models/pago.py`, Issue 17.1):** Un registro por cada pago que informa Mercado Pago, aprobado o no: `reserva_id`, `mp_payment_id` (único), estado, detalle, monto, moneda, medio de pago, fechas y `respuesta_mp` (JSONB). Si se borra la reserva, el pago se conserva con `reserva_id` en nulo. Desde la Issue 22.2 registra también la devolución: `monto_devuelto`, `fecha_devolucion` y `devolucion_estado` (`devuelto` o `pendiente_revision`, cuando Mercado Pago no pudo devolver y hay que hacerlo a mano). Las tres quedan en nulo si nunca hubo devolución.
 
 
 
@@ -489,7 +489,7 @@ Permite al administrador saber cuántas personas hay dentro del camping y cuánt
 * **Efectivo:** Lo cobrado en los ingresos manuales, en el día del escaneo.
 
 
-* **Mercado Pago:** Solo los pagos aprobados de la tabla `pagos`, en el día de la aprobación. Un reembolso cambia el estado del pago y deja de contarse.
+* **Mercado Pago:** Solo los pagos aprobados de la tabla `pagos`, en el día de la aprobación. Un reembolso total cambia el estado del pago y deja de contarse. En una devolución parcial el pago sigue aprobado, así que se le resta `monto_devuelto` (solo si `devolucion_estado` es `devuelto`: si quedó pendiente de revisión, la plata todavía no salió).
 
 
 * **Días:** Se agrupa por día de Buenos Aires, no de UTC, para que un cobro a las 23:30 cuente en el día correcto.
@@ -594,7 +594,9 @@ Primero se mira el plazo de arrepentimiento; si no rige, se aplican las reglas q
 
 * **Búsqueda separada de la cancelación:** `cancelar_reserva()` recibe la reserva ya encontrada. Mis reservas la busca por dueño (`reserva_del_usuario`) y el botón de arrepentimiento por el enlace del correo. Así hay una sola implementación de la regla, del reembolso y del correo.
 * **Sin devoluciones dobles:** `cancelar_reserva()` bloquea la fila (`SELECT … FOR UPDATE`) y la vuelve a leer antes de evaluar. Si llegan dos pedidos a la vez, o se usa dos veces el mismo enlace, el segundo encuentra la reserva cancelada y responde 422 "La reserva ya está cancelada.".
-* **Efectos:** la reserva pasa a `CANCELADA` (libera el cupo y su id entra en la lista negra que la PWA usa para rechazar el QR sin internet); el pago sigue `PAGADO` y la devolución se registra en `pagos` (`monto_devuelto`, `fecha_devolucion`, `devolucion_estado`). Si Mercado Pago rechaza el reembolso, la reserva igual queda cancelada y el pago queda en `pendiente_revision`.
+* **Efectos:** la reserva pasa a `CANCELADA` (libera el cupo y su id entra en la lista negra que la PWA usa para rechazar el QR sin internet); el pago sigue `PAGADO` y la devolución se registra en `pagos` (`monto_devuelto`, `fecha_devolucion`, `devolucion_estado`). Si Mercado Pago rechaza el reembolso, la reserva igual queda cancelada y el pago queda en `pendiente_revision` (la misma marca usa el pago tardío sin cupo de la Issue 17.5).
+* **Por qué el pago sigue `PAGADO`:** después de una devolución parcial Mercado Pago vuelve a avisar el pago como aprobado. Si la reserva quedara en `CANCELADO`, la confirmación de pagos la volvería a confirmar; con `PAGADO` ese aviso se ignora.
+* **Reembolso:** con el 100 % se pide la devolución total (Mercado Pago marca el pago como `refunded`); con menos, solo el monto (`{"amount": ...}`); con 0 % no se llama a Mercado Pago.
 * **Correo:** el de cancelación indica el motivo (Mis reservas o botón de arrepentimiento), si se aplicó el arrepentimiento y un **código de gestión**, que es el id de la reserva.
 
 ### 11.3. Enlaces del Botón de Arrepentimiento (sin cuenta)
@@ -608,6 +610,7 @@ Primero se mira el plazo de arrepentimiento; si no rige, se aplican las reglas q
 
 ### 11.4. Pantallas (Web de Reservas)
 
+* En Mis reservas, el botón "Cancelar" aparece en todas las reservas próximas y abre `components/DialogoCancelacion.tsx` (Dialog de `radix-ui`: se cierra con Esc y mantiene el foco adentro). Pide las condiciones a `GET /reservas/{id}/cancelacion`; fuera de plazo muestra el mensaje del backend y solo "Volver". Al confirmar, la reserva pasa a "Canceladas" con la respuesta del `POST`, sin volver a pedir la lista, y arriba se muestra el resultado.
 * El enlace "Botón de arrepentimiento" está en el pie de `LayoutPublico`, así que aparece en todas las pantallas de la web, con o sin sesión.
 * `/arrepentimiento` (`pages/Arrepentimiento.tsx`) pide solo el email y luego muestra "Si hay reservas con ese email, te enviamos un correo con un enlace para cada una.".
 * `/cancelar-reserva?token=` (`pages/CancelarReserva.tsx`) muestra las condiciones y confirma, con estados de carga, enlace vencido o no válido, fuera de plazo, éxito (con el código de gestión) y error. Las condiciones se dibujan con `DetalleCondiciones`, el mismo componente del diálogo de Mis reservas.
