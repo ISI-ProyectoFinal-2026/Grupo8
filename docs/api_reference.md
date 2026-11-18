@@ -216,7 +216,7 @@ Reglas de cada registro:
 * **Manejo de Errores:** Retorna HTTP 500 realizando un *rollback* de todo el lote ante un fallo crítico en la base de datos.
 
 
-## 5. Endpoints del Panel: Ocupación, Esperados, Configuración, Tipos de Reserva, Egresos y Cobros
+## 5. Endpoints del Panel: Ocupación, Esperados, Configuración, Tipos de Reserva, Egresos, Cobros e Historial de Ingresos
 
 Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las horas se guardan en UTC y los días se cuentan con la hora de Buenos Aires (ver `zonas-horarias.md`).
 
@@ -307,6 +307,31 @@ Todos son solo para `ADMIN`: sin token devuelven 401 y con otro rol, 403. Las ho
   "dias": [
     { "fecha": "2026-11-03", "efectivo": 2000.0, "mercado_pago": 15000.0, "total": 17000.0 },
     { "fecha": "2026-11-04", "efectivo": 0.0, "mercado_pago": 5000.25, "total": 5000.25 }
+  ]
+}
+```
+
+
+### `GET /api/v1/admin/ingresos`
+
+* **Descripción:** Ingresos aceptados por el servidor, del más nuevo al más viejo (Issue 26.6). Lo muestra "Historial de ingresos" del panel.
+* **Parámetros Query:** `desde` y `hasta` (AAAA-MM-DD, días de Buenos Aires, ambos incluidos). Sin fechas, hoy; con una sola, ese día. Máximo 92 días; un rango invertido o más largo devuelve 422. `skip` (desde 0) y `limit` (1 a 100, 20 por defecto).
+* **Qué no incluye:** los QR rechazados por clonación (quedan en `conflictos_sincronizacion`) ni los ingresos offline que todavía no se sincronizaron.
+* **Campos:** `fecha_hora_ingreso` en UTC; `reserva_id` es `null` en los ingresos manuales; `tipo_cliente` es `socio` o `visitante`; `tipo_ingreso` es `web` (QR) o `manual`.
+```json
+{
+  "desde": "2026-11-17",
+  "hasta": "2026-11-17",
+  "total": 1,
+  "items": [
+    {
+      "id": "0b6f1c2e-5a1d-4f8e-9c3b-2d7e8a9f1b40",
+      "fecha_hora_ingreso": "2026-11-17T03:30:00Z",
+      "reserva_id": null,
+      "personas": 3,
+      "tipo_cliente": "visitante",
+      "tipo_ingreso": "manual"
+    }
   ]
 }
 ```

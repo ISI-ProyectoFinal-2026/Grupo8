@@ -14,4 +14,9 @@
   y, si no se manda, se usa la hora de llegada del pedido.
 - **Cobros por día:** el resumen de cobros agrupa por día de Buenos Aires
   (`timezone('America/Argentina/Buenos_Aires', columna)`), no por día UTC.
+- **Filtrar por día:** el historial de ingresos usa `limites_dias_negocio(desde, hasta)`: de las 00:00
+  del primer día a las 00:00 del día siguiente al último, en Buenos Aires (`>=` y `<`). Así una hora como
+  las 23:30 queda en su día y no se pierde nada del último segundo. `hoy_negocio()` da el día de hoy.
+- **Mostrar:** el panel muestra las horas con la zona del negocio y en 24 h (`Intl.DateTimeFormat` con
+  `timeZone`), aunque el navegador esté en otra zona.
 - **Fechas antiguas:** las otras columnas de fecha del proyecto siguen sin zona y se leen como UTC.

@@ -7,16 +7,16 @@ Esta documentación está estructurada bajo el modelo *Docs as Code* para acompa
 ### 1. [Guía de Usuario](./user_guide.md)
 Manual operativo del software. Cubre:
 - El ciclo de vida de una reserva y la emisión del código QR.
-- Cómo los guardias deben operar la aplicación móvil (PWA) sin conexión a internet.
+- Cómo los guardias deben operar la aplicación móvil (PWA) sin conexión a internet: barra de navegación, registro manual, historial del dispositivo y estado de sincronización.
 - Navegación del cliente en el buscador (con la elección del tipo de reserva), pasarela de pagos (con el plazo de 10 minutos para pagar) y autogestión de perfil.
 - Cancelación desde Mis reservas y "Botón de arrepentimiento" sin cuenta.
-- Uso del panel de administración: monitor de ocupación, personas esperadas, gestión de reservas, egresos, resumen de cobros, configuración del camping y tipos de reserva.
+- Uso del panel de administración: alertas, monitor de ocupación, personas esperadas, gestión de reservas, historial de ingresos, egresos, resumen de cobros, configuración del camping y tipos de reserva.
 
 ### 2. [Documentación Técnica](./technical_documentation.md)
 Arquitectura y decisiones de diseño interno:
 - **Backend:** FastAPI, PostgreSQL, SQLAlchemy y migraciones con Alembic.
 - **Frontend:** React, Vite y arquitecturas de interfaz con Shadcn UI; un inicio de sesión por app, rutas por rol, estructura del panel de administración y estilo común de las tres apps.
-- **Seguridad Offline:** Criptografía asimétrica (ES256), IndexedDB, Dexie.js y el motor de validación local mediante la *Web Crypto API*.
+- **Seguridad Offline:** Criptografía asimétrica (ES256), IndexedDB, Dexie.js y el motor de validación local mediante la *Web Crypto API*; cola de envío separada del historial del dispositivo y su migración sin pérdida de datos.
 - **Comunicaciones:** Orquestación asíncrona para la generación de correos electrónicos y códigos QR en memoria RAM (Resend + Jinja2).
 - **Sesiones y permisos:** inicio de sesión con DNI o correo, roles, protección de rutas, sesión del guardia sin conexión y alta de socios.
 - **Configuración y tipos de reserva:** cupo, buffer offline y máximo por reserva editables desde el panel; tipos que se cobran por persona o por unidad (cabaña), con control de unidades por noche.
@@ -37,7 +37,7 @@ Definición estricta de contratos de datos y endpoints:
 - Modelos principales (Usuarios, Reservas, Configuraciones).
 - Motor de reglas, cálculo dinámico de tarifas y validaciones de cupos.
 - Endpoints de sincronización transaccional (`/bootstrap`, `/bulk-sync`) y webhooks financieros (Mercado Pago).
-- Endpoints del panel: ocupación, personas esperadas, gestión de reservas, egresos, resumen de cobros, configuración del camping y tipos de reserva.
+- Endpoints del panel: ocupación, personas esperadas, gestión de reservas, egresos, resumen de cobros, historial de ingresos, configuración del camping y tipos de reserva.
 - Inicio de sesión (`/auth/login`, `/auth/me`), token de sesión y permisos por rol.
 - Socios y membresías (padrón, renovación y baja) y alertas de clonación.
 - Cancelación de reservas y botón de arrepentimiento.
