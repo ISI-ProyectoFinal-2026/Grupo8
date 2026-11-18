@@ -150,3 +150,34 @@ Fecha: 14/11/2026 · Backend: https://qamp.onrender.com · Frontend: https://gru
 | El backend gratuito se suspende tras 15 minutos sin tráfico; el primer aviso de Mercado Pago puede llegar con el servicio dormido. | Abrir `/health` antes de pagar. Mercado Pago reintenta los avisos y queda "Verificar pago". |
 | Además del aviso con `data.id` y `type=payment` (aceptado con `200`), Mercado Pago envía avisos en el formato `id` + `topic` (`payment` y `merchant_order`), que el backend rechaza con `401 SignatureMismatch`. Mercado Pago los reintenta. | No afecta al pago: la reserva se confirma con el primer aviso. Queda pendiente decidir si esos avisos se responden con `200` sin procesarlos, para que Mercado Pago deje de reintentarlos. |
 | En el checkout de prueba no se pudieron agregar tarjetas nuevas a la cuenta de prueba comprador. | Se usaron las tarjetas que ya tenía la cuenta, con titular `APRO` y `OTHE`. |
+
+## 6. Despliegue final (sub-issue 21.2)
+
+Fecha: 18/11/2026 · Backend: https://qamp.onrender.com · Frontend: https://grupo8.vercel.app · Versión: `main` congelado (#325)
+
+Se reutilizó el entorno de la 21.1 (Render, Neon y Vercel) como producción, con las credenciales de prueba de Mercado Pago.
+
+### 6.1. Pasos
+
+1. **Render:** se agregó `ARREPENTIMIENTO_SECRET_KEY` (generada en el panel de Render) y se verificó que el último despliegue corresponda al último commit de `main`.
+2. **Migraciones:** el comando de arranque las aplica; `alembic_version` en Neon coincide con `alembic heads`.
+3. **Vercel:** se agregaron `VITE_CAMPING_NOMBRE`, `VITE_CAMPING_EMAIL` y `VITE_CAMPING_HORARIOS`, y se volvió a desplegar para que Vite tome las variables.
+4. **Datos:** se vació la base con `TRUNCATE usuarios, reservas CASCADE;` (borra también pagos, ingresos y personas de las reservas, pero no la configuración ni los tipos de reserva) y se cargó `seed.py` como en la sección 3.4. El `TRUNCATE` hace falta porque `seed.py` solo borra usuarios y reservas, y fallaría si quedan pagos o ingresos que apuntan a ellas.
+
+### 6.2. Checklist
+
+- [x] Variables de entorno cargadas en Render y Vercel, ninguna en el repositorio.
+- [x] Migraciones aplicadas en la base de producción sin errores.
+- [x] `/health` responde `status: ok`.
+- [x] Inicio de sesión de cada rol en su app: socio en `/login`, administrador en `/admin/login` y guardia en `/acceso/login`.
+- [x] Reserva pagada con el sandbox (titular `APRO`): webhook recibido y correo con el QR.
+- [x] Escaneo del QR desde la app del guardia.
+- [x] Monitor del panel: la ocupación sube con el ingreso.
+
+### 6.3. Observaciones
+
+| Observación | Qué hacer |
+|---|---|
+| Las tres apps comparten la sesión en el mismo navegador: con la sesión de socio abierta, `/admin/login` muestra "Acceso denegado". | Cerrar sesión antes de entrar con otro rol, o usar una ventana distinta por rol (por ejemplo, incógnito para la web de reservas). |
+| El panel no mostraba el ingreso escaneado mientras la app del guardia ya contaba la ocupación. | Es el funcionamiento sin conexión: el escaneo se guarda en el dispositivo y llega al panel al sincronizar. Desde Estado de sincronización se puede sincronizar a mano. |
+| El backend gratuito se suspende tras 15 minutos sin tráfico. | Abrir `/health` unos minutos antes de una demostración. |
