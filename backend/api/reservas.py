@@ -123,6 +123,14 @@ def _verificar_maximos(camping: ConfiguracionCamping, tipo: Optional[TipoReserva
         raise _error_de_tipo(error)
 
 
+def _verificar_titular_socio(db: Session, dni_titular: str) -> None:
+    """El DNI del titular de una unidad tiene que ser de un socio vigente, con las mismas respuestas que por persona."""
+    try:
+        socio_service.verificar_dni_socio(db, dni_titular)
+    except socio_service.SocioNoValidoError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+
+
 def _es_por_unidad(tipo: Optional[TipoReserva]) -> bool:
     return tipo is not None and tipo.forma_cobro == FormaCobroEnum.POR_UNIDAD
 
@@ -139,7 +147,7 @@ def cotizar_reserva(cotizacion_in: CotizarRequest, db: Session = Depends(get_db)
     camping = obtener_o_crear_camping(db)
 
     if _es_por_unidad(tipo):
-        # Por unidad: precio de la unidad × noches, sin descuentos ni detalle por persona
+        # Por unidad: precio de la unidad × noches, con el descuento de socio si el titular lo es
         if cotizacion_in.personas is not None:
             raise HTTPException(
                 status_code=422,
@@ -154,16 +162,20 @@ def cotizar_reserva(cotizacion_in: CotizarRequest, db: Session = Depends(get_db)
             noches = calcular_noches(cotizacion_in.fecha_ingreso, cotizacion_in.fecha_egreso)
         except TipoReservaError as error:
             raise _error_de_tipo(error)
-        total = float(PricingService.precio_por_unidad(tipo.precio, noches))
+        es_socio = cotizacion_in.dni_titular is not None
+        if es_socio:
+            _verificar_titular_socio(db, cotizacion_in.dni_titular)
+        precio = PricingService.cotizar_unidad(db, tipo.precio, noches, es_socio)
         return CotizarResponse(
-            subtotal=total,
-            descuento_total=0,
-            total=total,
-            cantidad_socios=0,
+            subtotal=float(precio.precio_base),
+            descuento_total=float(precio.precio_base - precio.precio_final),
+            total=float(precio.precio_final),
+            cantidad_socios=1 if es_socio else 0,
             detalle=[],
             forma_cobro=tipo.forma_cobro,
             precio_unitario=float(tipo.precio),
             noches=noches,
+            descuento_pct=float(precio.descuento_pct) if es_socio else None,
         )
 
     # Por persona (o sin tipo): como siempre, con el precio del tipo si lo hay
@@ -267,10 +279,21 @@ def crear_reserva(
 
     # 9. Precio. El monto lo calcula el backend, no lo manda el cliente
     if por_unidad:
-        # Precio de la unidad × noches, sin descuentos por persona ni filas de personas
+        # Precio de la unidad × noches, sin filas de personas. Si viene el DNI del titular tiene que ser
+        # de un socio vigente: el descuento no se confía al formulario
+        es_socio = reserva_in.dni_titular is not None
+        if es_socio:
+            try:
+                _verificar_titular_socio(db, reserva_in.dni_titular)
+            except HTTPException:
+                db.rollback()  # libera la fila del tipo
+                raise
+        precio = PricingService.cotizar_unidad(db, tipo.precio, noches, es_socio)
         personas = []
-        monto_total = float(PricingService.precio_por_unidad(tipo.precio, noches))
+        monto_total = float(precio.precio_final)
         titular = reserva_in.titular
+        dni_titular = reserva_in.dni_titular if es_socio else None
+        descuento_pct = precio.descuento_pct if es_socio else None
     else:
         # Las personas marcadas como socio tienen que validar como socio en la base
         # (membresía vigente y sin baja). Sin esto, el descuento quedaría a cargo del formulario
@@ -302,6 +325,8 @@ def crear_reserva(
         monto_total = float(cotizacion.total)
         # El titular es la primera persona
         titular = reserva_in.personas[0].nombre
+        dni_titular = None
+        descuento_pct = None
 
     # 10. Preparar el objeto para la base de datos. Se guarda el tipo y su precio de este momento
     nueva_reserva = Reserva(
@@ -309,6 +334,8 @@ def crear_reserva(
         camping_id=camping.camping_id,
         tipo_reserva_id=tipo.id if tipo else None,
         precio_tipo=tipo.precio if tipo else None,
+        dni_titular=dni_titular,
+        descuento_pct=descuento_pct,
         fecha_ingreso=reserva_in.fecha_ingreso,
         fecha_egreso=reserva_in.fecha_egreso,
         cantidad_personas=cantidad_personas,

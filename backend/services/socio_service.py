@@ -54,6 +54,16 @@ class SocioNoValidoError(Exception):
         super().__init__(mensaje)
 
 
+def verificar_dni_socio(db: Session, dni: str) -> None:
+    """
+    Comprueba que el DNI sea de un socio con la membresía vigente y sin baja, con la misma regla
+    que GET /socios/validar/{dni}. Lanza SocioNoValidoError si no valida.
+    """
+    resultado = validar_socio(db, dni)
+    if not resultado.valido:
+        raise SocioNoValidoError(dni, resultado.motivo or "NO_EXISTE")
+
+
 def verificar_personas_socias(db: Session, personas: Iterable[PersonaConCondicion]) -> None:
     """
     El descuento de socio no se confía al formulario: cada persona marcada como socio
@@ -64,7 +74,4 @@ def verificar_personas_socias(db: Session, personas: Iterable[PersonaConCondicio
         if persona.condicion != CondicionPersonaEnum.socio:
             continue
         # El schema de la reserva ya exige el DNI a los socios
-        dni = persona.dni or ""
-        resultado = validar_socio(db, dni)
-        if not resultado.valido:
-            raise SocioNoValidoError(dni, resultado.motivo or "NO_EXISTE")
+        verificar_dni_socio(db, persona.dni or "")

@@ -31,6 +31,8 @@ export interface Cotizacion {
   forma_cobro?: 'POR_PERSONA' | 'POR_UNIDAD' | null;
   precio_unitario?: number | null;
   noches?: number | null;
+  // Por unidad: porcentaje de descuento de socio aplicado (null si el titular no es socio)
+  descuento_pct?: number | null;
   // Por persona: las noches que se cobraron a cada una (con 0 noches, visita por el día, vale 1)
   jornadas?: number | null;
 }
@@ -118,6 +120,8 @@ export interface PedidoPorUnidad {
   cantidad_personas: number;
   fecha_ingreso: string;
   fecha_egreso: string;
+  // DNI del titular, solo si ya se verificó como socio vigente: el backend lo valida de nuevo y descuenta
+  dni_titular?: string;
 }
 
 /** Por unidad (cabaña): precio de la unidad × noches, sin datos de cada persona. */
