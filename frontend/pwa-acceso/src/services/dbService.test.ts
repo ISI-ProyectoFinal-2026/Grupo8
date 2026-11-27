@@ -4,6 +4,7 @@ import 'fake-indexeddb/auto';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
+import type { IJwtPayload } from '../types/security';
 import { dbService, MAX_HISTORIAL } from './dbService';
 
 /* Encolamiento de ingresos en IndexedDB (store `ingresos_pendientes`).
@@ -239,5 +240,126 @@ describe('dbService — Historial del dispositivo (26.2)', () => {
     vi.useRealTimers();
 
     expect((await dbService.obtenerHistorial()).map((f) => f.jti)).toEqual(['qr-nuevo', 'qr-viejo']);
+  });
+});
+
+describe('dbService — Registro manual con reserva (29.1)', () => {
+  const RESERVA_ID = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+  const qrReserva = (cambios: Partial<IJwtPayload> = {}): IJwtPayload => ({
+    jti: 'qr-reserva-1',
+    reserva_id: RESERVA_ID,
+    camping_id: 'CAMP-01',
+    iat: 1,
+    exp: 9999999999,
+    cantidad_personas: 3,
+    typ: 'visitante',
+    dat: '2026-12-01',
+    ...cambios,
+  });
+
+  const limpiar = async () => {
+    await db.ingresos_pendientes.clear();
+    await db.historial.clear();
+    await db.configuracion.clear();
+  };
+
+  beforeEach(limpiar);
+  afterEach(limpiar);
+
+  it('queda vinculado a la reserva, con el jti y la cantidad de personas del QR', async () => {
+    const idLocal = await dbService.registrarIngresoManualConReserva(
+      '30111222',
+      'Juan Perez',
+      qrReserva(),
+      0
+    );
+
+    expect(idLocal).toBe('qr-reserva-1');
+    const [pendiente] = await db.ingresos_pendientes.toArray();
+    expect(pendiente.jti).toBe('qr-reserva-1');
+    expect(pendiente.qr_payload).toMatchObject({
+      tipo_ingreso: 'MANUAL',
+      reserva_id: RESERVA_ID,
+      dni: '30111222',
+      nombre: 'Juan Perez',
+      cantidad_personas: 3,
+    });
+    const [fila] = await db.historial.toArray();
+    expect(fila).toMatchObject({
+      tipo: 'MANUAL',
+      reserva_id: RESERVA_ID,
+      cantidad_personas: 3,
+    });
+  });
+
+  it('la misma reserva no ingresa dos veces, ni con otro QR', async () => {
+    await dbService.registrarIngresoManualConReserva(
+      '30111222',
+      'Juan Perez',
+      qrReserva(),
+      0
+    );
+
+    await expect(
+      dbService.registrarIngresoManualConReserva(
+        '30111222',
+        'Juan Perez',
+        qrReserva(),
+        0
+      )
+    ).rejects.toThrow('RESERVA_YA_INGRESADA');
+    await expect(
+      dbService.registrarIngresoManualConReserva(
+        '30111222',
+        'Juan Perez',
+        qrReserva({ jti: 'qr-otro' }),
+        0
+      )
+    ).rejects.toThrow('RESERVA_YA_INGRESADA');
+    expect(await db.ingresos_pendientes.count()).toBe(1);
+  });
+
+  it('un QR ya escaneado también cuenta como reserva ya ingresada', async () => {
+    await dbService.registrarIngresoOffline('qr-reserva-1', qrReserva());
+
+    await expect(
+      dbService.registrarIngresoManualConReserva(
+        '30111222',
+        'Juan Perez',
+        qrReserva(),
+        0
+      )
+    ).rejects.toThrow('RESERVA_YA_INGRESADA');
+  });
+
+  it('una reserva ya sincronizada (fuera de la cola) sigue figurando como ingresada por el historial', async () => {
+    await dbService.registrarIngresoManualConReserva(
+      '30111222',
+      'Juan Perez',
+      qrReserva(),
+      0
+    );
+    await dbService.marcarComoSincronizados(['qr-reserva-1']);
+
+    expect(await db.ingresos_pendientes.count()).toBe(0);
+    expect(await dbService.reservaYaIngreso(RESERVA_ID)).toBe(true);
+  });
+
+  it('reservaYaIngreso es falso para una reserva que no ingresó', async () => {
+    expect(await dbService.reservaYaIngreso(RESERVA_ID)).toBe(false);
+  });
+
+  it('respeta el cupo del camping', async () => {
+    await dbService.guardarCapacidadMaxima(2);
+
+    await expect(
+      dbService.registrarIngresoManualConReserva(
+        '30111222',
+        'Juan Perez',
+        qrReserva({ cantidad_personas: 3 }),
+        0
+      )
+    ).rejects.toThrow('CAPACIDAD_EXCEDIDA');
+    expect(await db.ingresos_pendientes.count()).toBe(0);
   });
 });

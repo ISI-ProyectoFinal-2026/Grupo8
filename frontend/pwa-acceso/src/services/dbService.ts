@@ -1,16 +1,18 @@
 import { db, type HistorialIngreso } from '../db/db';
+import type { IJwtPayload } from '../types/security';
 import { generarJti } from '../utils/jti';
 
 /** Cuántos ingresos guarda el historial del dispositivo. Los más viejos se borran solos. */
 export const MAX_HISTORIAL = 50;
 
-// Copia liviana del ingreso para la pantalla de Historial: sin nombre, DNI ni monto
+// Copia liviana del ingreso para la pantalla de Historial: sin nombre, DNI ni monto.
+// Un manual con reserva (29.1) también guarda el id de la reserva: sirve para saber si ya ingresó.
 function filaHistorial(jti: string, payload: any, fecha: Date): HistorialIngreso {
   // Mismo criterio que syncService: los manuales viejos de la cola no traen tipo_ingreso, pero sí dni
   const esManual = payload?.tipo_ingreso === 'MANUAL' || payload?.dni !== undefined;
   return {
     jti,
-    reserva_id: esManual || payload?.reserva_id == null ? null : String(payload.reserva_id),
+    reserva_id: payload?.reserva_id == null ? null : String(payload.reserva_id),
     tipo: esManual ? 'MANUAL' : 'QR',
     cantidad_personas: Number(payload?.cantidad_personas ?? 1),
     fecha_ingreso: fecha,
@@ -180,6 +182,55 @@ export const dbService = {
     await this.registrarIngresoOffline(jti, payloadManual);
     // Es el "ID local" que ve el guardia en la confirmación
     return jti;
+  },
+
+  /**
+   * ¿Esta reserva ya ingresó en este dispositivo? Mira la cola de envío y el historial
+   * (los que ya se sincronizaron salen de la cola, pero siguen en el historial).
+   * Sin conexión es lo único que se puede revisar: si ingresó por otro dispositivo,
+   * el servidor lo marca como conflicto al sincronizar.
+   */
+  async reservaYaIngreso(reservaId: string): Promise<boolean> {
+    const id = String(reservaId);
+    if ((await db.historial.where('reserva_id').equals(id).count()) > 0)
+      return true;
+    const pendientes = await db.ingresos_pendientes.toArray();
+    return pendientes.some(
+      (p) =>
+        p.qr_payload?.reserva_id != null &&
+        String(p.qr_payload.reserva_id) === id
+    );
+  },
+
+  /**
+   * Ingreso manual de una reserva web (29.1): el guardia carga el código del QR y, ya verificado,
+   * el ingreso queda vinculado a esa reserva. Se usa el jti del QR y no uno nuevo, así el mismo
+   * QR no puede entrar dos veces (escaneado o cargado a mano) y el servidor lo reconoce como el mismo.
+   * La cantidad de personas sale del QR, no de lo que escriba el guardia.
+   */
+  async registrarIngresoManualConReserva(
+    dni: string,
+    nombre: string,
+    qr: IJwtPayload,
+    montoCobrado = 0
+  ): Promise<string> {
+    if (await this.reservaYaIngreso(qr.reserva_id)) {
+      throw new Error('RESERVA_YA_INGRESADA: Esta reserva ya fue ingresada.');
+    }
+
+    const payloadManual = {
+      dni,
+      nombre,
+      tipo_ingreso: 'MANUAL',
+      tipo_visita: 'Manual con Reserva',
+      reserva_id: String(qr.reserva_id),
+      cantidad_personas: qr.cantidad_personas,
+      monto_cobrado: Math.round(montoCobrado * 100) / 100,
+      typ: 'manual',
+    };
+
+    await this.registrarIngresoOffline(qr.jti, payloadManual);
+    return qr.jti;
   },
 
   // ==========================================
