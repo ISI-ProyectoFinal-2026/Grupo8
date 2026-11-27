@@ -8,10 +8,12 @@ import { Separator } from "@/components/ui/separator";
 import {
   cotizarPorUnidad,
   cotizarReserva,
+  etiquetaJornadas,
   ERROR_COTIZACION_GENERICO,
   formatearMonto,
   personasParaCotizar,
   type Cotizacion,
+  type FechasCotizacion,
   type PedidoPorUnidad,
   type PersonaCotizar,
 } from "@/lib/cotizacion";
@@ -48,7 +50,7 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
 
 // Lo que se cotiza: por persona (con la edad y condición de cada una) o por unidad
 type PedidoCotizacion =
-  | { forma: "persona"; tipoId: string; personas: PersonaCotizar[] }
+  | { forma: "persona"; tipoId: string; personas: PersonaCotizar[]; fechas: FechasCotizacion }
   | { forma: "unidad"; pedido: PedidoPorUnidad };
 
 // Obtiene un mensaje legible de una respuesta de error del backend
@@ -214,7 +216,13 @@ export default function Reservas() {
         };
       }
     } else if (personasACotizar) {
-      pedidoCotizacion = { forma: "persona", tipoId: tipo.id, personas: personasACotizar };
+      pedidoCotizacion = {
+        forma: "persona",
+        tipoId: tipo.id,
+        personas: personasACotizar,
+        // Las mismas fechas que se mandan al reservar: sin ellas el precio no incluiría las noches
+        fechas: { fecha_ingreso: fecha, fecha_egreso: fechaEgreso || fecha },
+      };
     }
   }
   const claveCotizacion = JSON.stringify(pedidoCotizacion);
@@ -232,7 +240,7 @@ export default function Reservas() {
     const pedido =
       aCotizar.forma === "unidad"
         ? cotizarPorUnidad(aCotizar.pedido, controlador.signal)
-        : cotizarReserva(aCotizar.personas, controlador.signal, aCotizar.tipoId);
+        : cotizarReserva(aCotizar.personas, controlador.signal, aCotizar.tipoId, aCotizar.fechas);
     pedido
       .then(setCotizacion)
       .catch((error: unknown) => {
@@ -618,7 +626,9 @@ export default function Reservas() {
                     ? cotizacion?.noches
                       ? `${formatearMonto(cotizacion.precio_unitario ?? tipo.precio)} × ${cotizacion.noches} ${cotizacion.noches === 1 ? "noche" : "noches"}`
                       : "Subtotal"
-                    : `Subtotal (${cantidadPersonas} pers.)`}
+                    : cotizacion?.jornadas
+                      ? `${formatearMonto(cotizacion.precio_unitario ?? tipo.precio)} × ${cantidadPersonas} ${cantidadPersonas === 1 ? "persona" : "personas"} × ${etiquetaJornadas(cotizacion.jornadas, fecha === (fechaEgreso || fecha))}`
+                      : `Subtotal (${cantidadPersonas} pers.)`}
                 </span>
                 <span>{cotizacion ? formatearMonto(cotizacion.subtotal) : "—"}</span>
               </div>

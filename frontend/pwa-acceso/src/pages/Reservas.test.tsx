@@ -133,13 +133,13 @@ function simularBackend({ cotizacion = COTIZACION_DEL_BACKEND, usuario, socios =
   return fetchFalso;
 }
 
-function mostrarReservas(personas = '2') {
+function mostrarReservas(personas = '2', fechaEgreso = '2030-01-10') {
   return render(
     <MemoryRouter
       initialEntries={[
         {
           pathname: '/reservas',
-          state: { fecha: '2030-01-10', fechaEgreso: '2030-01-10', personas, tipo: TIPO_CARPA },
+          state: { fecha: '2030-01-10', fechaEgreso, personas, tipo: TIPO_CARPA },
         },
       ]}
     >
@@ -269,7 +269,33 @@ describe('Reservas: precio calculado por el backend', () => {
         { edad: 70, condicion: 'visitante' },
         { edad: 68, condicion: 'visitante' },
       ],
+      fecha_ingreso: '2030-01-10',
+      fecha_egreso: '2030-01-10',
     });
+  });
+
+  it('cotiza con las mismas fechas de la estadía y muestra precio × personas × noches', async () => {
+    const fetchFalso = simularBackend({
+      cotizacion: { ...COTIZACION_DEL_BACKEND, precio_unitario: 8500, jornadas: 3 },
+    });
+    const { container } = mostrarReservas('2', '2030-01-13');
+
+    cargarEdades(container, ['30', '28']);
+
+    await waitFor(() => expect(fetchFalso).toHaveBeenCalledTimes(1));
+    const cuerpo = JSON.parse(fetchFalso.mock.calls[0][1].body);
+    expect(cuerpo.fecha_ingreso).toBe('2030-01-10');
+    expect(cuerpo.fecha_egreso).toBe('2030-01-13');
+    expect(await screen.findByText(/\$8\.?500 × 2 personas × 3 noches/)).toBeTruthy();
+  });
+
+  it('si se viene por el día muestra una jornada', async () => {
+    simularBackend({ cotizacion: { ...COTIZACION_DEL_BACKEND, precio_unitario: 8500, jornadas: 1 } });
+    const { container } = mostrarReservas('2');
+
+    cargarEdades(container, ['30', '28']);
+
+    expect(await screen.findByText(/\$8\.?500 × 2 personas × 1 jornada/)).toBeTruthy();
   });
 
   it('no muestra la fila de descuento si el backend no aplicó ninguno', async () => {

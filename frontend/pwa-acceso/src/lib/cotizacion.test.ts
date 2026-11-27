@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   cotizarPorUnidad,
   cotizarReserva,
+  etiquetaJornadas,
   formatearMonto,
   personasParaCotizar,
   type Cotizacion,
@@ -120,6 +121,21 @@ describe('cotizarReserva', () => {
     expect(JSON.parse(fetchFalso.mock.calls[0][1].body)).toEqual({ tipo_reserva_id: 't-carpa', personas });
   });
 
+  it('con fechas manda también el ingreso y el egreso para cobrar las noches', async () => {
+    const fetchFalso = vi.fn().mockResolvedValue({ ok: true, json: async () => COTIZACION });
+    vi.stubGlobal('fetch', fetchFalso);
+    const personas = [{ edad: 34, condicion: 'visitante' as const }];
+    const fechas = { fecha_ingreso: '2030-01-10', fecha_egreso: '2030-01-15' };
+
+    await cotizarReserva(personas, undefined, 't-carpa', fechas);
+
+    expect(JSON.parse(fetchFalso.mock.calls[0][1].body)).toEqual({
+      tipo_reserva_id: 't-carpa',
+      personas,
+      ...fechas,
+    });
+  });
+
   it('muestra el motivo que explica el backend', async () => {
     vi.stubGlobal(
       'fetch',
@@ -160,5 +176,16 @@ describe('cotizarPorUnidad', () => {
     expect(await cotizarPorUnidad(pedido)).toEqual(respuesta);
     expect(String(fetchFalso.mock.calls[0][0])).toMatch(/\/reservas\/cotizar$/);
     expect(JSON.parse(fetchFalso.mock.calls[0][1].body)).toEqual(pedido);
+  });
+});
+
+describe('etiquetaJornadas', () => {
+  it('nombra las noches en singular y plural', () => {
+    expect(etiquetaJornadas(1, false)).toBe('1 noche');
+    expect(etiquetaJornadas(5, false)).toBe('5 noches');
+  });
+
+  it('si se viene por el día habla de una jornada', () => {
+    expect(etiquetaJornadas(1, true)).toBe('1 jornada');
   });
 });

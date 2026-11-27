@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List, NamedTuple, Optional, Sequence
 
@@ -18,7 +19,7 @@ class PersonaPrecio(NamedTuple):
 
 class PrecioPersona(NamedTuple):
     """Lo que se cobra a una persona y cómo se llegó a ese importe."""
-    precio_base: Decimal
+    precio_base: Decimal  # importe de la persona antes del descuento, ya multiplicado por las jornadas
     descuento_pct: Decimal  # en porcentaje: 20 significa 20 %
     precio_final: Decimal
     descuento_codigo: Optional[str] = None  # None si no se aplicó ningún descuento
@@ -31,6 +32,7 @@ class Cotizacion(NamedTuple):
     descuento_total: Decimal
     total: Decimal
     cantidad_socios: int
+    jornadas: int = 1  # noches que se cobran por persona (una sola si es visita por el día)
 
 
 class PricingService:
@@ -63,19 +65,33 @@ class PricingService:
         return min(aplicables, key=lambda d: (-Decimal(str(d.porcentaje)), d.codigo))
 
     @staticmethod
+    def jornadas(fecha_ingreso: Optional[date], fecha_egreso: Optional[date]) -> int:
+        """
+        Jornadas que se cobran a cada persona: las noches de la estadía, y una sola si se
+        viene por el día (0 noches). Sin fechas también se cobra una.
+        """
+        if fecha_ingreso is None or fecha_egreso is None:
+            return 1
+        return max((fecha_egreso - fecha_ingreso).days, 1)
+
+    @staticmethod
     def calcular_precio(
         personas: Sequence[PersonaPrecio],
         descuentos: Sequence[Descuento],
         precio_por_persona: Optional[Decimal] = None,
+        jornadas: int = 1,
     ) -> Cotizacion:
         """
         Calcula lo que paga cada persona y el total de la reserva con los descuentos dados.
+        Cada persona paga precio × jornadas, y el descuento se aplica sobre ese subtotal.
         El importe de cada persona se redondea a dos decimales (mitad hacia arriba)
         antes de sumar. Sin precio_por_persona (reservas sin tipo) se usa PRECIO_BASE_POR_PERSONA.
         """
         if precio_por_persona is None:
             precio_por_persona = Decimal(str(settings.PRECIO_BASE_POR_PERSONA))
-        precio_base = Decimal(str(precio_por_persona)).quantize(DOS_DECIMALES, rounding=ROUND_HALF_UP)
+        precio_noche = Decimal(str(precio_por_persona)).quantize(DOS_DECIMALES, rounding=ROUND_HALF_UP)
+        # Lo que cada persona debería pagar sin descuento: el precio por las jornadas
+        precio_base = precio_noche * jornadas
 
         precios = []
         for persona in personas:
@@ -98,6 +114,7 @@ class PricingService:
             descuento_total=subtotal - total,
             total=total,
             cantidad_socios=sum(1 for p in personas if p.condicion == CondicionPersonaEnum.socio),
+            jornadas=jornadas,
         )
 
     @staticmethod
@@ -105,13 +122,14 @@ class PricingService:
         db: Session,
         personas: Sequence[PersonaPrecio],
         precio_por_persona: Optional[Decimal] = None,
+        jornadas: int = 1,
     ) -> Cotizacion:
         """
         Único punto de entrada para saber cuánto cuesta una reserva por persona: lo usan la
         cotización y la creación de la reserva, así el importe mostrado es el mismo que se cobra.
         """
         return PricingService.calcular_precio(
-            personas, PricingService._descuentos_activos(db), precio_por_persona
+            personas, PricingService._descuentos_activos(db), precio_por_persona, jornadas
         )
 
     @staticmethod

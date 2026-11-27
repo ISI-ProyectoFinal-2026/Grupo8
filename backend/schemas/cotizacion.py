@@ -22,7 +22,8 @@ class CotizarRequest(BaseModel):
     tipo_reserva_id: Optional[UUID] = None
     # Por persona (o sin tipo)
     personas: Optional[List[PersonaCotizar]] = None
-    # Por unidad: cuántas personas van y las fechas, porque se cobra por noche
+    # Por unidad: cuántas personas van, y las fechas porque se cobra por noche. Por persona las fechas
+    # también cuentan (precio × personas × noches); sin ellas se cotiza una jornada
     cantidad_personas: Optional[int] = Field(default=None, strict=True, ge=1)
     fecha_ingreso: Optional[date] = None
     fecha_egreso: Optional[date] = None
@@ -66,3 +67,5 @@ class CotizarResponse(BaseModel):
     forma_cobro: Optional[FormaCobroEnum] = None
     precio_unitario: Optional[float] = None
     noches: Optional[int] = None
+    # Solo por persona: las noches que se cobraron a cada una (0 noches, visita por el día, cuenta 1)
+    jornadas: Optional[int] = None
