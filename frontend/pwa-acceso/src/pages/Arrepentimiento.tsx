@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { CartelContacto } from '@/components/CartelContacto';
 import { ErrorDeCampo } from '@/components/ErrorDeCampo';
 import { Button } from '@/components/ui/button';
 import {
@@ -118,6 +119,8 @@ export default function Arrepentimiento() {
           )}
         </CardContent>
       </Card>
+      {/* Los enlaces llegan por correo: si no llegan, el visitante necesita otra salida */}
+      <CartelContacto className="mt-6" />
     </div>
   );
 }
