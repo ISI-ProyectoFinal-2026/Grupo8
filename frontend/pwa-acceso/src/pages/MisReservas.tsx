@@ -242,7 +242,12 @@ export default function MisReservas() {
           </Badge>
         </CardHeader>
         <CardContent className="pt-4 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-xl font-bold text-tierra-900">{formatearMonto(reserva.monto_total)}</div>
+          <div>
+            <div className="text-xl font-bold text-tierra-900">{formatearMonto(reserva.monto_total)}</div>
+            {(reserva.descuento_total ?? 0) > 0 && (
+              <p className="text-sm text-bosque-700">Descuento: -{formatearMonto(reserva.descuento_total ?? 0)}</p>
+            )}
+          </div>
           <div className="flex gap-2 w-full md:w-auto">
 
             {/* Lógica para reservas PAGADAS / PRÓXIMAS */}

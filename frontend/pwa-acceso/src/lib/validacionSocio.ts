@@ -21,6 +21,21 @@ export async function validarSocio(dni: string, signal?: AbortSignal): Promise<V
   return (await respuesta.json()) as ValidacionSocio;
 }
 
+// Igual que mensajeMotivoSocio, pero para el DNI opcional del titular de una cabaña: ahí no hay
+// "Visitante General" para elegir, alcanza con dejar el campo vacío
+export function mensajeMotivoSocioUnidad(motivo: MotivoSocio | null): string {
+  switch (motivo) {
+    case 'NO_EXISTE':
+      return 'No encontramos ningún socio con ese DNI. Revisalo o dejá el campo vacío para reservar sin descuento.';
+    case 'NO_ES_SOCIO':
+      return 'Ese DNI no pertenece a un socio. Dejá el campo vacío para reservar sin descuento.';
+    case 'CUOTA_VENCIDA':
+      return 'La cuota de este socio está vencida. Regularizala o dejá el campo vacío para reservar sin descuento.';
+    default:
+      return 'No pudimos validar el DNI. Intentá nuevamente.';
+  }
+}
+
 // Texto para mostrar bajo el campo de DNI cuando el backend rechaza al socio
 export function mensajeMotivoSocio(motivo: MotivoSocio | null): string {
   switch (motivo) {

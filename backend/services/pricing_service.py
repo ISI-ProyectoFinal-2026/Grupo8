@@ -35,6 +35,14 @@ class Cotizacion(NamedTuple):
     jornadas: int = 1  # noches que se cobran por persona (una sola si es visita por el día)
 
 
+class PrecioUnidad(NamedTuple):
+    """Lo que se cobra por una unidad (cabaña) y cómo se llegó a ese importe."""
+    precio_base: Decimal  # precio de la unidad × noches, antes del descuento
+    descuento_pct: Decimal  # en porcentaje: 20 significa 20 %
+    precio_final: Decimal
+    descuento_codigo: Optional[str] = None  # None si no se aplicó ningún descuento
+
+
 class PricingService:
     @staticmethod
     def _descuentos_activos(db: Session) -> List[Descuento]:
@@ -136,3 +144,26 @@ class PricingService:
     def precio_por_unidad(precio_unidad: Decimal, noches: int) -> Decimal:
         """Reserva por unidad (cabaña): precio de la unidad × noches, sin descuentos por persona."""
         return (Decimal(str(precio_unidad)) * noches).quantize(DOS_DECIMALES, rounding=ROUND_HALF_UP)
+
+    @staticmethod
+    def cotizar_unidad(db: Session, precio_unidad: Decimal, noches: int, es_socio: bool = False) -> PrecioUnidad:
+        """
+        Reserva por unidad (cabaña): precio de la unidad × noches. Si el titular es socio se aplica
+        el descuento de socio que el administrador tiene activo, con el mismo redondeo que por persona.
+        Es el único punto de entrada para la cotización y la creación, así el total mostrado es el que se cobra.
+        """
+        precio_base = PricingService.precio_por_unidad(precio_unidad, noches)
+        descuento = None
+        if es_socio:
+            # Se reutiliza la regla por persona: los descuentos por edad no aplican a una unidad
+            descuento = PricingService._descuento_de(
+                PersonaPrecio(edad=0, condicion=CondicionPersonaEnum.socio),
+                [d for d in PricingService._descuentos_activos(db) if d.aplica_a == AplicaDescuentoEnum.socio],
+            )
+        pct = Decimal(str(descuento.porcentaje)) if descuento else Decimal(0)
+        return PrecioUnidad(
+            precio_base=precio_base,
+            descuento_pct=pct.quantize(DOS_DECIMALES, rounding=ROUND_HALF_UP),
+            precio_final=(precio_base * (100 - pct) / 100).quantize(DOS_DECIMALES, rounding=ROUND_HALF_UP),
+            descuento_codigo=descuento.codigo if descuento else None,
+        )

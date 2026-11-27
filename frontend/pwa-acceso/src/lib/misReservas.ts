@@ -25,6 +25,8 @@ export interface ReservaDetalle {
   cantidad_personas: number;
   cantidad_socios: number;
   monto_total: number;
+  // Cuánto se descontó en total, calculado por el backend (0 si no hubo descuento)
+  descuento_total?: number;
   titular: string;
   estado_reserva: EstadoReserva;
   estado_pago: string;
