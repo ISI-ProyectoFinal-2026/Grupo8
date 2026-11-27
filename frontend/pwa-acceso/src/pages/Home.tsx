@@ -11,8 +11,10 @@ import {
 } from "@/components/ui/select";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { DisponibilidadDias } from "@/components/DisponibilidadDias";
 import { ErrorDeCampo } from "@/components/ErrorDeCampo";
 import { CAMPING } from "@/lib/camping";
+import { useDisponibilidad } from "@/lib/disponibilidad";
 import { atributosDeError, enfocarPrimerError } from "@/lib/errorDeCampo";
 import { sumarDias } from "@/lib/fechas";
 import {
@@ -58,6 +60,17 @@ export default function Home() {
   }, [cargarTipos]);
 
   const tipo = tipos.find((t) => t.id === tipoId);
+
+  // Disponibilidad del día elegido y los siguientes. Con noches válidas también la de la estadía,
+  // que se calcula con la misma cuenta que valida la reserva
+  const nochesElegidas = /^\d+$/.test(noches) ? Number(noches) : 0;
+  const egresoDeLaEstadia =
+    /^\d{4}-\d{2}-\d{2}$/.test(fecha) && nochesElegidas >= 1 && nochesElegidas <= MAX_NOCHES
+      ? sumarDias(fecha, nochesElegidas)
+      : null;
+  const disponibilidad = useDisponibilidad(fecha, egresoDeLaEstadia);
+  const personasElegidas = /^\d+$/.test(personas) ? Number(personas) : null;
+
   const sinTipos = !cargandoTipos && !errorTipos && tipos.length === 0;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -84,6 +97,17 @@ export default function Home() {
 
     const fechas = validarFechasEstadia(fecha, fechaEgreso);
     if (fechas.ingreso) nuevos.fecha = fechas.ingreso;
+
+    // Con la disponibilidad ya consultada no se deja seguir con un día completo ni con una estadía
+    // que no tiene lugares para todas las personas. Si no se pudo consultar, decide el backend al reservar
+    const { datos } = disponibilidad;
+    if (datos && !nuevos.fecha) {
+      if (datos.dias.find((d) => d.fecha === fecha)?.completo) {
+        nuevos.fecha = "Ese día está completo. Elegí otro día de la lista.";
+      } else if (datos.estadia && !nuevos.personas && personasElegidas !== null && personasElegidas > datos.estadia.disponibles) {
+        nuevos.personas = `Para esa estadía quedan ${datos.estadia.disponibles} ${datos.estadia.disponibles === 1 ? "lugar" : "lugares"}. Elegí otras fechas o menos personas.`;
+      }
+    }
 
     setErrores(nuevos);
     if (Object.keys(nuevos).length > 0) {
@@ -144,6 +168,13 @@ export default function Home() {
                 <ErrorDeCampo idCampo="personas" mensaje={errores.personas} />
               </div>
             </div>
+
+            <DisponibilidadDias
+              disponibilidad={disponibilidad}
+              fechaElegida={fecha}
+              personas={personasElegidas}
+              onElegir={setFecha}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="tipo">Tipo de reserva</Label>
