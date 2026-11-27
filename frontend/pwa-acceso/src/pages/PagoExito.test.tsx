@@ -340,6 +340,24 @@ async function mostrarConfirmada() {
   })) as HTMLButtonElement;
 }
 
+describe('Cartel de contacto en el pago exitoso (31.3)', () => {
+  it('con la reserva confirmada muestra el cartel que lleva a Contacto', async () => {
+    await mostrarConfirmada();
+
+    expect(screen.getByText('¿No te llegó el mail?')).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: /contactanos/i }).getAttribute('href')
+    ).toBe('/contacto');
+  });
+
+  it('no aparece mientras se confirma el pago', () => {
+    consultar.mockReturnValue(new Promise(() => {}));
+    mostrar();
+
+    expect(screen.queryByText('¿No te llegó el mail?')).toBeNull();
+  });
+});
+
 describe('Descargar QR desde la pantalla de pago exitoso', () => {
   it('descarga el QR con la reserva y el pago que devuelve Mercado Pago, sin sesión', async () => {
     const fetchFalso = simularApi(

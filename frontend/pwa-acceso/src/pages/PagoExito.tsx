@@ -1,3 +1,4 @@
+import { CartelContacto } from '@/components/CartelContacto';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -332,6 +333,7 @@ function Confirmada({
         <QrCode className="w-5 h-5" />
         {descargando ? 'Descargando…' : 'Descargar QR'}
       </Button>
+      <CartelContacto />
       <VolverAlInicio />
     </Pantalla>
   );

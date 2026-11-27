@@ -73,6 +73,20 @@ describe('Botón de arrepentimiento (25.3)', () => {
     expect(screen.getByRole('link', { name: 'Volver al inicio' }).getAttribute('href')).toBe('/');
   });
 
+  it('muestra el cartel para contactar al camping, antes y después de enviar', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta(202, { mensaje: MENSAJE })));
+    mostrar();
+
+    const antes = screen.getByRole('link', { name: /contactanos/i });
+    expect(antes.getAttribute('href')).toBe('/contacto');
+    expect(screen.getByText('¿No te llegó el mail?')).toBeTruthy();
+
+    escribirYEnviar('ana@correo.com');
+    await screen.findByRole('status');
+
+    expect(screen.getByRole('link', { name: /contactanos/i }).getAttribute('href')).toBe('/contacto');
+  });
+
   it('"Usar otro email" vuelve al formulario vacío', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => respuesta(202, { mensaje: MENSAJE })));
     mostrar();
