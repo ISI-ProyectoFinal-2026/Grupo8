@@ -145,24 +145,109 @@ def _cambiar_reserva(reserva_id: str, **valores) -> None:
 # --- Por persona ---
 
 def test_reserva_por_persona_usa_el_precio_del_tipo_y_los_descuentos(parcela, descuentos_fijos):
+    # _por_persona reserva 2 noches (del día 40 al 42)
     response = client.post(URL_RESERVAS, json=_por_persona(parcela, [_visitante(), _socio()]))
 
     assert response.status_code == 201, response.text
     data = response.json()
-    # Visitante paga el precio del tipo; el socio, con su descuento
-    esperado = PRECIO_PARCELA + PRECIO_PARCELA * (100 - descuentos_fijos) / 100
+    # Cada persona paga el precio × 2 noches; el socio, con su descuento sobre ese subtotal
+    subtotal = PRECIO_PARCELA * 2
+    esperado = subtotal + subtotal * (100 - descuentos_fijos) / 100
     assert data["monto_total"] == esperado
     assert data["tipo_reserva_id"] == str(parcela.id)
     assert data["precio_tipo"] == PRECIO_PARCELA
-    assert [p["precio_base"] for p in data["personas"]] == [PRECIO_PARCELA, PRECIO_PARCELA]
+    assert [p["precio_base"] for p in data["personas"]] == [subtotal, subtotal]
     assert data["titular"] == "Ana Perez"
     assert data["cantidad_personas"] == 2
 
 
-def test_el_precio_por_persona_no_se_multiplica_por_las_noches(parcela):
-    una_noche = client.post(URL_COTIZAR, json={"tipo_reserva_id": str(parcela.id), "personas": [{"edad": 30, "condicion": "visitante"}]})
+@pytest.mark.parametrize("noches", [1, 2, 5])
+def test_la_carpa_cobra_precio_por_personas_por_noches(parcela, noches):
+    personas = [_visitante(), _visitante("Luis Perez", 12), _visitante("Eva Perez", 5)]
 
-    assert una_noche.json()["total"] == PRECIO_PARCELA
+    reserva = client.post(URL_RESERVAS, json=_por_persona(parcela, personas, egreso=40 + noches))
+
+    assert reserva.status_code == 201, reserva.text
+    assert reserva.json()["monto_total"] == PRECIO_PARCELA * 3 * noches
+
+
+def test_la_carpa_por_el_dia_cobra_una_jornada(parcela):
+    # Ingreso y egreso el mismo día: 0 noches, se cobra una jornada
+    reserva = client.post(URL_RESERVAS, json=_por_persona(parcela, [_visitante(), _visitante("Luis Perez")], egreso=40))
+
+    assert reserva.status_code == 201, reserva.text
+    assert reserva.json()["monto_total"] == PRECIO_PARCELA * 2
+
+
+@pytest.mark.parametrize("noches", [0, 1, 2, 5])
+def test_cotizar_la_carpa_da_lo_mismo_que_crear_la_reserva(parcela, descuentos_fijos, noches):
+    personas = [_visitante(), _socio()]
+    jornadas = max(noches, 1)
+
+    cotizacion = client.post(
+        URL_COTIZAR,
+        json={
+            "tipo_reserva_id": str(parcela.id),
+            "personas": [{"edad": p["edad"], "condicion": p["condicion"]} for p in personas],
+            "fecha_ingreso": _dia(40),
+            "fecha_egreso": _dia(40 + noches),
+        },
+    )
+    reserva = client.post(URL_RESERVAS, json=_por_persona(parcela, personas, egreso=40 + noches))
+
+    assert cotizacion.status_code == 200, cotizacion.text
+    assert reserva.status_code == 201, reserva.text
+    datos = cotizacion.json()
+    subtotal = PRECIO_PARCELA * jornadas
+    assert datos["jornadas"] == jornadas
+    assert datos["subtotal"] == subtotal * 2
+    assert datos["total"] == subtotal + subtotal * (100 - descuentos_fijos) / 100
+    assert datos["total"] == reserva.json()["monto_total"]
+    # El detalle cotizado es el mismo que se guarda en cada persona
+    for cotizada, guardada in zip(datos["detalle"], reserva.json()["personas"]):
+        assert cotizada["precio_base"] == guardada["precio_base"] == subtotal
+        assert cotizada["precio_final"] == guardada["precio_final"]
+
+
+def test_cotizar_por_persona_sin_fechas_cobra_una_jornada(parcela):
+    response = client.post(
+        URL_COTIZAR,
+        json={"tipo_reserva_id": str(parcela.id), "personas": [{"edad": 30, "condicion": "visitante"}]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == PRECIO_PARCELA
+    assert response.json()["jornadas"] == 1
+
+
+@pytest.mark.parametrize("cambios, mensaje", [
+    ({"fecha_egreso": None}, "Indicá las fechas"),
+    ({"fecha_ingreso": None}, "Indicá las fechas"),
+    ({"fecha_egreso": _dia(39)}, "anterior"),
+    ({"fecha_egreso": _dia(40 + settings.MAX_NOCHES_POR_RESERVA + 1)}, "no puede superar"),
+])
+def test_cotizar_por_persona_controla_las_fechas_como_la_reserva(parcela, cambios, mensaje):
+    cuerpo = {
+        "tipo_reserva_id": str(parcela.id),
+        "personas": [{"edad": 30, "condicion": "visitante"}],
+        "fecha_ingreso": _dia(40),
+        "fecha_egreso": _dia(42),
+        **cambios,
+    }
+    cuerpo = {clave: valor for clave, valor in cuerpo.items() if valor is not None}
+
+    response = client.post(URL_COTIZAR, json=cuerpo)
+
+    assert response.status_code == 422
+    assert mensaje in response.text
+
+
+def test_sin_tipo_tambien_se_cobra_por_noche(reservas_sin_tipo):
+    response = client.post(URL_RESERVAS, json=_por_persona(None, [_visitante()], egreso=43))
+
+    assert response.status_code == 201, response.text
+    reservas_sin_tipo.append(response.json()["id"])
+    assert response.json()["monto_total"] == settings.PRECIO_BASE_POR_PERSONA * 3
 
 
 def test_cotizar_por_persona_con_tipo(parcela, descuentos_fijos):
@@ -178,11 +263,13 @@ def test_cotizar_por_persona_con_tipo(parcela, descuentos_fijos):
     assert data["forma_cobro"] == "POR_PERSONA"
     assert data["precio_unitario"] == PRECIO_PARCELA
     assert data["noches"] is None
+    assert data["jornadas"] == 1
     assert len(data["detalle"]) == 2
 
 
 def test_sin_tipo_la_reserva_funciona_como_antes(reservas_sin_tipo):
-    response = client.post(URL_RESERVAS, json=_por_persona(None, [_visitante()]))
+    # Una noche: con más noches el precio base se multiplica (ver test_sin_tipo_tambien_se_cobra_por_noche)
+    response = client.post(URL_RESERVAS, json=_por_persona(None, [_visitante()], egreso=41))
 
     assert response.status_code == 201, response.text
     reservas_sin_tipo.append(response.json()["id"])
@@ -225,6 +312,25 @@ def test_reserva_por_unidad_cobra_unidad_por_noches_sin_descuentos(cabana):
     assert data["tipo_reserva_id"] == str(cabana.id)
     assert data["precio_tipo"] == PRECIO_CABANA
     assert data["estado_reserva"] == EstadoReservaEnum.PENDIENTE.value
+
+
+@pytest.mark.parametrize("noches", [1, 2, 5])
+def test_la_cabana_cotizada_y_reservada_cobra_la_unidad_por_noches_una_sola_vez(cabana, noches):
+    cotizacion = client.post(
+        URL_COTIZAR,
+        json={
+            "tipo_reserva_id": str(cabana.id),
+            "cantidad_personas": 4,
+            "fecha_ingreso": _dia(40),
+            "fecha_egreso": _dia(40 + noches),
+        },
+    )
+    reserva = client.post(URL_RESERVAS, json=_por_unidad(cabana, ingreso=40, egreso=40 + noches))
+
+    assert cotizacion.status_code == 200, cotizacion.text
+    assert reserva.status_code == 201, reserva.text
+    assert cotizacion.json()["noches"] == noches
+    assert cotizacion.json()["total"] == reserva.json()["monto_total"] == PRECIO_CABANA * noches
 
 
 def test_la_reserva_conserva_el_precio_del_momento(cabana):

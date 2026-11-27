@@ -23,6 +23,7 @@ pytestmark = pytest.mark.usefixtures("camping_de_prueba")
 
 INGRESO = hoy_argentina() + timedelta(days=30)
 EGRESO = INGRESO + timedelta(days=2)
+NOCHES = (EGRESO - INGRESO).days
 BASE = settings.PRECIO_BASE_POR_PERSONA
 
 PERSONAS = [
@@ -37,10 +38,24 @@ def _para_cotizar(personas) -> list:
     return [{"edad": p["edad"], "condicion": p["condicion"]} for p in personas]
 
 
-def _payload_reserva(personas=PERSONAS) -> dict:
+def _cotizar_estadia(personas=PERSONAS, egreso=EGRESO) -> dict:
+    """Cotiza con las mismas fechas que después se mandan al reservar, que es lo que hace la web."""
+    respuesta = client.post(
+        "/reservas/cotizar",
+        json={
+            "personas": _para_cotizar(personas),
+            "fecha_ingreso": INGRESO.isoformat(),
+            "fecha_egreso": egreso.isoformat(),
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    return respuesta.json()
+
+
+def _payload_reserva(personas=PERSONAS, egreso=EGRESO) -> dict:
     return {
         "fecha_ingreso": INGRESO.isoformat(),
-        "fecha_egreso": EGRESO.isoformat(),
+        "fecha_egreso": egreso.isoformat(),
         "personas": personas,
         "email": "ana@test.com",
     }
@@ -227,7 +242,7 @@ def test_cotizar_acepta_el_maximo_de_personas():
 # ---------- Cotización = reserva = Mercado Pago ----------
 
 def test_el_total_cotizado_es_el_de_la_reserva_y_el_que_se_manda_a_mercado_pago(reservas_creadas, mercado_pago):
-    cotizacion = client.post("/reservas/cotizar", json={"personas": _para_cotizar(PERSONAS)}).json()
+    cotizacion = _cotizar_estadia()
 
     reserva = client.post("/reservas/", json=_payload_reserva())
     assert reserva.status_code == 201, reserva.text
@@ -243,8 +258,29 @@ def test_el_total_cotizado_es_el_de_la_reserva_y_el_que_se_manda_a_mercado_pago(
     assert mercado_pago.preferencia["external_reference"] == reserva["id"]
 
 
+@pytest.mark.parametrize("noches", [0, 1, 2, 5])
+def test_con_noches_cotizacion_reserva_y_mercado_pago_dan_el_mismo_monto(
+    reservas_creadas, mercado_pago, descuentos_fijos, noches
+):
+    egreso = INGRESO + timedelta(days=noches)
+    cotizacion = _cotizar_estadia(egreso=egreso)
+
+    reserva = client.post("/reservas/", json=_payload_reserva(egreso=egreso))
+    assert reserva.status_code == 201, reserva.text
+    reserva = reserva.json()
+    reservas_creadas.append(reserva["id"])
+    client.post("/api/payments/create", json={"title": "Reserva", "reserva_id": reserva["id"]})
+
+    jornadas = max(noches, 1)  # con 0 noches (visita por el día) se cobra una jornada
+    por_noche = 3 * BASE - BASE * descuentos_fijos / 100
+    unit_price = mercado_pago.preferencia["items"][0]["unit_price"]
+    assert cotizacion["jornadas"] == jornadas
+    assert cotizacion["total"] == reserva["monto_total"] == unit_price
+    assert cotizacion["total"] == pytest.approx(jornadas * por_noche)
+
+
 def test_el_detalle_cotizado_coincide_con_lo_guardado_en_cada_persona(reservas_creadas):
-    cotizacion = client.post("/reservas/cotizar", json={"personas": _para_cotizar(PERSONAS)}).json()
+    cotizacion = _cotizar_estadia()
 
     reserva = client.post("/reservas/", json=_payload_reserva()).json()
     reservas_creadas.append(reserva["id"])
@@ -268,14 +304,14 @@ def test_con_descuentos_por_edad_cotizacion_reserva_y_pago_siguen_coincidiendo(
     )
     monkeypatch.setattr(PricingService, "_descuentos_activos", staticmethod(lambda db: [socio, menores]))
 
-    cotizacion = client.post("/reservas/cotizar", json={"personas": _para_cotizar(PERSONAS)}).json()
+    cotizacion = _cotizar_estadia()
     reserva = client.post("/reservas/", json=_payload_reserva()).json()
     reservas_creadas.append(reserva["id"])
     client.post("/api/payments/create", json={"title": "Reserva", "reserva_id": reserva["id"]})
 
     assert cotizacion["total"] == reserva["monto_total"] == mercado_pago.preferencia["items"][0]["unit_price"]
-    # 5000 * 0.75 + 5000 * 0.6667 (redondeado a 3333.50) + 5000
-    assert cotizacion["total"] == pytest.approx(BASE * 0.75 + 3333.50 + BASE)
+    # Por noche: 5000 * 0.75 + 5000 * 0.6667 (redondeado a 3333.50) + 5000; la reserva es de 2 noches
+    assert cotizacion["total"] == pytest.approx(NOCHES * (BASE * 0.75 + 3333.50 + BASE))
 
 
 def test_el_monto_de_la_reserva_no_lo_decide_el_cliente(reservas_creadas, descuentos_fijos):
@@ -285,7 +321,7 @@ def test_el_monto_de_la_reserva_no_lo_decide_el_cliente(reservas_creadas, descue
     reserva = client.post("/reservas/", json=payload).json()
     reservas_creadas.append(reserva["id"])
 
-    assert reserva["monto_total"] == pytest.approx(3 * BASE - BASE * descuentos_fijos / 100)
+    assert reserva["monto_total"] == pytest.approx(NOCHES * (3 * BASE - BASE * descuentos_fijos / 100))
 
 
 def test_el_pago_cobra_el_monto_guardado_aunque_cambien_los_descuentos(monkeypatch, reservas_creadas, mercado_pago):

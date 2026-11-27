@@ -31,6 +31,8 @@ export interface Cotizacion {
   forma_cobro?: 'POR_PERSONA' | 'POR_UNIDAD' | null;
   precio_unitario?: number | null;
   noches?: number | null;
+  // Por persona: las noches que se cobraron a cada una (con 0 noches, visita por el día, vale 1)
+  jornadas?: number | null;
 }
 
 // Mensaje cuando la cotización falla sin un motivo del backend (por ejemplo, sin conexión)
@@ -54,6 +56,12 @@ export function personasParaCotizar(personas: PersonaDelFormulario[]): PersonaCo
     });
   }
   return resultado;
+}
+
+// Cómo se nombra lo que se cobra por persona: noches, o una jornada si se viene por el día
+export function etiquetaJornadas(jornadas: number, porElDia: boolean): string {
+  if (porElDia) return '1 jornada';
+  return `${jornadas} ${jornadas === 1 ? 'noche' : 'noches'}`;
 }
 
 export function formatearMonto(valor: number): string {
@@ -82,13 +90,26 @@ async function pedirCotizacion(cuerpo: object, signal?: AbortSignal): Promise<Co
   return (await respuesta.json()) as Cotizacion;
 }
 
-/** Por persona: cada una con su edad y condición. Sin tipo se cotiza con el precio base. */
+export interface FechasCotizacion {
+  fecha_ingreso: string;
+  fecha_egreso: string;
+}
+
+/**
+ * Por persona: cada una con su edad y condición, por las noches de la estadía.
+ * Sin tipo se cotiza con el precio base. Sin fechas el backend cobra una sola jornada.
+ */
 export function cotizarReserva(
   personas: PersonaCotizar[],
   signal?: AbortSignal,
-  tipoReservaId?: string
+  tipoReservaId?: string,
+  fechas?: FechasCotizacion
 ): Promise<Cotizacion> {
-  const cuerpo = tipoReservaId ? { tipo_reserva_id: tipoReservaId, personas } : { personas };
+  const cuerpo = {
+    ...(tipoReservaId ? { tipo_reserva_id: tipoReservaId } : {}),
+    personas,
+    ...(fechas ?? {}),
+  };
   return pedirCotizacion(cuerpo, signal);
 }
 

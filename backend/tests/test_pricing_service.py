@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -118,6 +119,84 @@ def test_ante_un_empate_se_elige_el_de_codigo_menor():
     descuentos = [_por_edad("zeta", 30, 0, 120), _por_edad("alfa", 30, 0, 120)]
 
     assert _una_persona(VISITANTE, 30, descuentos).descuento_codigo == "alfa"
+
+
+# ---------- Noches ----------
+
+@pytest.mark.parametrize("noches", [1, 2, 5])
+def test_cada_persona_paga_el_precio_por_las_noches(noches):
+    personas = [PersonaPrecio(30, VISITANTE), PersonaPrecio(25, VISITANTE)]
+
+    cotizacion = PricingService.calcular_precio(personas, [], jornadas=noches)
+
+    assert cotizacion.jornadas == noches
+    assert [p.precio_base for p in cotizacion.personas] == [BASE * noches, BASE * noches]
+    assert cotizacion.subtotal == BASE * 2 * noches
+    assert cotizacion.total == BASE * 2 * noches
+
+
+def test_sin_indicar_noches_se_cobra_una_jornada():
+    cotizacion = PricingService.calcular_precio([PersonaPrecio(30, VISITANTE)], [])
+
+    assert cotizacion.jornadas == 1
+    assert cotizacion.total == BASE
+
+
+def test_el_descuento_se_aplica_sobre_el_subtotal_de_cada_persona_ya_multiplicado_por_las_noches():
+    personas = [PersonaPrecio(34, SOCIO), PersonaPrecio(30, VISITANTE)]
+
+    cotizacion = PricingService.calcular_precio(personas, [_socio(20)], jornadas=3)
+
+    socio, visitante = cotizacion.personas
+    assert socio.precio_base == BASE * 3
+    assert socio.precio_final == BASE * 3 * Decimal("0.8")
+    assert visitante.precio_final == BASE * 3
+    assert cotizacion.subtotal == BASE * 6
+    assert cotizacion.total == BASE * 3 * Decimal("1.8")
+    assert cotizacion.descuento_total == BASE * 3 * Decimal("0.2")
+
+
+def test_el_redondeo_se_hace_sobre_el_subtotal_con_noches_y_no_noche_por_noche():
+    # 100,05 × 3 = 300,15 → con 10 % da 270,135 y se redondea a 270,14.
+    # Descontando noche por noche (90,045 → 90,05) y multiplicando daría 270,15.
+    cotizacion = PricingService.calcular_precio(
+        [PersonaPrecio(34, SOCIO)], [_socio(10)], precio_por_persona=Decimal("100.05"), jornadas=3
+    )
+
+    assert cotizacion.personas[0].precio_final == Decimal("270.14")
+
+
+def test_una_persona_con_descuento_total_sigue_pagando_cero_con_noches():
+    cotizacion = PricingService.calcular_precio([PersonaPrecio(34, SOCIO)], [_socio(100)], jornadas=5)
+
+    assert cotizacion.total == 0
+
+
+def test_las_jornadas_son_las_noches_de_la_estadia():
+    assert PricingService.jornadas(date(2030, 1, 10), date(2030, 1, 11)) == 1
+    assert PricingService.jornadas(date(2030, 1, 10), date(2030, 1, 12)) == 2
+    assert PricingService.jornadas(date(2030, 1, 10), date(2030, 1, 15)) == 5
+
+
+def test_si_se_viene_por_el_dia_se_cobra_una_jornada():
+    assert PricingService.jornadas(date(2030, 1, 10), date(2030, 1, 10)) == 1
+
+
+def test_sin_fechas_se_cobra_una_jornada():
+    assert PricingService.jornadas(None, None) == 1
+
+
+def test_cotizar_pasa_las_noches_al_calculo(monkeypatch):
+    monkeypatch.setattr(PricingService, "_descuentos_activos", staticmethod(lambda db: [_socio(20)]))
+
+    cotizacion = PricingService.cotizar(None, [PersonaPrecio(34, SOCIO)], jornadas=2)
+
+    assert cotizacion.total == BASE * 2 * Decimal("0.8")
+
+
+def test_el_precio_por_unidad_ya_incluye_las_noches_y_no_se_multiplica_otra_vez():
+    assert PricingService.precio_por_unidad(Decimal("25000"), 1) == Decimal("25000.00")
+    assert PricingService.precio_por_unidad(Decimal("25000"), 5) == Decimal("125000.00")
 
 
 # ---------- Totales ----------

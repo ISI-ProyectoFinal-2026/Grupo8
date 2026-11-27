@@ -87,7 +87,24 @@ def _respuesta_cotizacion(
         ],
         forma_cobro=tipo.forma_cobro if tipo else None,
         precio_unitario=float(tipo.precio) if tipo else None,
+        jornadas=cotizacion.jornadas,
     )
+
+
+def _jornadas_cotizadas(fecha_ingreso: Optional[date], fecha_egreso: Optional[date]) -> int:
+    """Jornadas a cobrar por persona al cotizar. Las fechas se controlan igual que al crear la reserva."""
+    if (fecha_ingreso is None) != (fecha_egreso is None):
+        raise HTTPException(status_code=422, detail="Indicá las fechas de ingreso y egreso.")
+    if fecha_ingreso is not None and fecha_egreso is not None:
+        noches = (fecha_egreso - fecha_ingreso).days
+        if noches < 0:
+            raise HTTPException(status_code=422, detail="La fecha de egreso no puede ser anterior a la de ingreso.")
+        if noches > settings.MAX_NOCHES_POR_RESERVA:
+            raise HTTPException(
+                status_code=422,
+                detail=f"La estadía no puede superar las {settings.MAX_NOCHES_POR_RESERVA} noches.",
+            )
+    return PricingService.jornadas(fecha_ingreso, fecha_egreso)
 
 
 def _error_de_tipo(error: TipoReservaError) -> HTTPException:
@@ -153,8 +170,9 @@ def cotizar_reserva(cotizacion_in: CotizarRequest, db: Session = Depends(get_db)
     if cotizacion_in.personas is None:
         raise HTTPException(status_code=422, detail="Una reserva de este tipo necesita los datos de cada persona.")
     _verificar_maximos(camping, tipo, len(cotizacion_in.personas))
+    jornadas = _jornadas_cotizadas(cotizacion_in.fecha_ingreso, cotizacion_in.fecha_egreso)
     personas = [PersonaPrecio(p.edad, p.condicion) for p in cotizacion_in.personas]
-    cotizacion = PricingService.cotizar(db, personas, tipo.precio if tipo else None)
+    cotizacion = PricingService.cotizar(db, personas, tipo.precio if tipo else None, jornadas)
     return _respuesta_cotizacion(cotizacion, personas, tipo)
 
 
@@ -266,6 +284,7 @@ def crear_reserva(
             db,
             [PersonaPrecio(p.edad, p.condicion) for p in reserva_in.personas],
             tipo.precio if tipo else None,
+            PricingService.jornadas(reserva_in.fecha_ingreso, reserva_in.fecha_egreso),
         )
         personas = [
             ReservaPersona(
