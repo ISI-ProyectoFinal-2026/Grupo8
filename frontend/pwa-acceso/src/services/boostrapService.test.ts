@@ -3,7 +3,7 @@
 import 'fake-indexeddb/auto';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AUTH_EXPIRED_EVENT, TOKEN_KEY } from '@/context/AuthContext';
+import { AUTH_EXPIRED_EVENT } from '@/context/AuthContext';
 import { db } from '../db/db';
 import { sincronizarBootstrap } from './bootstrapService';
 import { dbService } from './dbService';
@@ -122,7 +122,7 @@ describe('bootstrapService — lista de reservas canceladas (Issue 20.4)', () =>
   });
 
   it('pide la primera página completa con el token del guardia', async () => {
-    localStorage.setItem(TOKEN_KEY, 'token-del-guardia');
+    await dbService.guardarSesion('token-del-guardia', 'SEGURIDAD');
     const fetchFalso = vi.fn().mockResolvedValue(pagina([]));
     vi.stubGlobal('fetch', fetchFalso);
 

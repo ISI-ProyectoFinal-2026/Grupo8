@@ -3,7 +3,7 @@
 import 'fake-indexeddb/auto';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AUTH_EXPIRED_EVENT, TOKEN_KEY } from '@/context/AuthContext';
+import { AUTH_EXPIRED_EVENT } from '@/context/AuthContext';
 import { db } from '../db/db';
 import { dbService, MAX_HISTORIAL } from './dbService';
 import { CLAVE_ULTIMA_SINCRONIZACION, MENSAJE_SESION, syncService } from './syncService';
@@ -59,8 +59,8 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     await db.configuracion.clear();
     setNavigatorOnLine(true);
     syncService.isSyncing = false;
-    // bulk-sync exige la sesión del guardia: se simula una abierta
-    localStorage.setItem(TOKEN_KEY, TOKEN_GUARDIA);
+    // bulk-sync exige la sesión del guardia, que vive en IndexedDB (28.2): se simula una abierta
+    await dbService.guardarSesion(TOKEN_GUARDIA, 'SEGURIDAD');
 
     // Mock de fetch por defecto: éxito "vacío". Actúa como red de
     // seguridad: si un reintento con backoff agendado por un test anterior
@@ -79,7 +79,6 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     await db.configuracion.clear();
     setNavigatorOnLine(true);
     syncService.isSyncing = false;
-    localStorage.removeItem(TOKEN_KEY);
     vi.restoreAllMocks();
   });
 
@@ -392,7 +391,7 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
   });
 
   it('Test 11 — sin sesión no se envía nada y la cola queda intacta', async () => {
-    localStorage.removeItem(TOKEN_KEY);
+    await dbService.eliminarSesion();
     await dbService.registrarIngresoManual('22222222', 'Sin Sesion', 0, 'Espontaneo', 10);
 
     await syncService.sincronizarIngresosPendientes();
@@ -447,7 +446,7 @@ describe('Offline/Online integration — pérdida y recuperación de conexión (
     expect(await db.ingresos_pendientes.toArray()).toHaveLength(1);
 
     // El guardia inicia sesión de nuevo y el siguiente intento ya viaja con el token nuevo
-    localStorage.setItem(TOKEN_KEY, 'token-nuevo');
+    await dbService.guardarSesion('token-nuevo', 'SEGURIDAD');
     const jti = (await db.ingresos_pendientes.toArray())[0].jti;
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,

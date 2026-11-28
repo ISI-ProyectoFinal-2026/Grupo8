@@ -1,4 +1,4 @@
-import { AUTH_EXPIRED_EVENT, TOKEN_KEY } from '@/context/AuthContext';
+import { AUTH_EXPIRED_EVENT, leerTokenGuardia } from '@/context/AuthContext';
 import { dbService } from './dbService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -21,18 +21,10 @@ const esListaDeIds = (valor: unknown): valor is string[] =>
   Array.isArray(valor) &&
   valor.every((id) => typeof id === 'string' && id.length > 0);
 
-const leerToken = (): string | null => {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-};
-
 async function pedirPagina(pagina: number): Promise<RespuestaBootstrap> {
   const control = new AbortController();
   const temporizador = setTimeout(() => control.abort(), TIEMPO_MAXIMO_MS);
-  const token = leerToken();
+  const token = await leerTokenGuardia();
   try {
     const response = await fetch(
       `${API_URL}/api/v1/sincronizacion/bootstrap?page=${pagina}&limit=${TAMANIO_PAGINA}`,

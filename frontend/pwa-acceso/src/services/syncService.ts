@@ -1,4 +1,4 @@
-import { AUTH_EXPIRED_EVENT, TOKEN_KEY, type DetalleSesionVencida } from '@/context/AuthContext';
+import { AUTH_EXPIRED_EVENT, leerTokenGuardia, type DetalleSesionVencida } from '@/context/AuthContext';
 import { dbService } from './dbService';
 import { obtenerDispositivoId } from '../utils/dispositivo';
 
@@ -50,15 +50,6 @@ interface SyncResponse {
   sincronizados_jti: string[];
   errores: ErrorIngreso[];
 }
-
-// Token de la sesión del guardia; bulk-sync lo exige
-const leerToken = (): string | null => {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-};
 
 /** Aviso de sesión vencida. Lo usan también Estado de sincronización y el login del guardia. */
 export const MENSAJE_SESION = 'Iniciá sesión de nuevo para sincronizar. Tus ingresos siguen guardados en este dispositivo.';
@@ -117,7 +108,8 @@ export const syncService = {
       }
 
       // Sin sesión no se envía nada: la cola queda intacta hasta que el guardia vuelva a iniciar sesión
-      const token = leerToken();
+      // Token de la sesión del guardia, guardado en IndexedDB (28.2); bulk-sync lo exige
+      const token = await leerTokenGuardia();
       if (!token) {
         this.isSyncing = false;
         notificarUI('error', { mensaje: MENSAJE_SESION });

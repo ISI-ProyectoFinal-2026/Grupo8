@@ -33,7 +33,51 @@ async function recortarHistorial(): Promise<void> {
   await db.historial.bulkDelete(masViejos);
 }
 
+/** Clave de `configuracion` donde se guarda la sesión del guardia (28.2). */
+export const CLAVE_SESION = 'sesion_guardia';
+
+/** Lo mínimo para reabrir la app sin conexión: el token y el rol con el que se inició sesión. */
+export interface SesionGuardada {
+  token: string;
+  /** Rol de la interfaz. Es informativo: al leer se revalida contra el token. */
+  rol: string;
+  /** ISO. Cuándo se guardó en este dispositivo. */
+  guardada_en: string;
+}
+
+function esSesionGuardada(valor: unknown): valor is SesionGuardada {
+  if (typeof valor !== 'object' || valor === null) return false;
+  const { token, rol, guardada_en } = valor as Record<string, unknown>;
+  return (
+    typeof token === 'string' &&
+    token.length > 0 &&
+    typeof rol === 'string' &&
+    typeof guardada_en === 'string'
+  );
+}
+
 export const dbService = {
+  // ==========================================
+  // SESIÓN DEL GUARDIA (28.2)
+  // Vive en `configuracion` y no en una tabla nueva: es un par clave-valor, no hace falta una migración
+  // de Dexie, y borrarla (`eliminarSesion`) no puede tocar `ingresos_pendientes` porque es otra tabla.
+  // ==========================================
+  async guardarSesion(token: string, rol: string): Promise<void> {
+    const sesion: SesionGuardada = { token, rol, guardada_en: new Date().toISOString() };
+    await db.configuracion.put({ clave: CLAVE_SESION, valor: sesion });
+  },
+
+  /** La sesión guardada, o null si no hay o lo guardado no tiene la forma esperada. */
+  async obtenerSesion(): Promise<SesionGuardada | null> {
+    const guardado = (await db.configuracion.get(CLAVE_SESION))?.valor;
+    return esSesionGuardada(guardado) ? guardado : null;
+  },
+
+  /** Solo borra la sesión. La cola de ingresos pendientes y el historial quedan como estaban. */
+  async eliminarSesion(): Promise<void> {
+    await db.configuracion.delete(CLAVE_SESION);
+  },
+
   // ==========================================
   // STORES: CONFIGURACIÓN
   // ==========================================

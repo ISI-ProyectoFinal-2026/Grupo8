@@ -13,7 +13,7 @@ import {
 } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuthProvider, TOKEN_KEY } from '@/context/AuthContext';
+import { AuthProvider } from '@/context/AuthContext';
 import { db } from '@/db/db';
 import { dbService } from '@/services/dbService';
 import {
@@ -64,10 +64,11 @@ const boton = () =>
 describe('Estado de sincronización (26.3)', () => {
   beforeEach(async () => {
     simularConexion(true);
-    localStorage.setItem(TOKEN_KEY, crearToken());
     await db.ingresos_pendientes.clear();
     await db.historial.clear();
     await db.configuracion.clear();
+    // La sesión del guardia vive en IndexedDB (28.2)
+    await dbService.guardarSesion(crearToken(), 'SEGURIDAD');
     syncService.isSyncing = false;
   });
 
@@ -228,15 +229,17 @@ describe('Estado de sincronización (26.3)', () => {
   });
 
   it('con el token vencido muestra el aviso de syncService y ofrece iniciar sesión de nuevo', async () => {
-    localStorage.setItem(
-      TOKEN_KEY,
-      crearToken(Math.floor(Date.now() / 1000) - 60)
+    await dbService.guardarSesion(
+      crearToken(Math.floor(Date.now() / 1000) - 60),
+      'SEGURIDAD'
     );
     // Sin red, la app le conserva la sesión vencida al guardia
     simularConexion(false);
     mostrar();
 
-    expect(screen.getByRole('alert').textContent).toContain(MENSAJE_SESION);
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      MENSAJE_SESION
+    );
     expect(
       screen.queryByRole('button', { name: /sincronizar ahora/i })
     ).toBeNull();
@@ -256,7 +259,7 @@ describe('Estado de sincronización (26.3)', () => {
     expect(iniciar.getAttribute('aria-disabled')).toBe('false');
     fireEvent.click(iniciar);
 
-    // Se cierra la sesión: la ruta protegida lo lleva al login
-    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    // Se cierra la sesión: se borra de IndexedDB y la ruta protegida lo lleva al login
+    await waitFor(async () => expect(await dbService.obtenerSesion()).toBeNull());
   });
 });

@@ -14,9 +14,12 @@ interface RutaProtegidaProps {
  * "Acceso denegado". La autorización real la hace el backend en cada request; esto solo protege la interfaz.
  */
 export function RutaProtegida({ roles, rutaLogin = '/login' }: RutaProtegidaProps) {
-  const { rol } = useAuth();
+  const { rol, cargando } = useAuth();
   const location = useLocation();
 
+  // La sesión del guardia se lee de IndexedDB: hasta que termina, mandarlo al login sería un error.
+  // Las de la web y el panel están en localStorage y ya se leyeron, así que esas rutas no esperan.
+  if (!rol && cargando && roles.includes('SEGURIDAD')) return <p role="status" className="p-6 text-center text-lg">Abriendo la sesión…</p>;
   if (!rol) return <Navigate to={rutaLogin} replace state={{ from: location }} />;
   if (!roles.includes(rol)) return <AccesoDenegado />;
   return <Outlet />;

@@ -12,7 +12,13 @@ import { syncService } from '@/services/syncService';
 import { LayoutAcceso } from './LayoutAcceso';
 
 vi.mock('@/services/dbService', () => ({
-  dbService: { contarIngresosPendientes: vi.fn() },
+  dbService: {
+    contarIngresosPendientes: vi.fn(),
+    // La sesión del guardia vive en IndexedDB (28.2)
+    obtenerSesion: vi.fn(),
+    guardarSesion: vi.fn(),
+    eliminarSesion: vi.fn(),
+  },
 }));
 // La sincronización de fondo se prueba en syncService; acá interesa que el marco la arranque
 vi.mock('@/services/syncService', () => ({
@@ -24,9 +30,17 @@ function base64Url(objeto: object) {
 }
 
 // JWT sin firma válida: la interfaz solo lee los claims `rol` y `exp`.
-function crearToken() {
-  const payload = base64Url({ sub: 'g-1', rol: 'SEGURIDAD', exp: Math.floor(Date.now() / 1000) + 3600 });
+function crearToken(exp = Math.floor(Date.now() / 1000) + 3600) {
+  const payload = base64Url({ sub: 'g-1', rol: 'SEGURIDAD', exp });
   return `${base64Url({ alg: 'HS256', typ: 'JWT' })}.${payload}.firma`;
+}
+
+function guardarSesionEnElDispositivo(token = crearToken()) {
+  vi.mocked(dbService.obtenerSesion).mockResolvedValue({
+    token,
+    rol: 'SEGURIDAD',
+    guardada_en: new Date().toISOString(),
+  });
 }
 
 function mostrar(ruta = '/acceso') {
@@ -52,7 +66,9 @@ function simularConexion(enLinea: boolean) {
 
 describe('Marco de la app del guardia (24.5 y 26.1)', () => {
   beforeEach(() => {
-    localStorage.setItem(TOKEN_KEY, crearToken());
+    guardarSesionEnElDispositivo();
+    vi.mocked(dbService.eliminarSesion).mockResolvedValue(undefined);
+    vi.mocked(dbService.guardarSesion).mockResolvedValue(undefined);
     simularConexion(true);
     vi.mocked(dbService.contarIngresosPendientes).mockResolvedValue(0);
   });
@@ -150,6 +166,59 @@ describe('Marco de la app del guardia (24.5 y 26.1)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
 
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    // Y se borra la sesión guardada en IndexedDB (28.2)
+    expect(dbService.eliminarSesion).toHaveBeenCalled();
+  });
+
+  describe('aviso de sesión vencida sin conexión (28.2)', () => {
+    const VENCIDO = () => crearToken(Math.floor(Date.now() / 1000) - 3600);
+    const aviso = () => screen.queryByText(/Tu sesión venció/);
+
+    it('sin conexión y con el token vencido muestra el aviso, accesible, y deja ver la pantalla', async () => {
+      simularConexion(false);
+      guardarSesionEnElDispositivo(VENCIDO());
+
+      mostrar();
+
+      const texto = await screen.findByText(/Tu sesión venció/);
+      expect(texto.getAttribute('role')).toBe('status');
+      expect(texto.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+      // Dice qué puede hacer y qué no
+      expect(texto.textContent).toMatch(/seguir escaneando/);
+      expect(texto.textContent).toMatch(/iniciar sesión de nuevo/);
+      expect(screen.getByText('Pantalla del escáner')).toBeTruthy();
+    });
+
+    it('con el token vigente no muestra el aviso, ni con ni sin conexión', async () => {
+      simularConexion(false);
+      mostrar();
+      await screen.findByText('Pantalla del escáner');
+      expect(aviso()).toBeNull();
+    });
+
+    it('con conexión y el token vencido no muestra el aviso: lo resuelve el login', async () => {
+      guardarSesionEnElDispositivo(VENCIDO());
+
+      mostrar();
+
+      // Con conexión la sesión se descarta y el marco no se muestra
+      await vi.waitFor(() => expect(dbService.eliminarSesion).toHaveBeenCalled());
+      expect(aviso()).toBeNull();
+    });
+
+    it('el aviso desaparece cuando vuelve la conexión', async () => {
+      simularConexion(false);
+      guardarSesionEnElDispositivo(VENCIDO());
+      mostrar();
+      await screen.findByText(/Tu sesión venció/);
+
+      simularConexion(true);
+      act(() => {
+        window.dispatchEvent(new Event('online'));
+      });
+
+      expect(aviso()).toBeNull();
+    });
   });
 
   it('arranca la sincronización de fondo, que ya no depende de estar en el escáner (26.4)', () => {
