@@ -73,6 +73,9 @@ Se usa Neon y no la base gratuita de Render porque esta vence a los 30 días de 
 | `MERCADOPAGO_ACCESS_TOKEN` / `MERCADOPAGO_PUBLIC_KEY` | Credenciales de prueba de la aplicación (`APP_USR-...`) |
 | `MERCADOPAGO_WEBHOOK_SECRET` | Clave secreta de Tus integraciones > Webhooks |
 | `RESEND_API_KEY` | Clave de Resend |
+| `CONTACTO_EMAIL_DESTINO` | Correo del camping que recibe los mensajes de la pantalla Contacto. Vacío = el formulario responde 503 |
+| `CONTACTO_EMAIL_REMITENTE` | Remitente de esos correos, por ejemplo `Camping <contacto@tudominio.com>`, de un dominio verificado en Resend. Con `onboarding@resend.dev` (por defecto) Resend solo entrega al correo dueño de la cuenta |
+| `CONTACTO_IP_DESDE_PROXY` | `true` en Render: el límite de envíos toma la IP del visitante de `X-Forwarded-For` |
 | `FRONTEND_URL` | Dirección de Vercel, por ejemplo `https://qamp.vercel.app` |
 | `BACKEND_PUBLIC_URL` | Dirección de Render, por ejemplo `https://qamp-api.onrender.com` |
 | `ARREPENTIMIENTO_SECRET_KEY` | Obligatoria. Texto aleatorio largo, distinto de `AUTH_SECRET_KEY`: firma los enlaces del botón de arrepentimiento. Sin ella el backend no arranca |
