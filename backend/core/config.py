@@ -63,6 +63,17 @@ class Settings(BaseSettings):
     MERCADOPAGO_API_URL: str = ""
     RESEND_API_KEY: str
 
+    # --- Formulario de Contacto (Issue 31.5) ---
+    # Correo del camping que recibe los mensajes. Siempre sale de acá, nunca de lo que manda el frontend.
+    # Vacío = el formulario responde 503 y no envía nada
+    CONTACTO_EMAIL_DESTINO: str = ""
+    # Remitente de esos correos. onboarding@resend.dev solo entrega a la cuenta dueña de Resend:
+    # en producción tiene que ser una dirección de un dominio verificado en Resend
+    CONTACTO_EMAIL_REMITENTE: str = "Qamp Contacto <onboarding@resend.dev>"
+    # True detrás de un proxy (Render): la IP del visitante se toma del último valor de X-Forwarded-For.
+    # En local, False: se usa la IP de la conexión
+    CONTACTO_IP_DESDE_PROXY: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

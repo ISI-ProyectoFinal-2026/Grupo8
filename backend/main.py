@@ -28,6 +28,7 @@ from api.tipos_reserva import admin_router as admin_tipos_reserva_router
 from api.tipos_reserva import router as tipos_reserva_router
 from api.arrepentimiento import router as arrepentimiento_router
 from api.disponibilidad import router as disponibilidad_router
+from api.contacto import router as contacto_router
 
 configurar_logging(settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ app.include_router(tipos_reserva_router)
 app.include_router(admin_tipos_reserva_router)
 app.include_router(arrepentimiento_router)
 app.include_router(disponibilidad_router)
+app.include_router(contacto_router)
 
 @app.middleware("http")
 async def log_errors_middleware(request: Request, call_next):

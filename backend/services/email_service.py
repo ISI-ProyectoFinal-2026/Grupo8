@@ -54,6 +54,23 @@ class EmailService:
             logger.error(f"Error crítico en hilo secundario al enviar correo: {str(e)}")
 
     @staticmethod
+    def enviar_contacto(destinatario: str, remitente: str, datos: dict) -> None:
+        """Mensaje del formulario de Contacto al correo del camping. datos lleva nombre, email y mensaje.
+        A diferencia de los demás, se envía en el momento y NO captura el error: quien llama tiene que
+        saber si Resend falló para no avisarle al visitante que su mensaje salió."""
+        template = template_env.get_template("contacto_mensaje.html")
+        params: resend.Emails.SendParams = {
+            "from": remitente,
+            "to": [destinatario],
+            # Al responder el correo, la respuesta va al visitante
+            "reply_to": datos["email"],
+            "subject": f"Consulta desde la web de {datos['nombre']}",
+            "html": template.render(**datos),
+        }
+        email = resend.Emails.send(params)
+        logger.info(f"Mensaje de contacto despachado con éxito. ID: {email['id']}")
+
+    @staticmethod
     def enviar_cancelacion_sync(destinatario: str, datos_reserva: dict):
         """Avisa que la reserva quedó cancelada. datos_reserva lleva nombre_cliente, reserva_id y
         motivo_cancelacion, y opcionalmente detalle_devolucion (cuánto se devuelve y cómo)."""
