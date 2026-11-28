@@ -10,5 +10,8 @@ export interface IJwtPayload {
   cantidad_personas: number;
   typ: 'socio' | 'visitante'; // Tipo de cliente para lógica visual en la PWA
   exp: number;        // Timestamp UNIX de expiración
-  dat: string;        // Fecha exacta de validez (formato YYYY-MM-DD)
+  dat: string;        // Primer día válido: fecha de ingreso de la reserva (YYYY-MM-DD)
+  // Último día válido: fecha de egreso (YYYY-MM-DD). En el backend es obligatorio, pero acá es
+  // opcional porque los QR emitidos antes de la 28.1 no lo traen (ver utils/vigenciaQR.ts)
+  egr?: string;
 }

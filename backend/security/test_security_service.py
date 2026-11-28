@@ -20,7 +20,8 @@ def valid_payload_data():
         "cantidad_personas": 4,
         "typ": "visitante",
         "exp": 1784048400,
-        "dat": "2026-07-15"
+        "dat": "2026-07-15",
+        "egr": "2026-07-17"
     }
 
 @pytest.fixture
@@ -102,3 +103,45 @@ def test_payload_validation_fails_with_invalid_data(valid_payload_data):
         JWTPayloadSchema(**invalid_data)
         
     assert "Input should be 'socio' or 'visitante'" in str(exc_info.value)
+
+
+# --- Fechas de vigencia del QR (28.1) ---
+
+def test_el_token_firmado_lleva_dat_y_egr(valid_payload_data, test_private_key):
+    """El QR trae el primer y el último día válido en su payload."""
+    token = SecurityService(private_key=test_private_key).generate_offline_qr_token(
+        JWTPayloadSchema(**valid_payload_data)
+    )
+
+    # La firma ya se verifica en el test de arriba: acá solo interesa qué viaja en el payload
+    claims = jwt.decode(token, options={"verify_signature": False})
+
+    assert claims["dat"] == "2026-07-15"
+    assert claims["egr"] == "2026-07-17"
+
+
+def test_egr_es_obligatorio(valid_payload_data):
+    datos = {clave: valor for clave, valor in valid_payload_data.items() if clave != "egr"}
+
+    with pytest.raises(ValidationError):
+        JWTPayloadSchema(**datos)
+
+
+def test_un_qr_de_un_solo_dia_puede_tener_el_mismo_dat_y_egr(valid_payload_data):
+    payload = JWTPayloadSchema(**{**valid_payload_data, "egr": valid_payload_data["dat"]})
+
+    assert payload.dat == payload.egr
+
+
+@pytest.mark.parametrize(
+    "campo, valor",
+    [
+        ("egr", "2026-07-14"),   # egreso anterior al ingreso
+        ("egr", "2026-07-15T00:00:00"),  # no es una fecha sola
+        ("egr", "17/07/2026"),
+        ("dat", "2026-02-31"),   # día que no existe
+    ],
+)
+def test_fechas_invalidas_se_rechazan(valid_payload_data, campo, valor):
+    with pytest.raises(ValidationError):
+        JWTPayloadSchema(**{**valid_payload_data, campo: valor})

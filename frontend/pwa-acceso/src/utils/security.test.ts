@@ -2,7 +2,7 @@
 import { exportSPKI, generateKeyPair, SignJWT } from 'jose';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { IJwtPayload } from '../types/security';
-import { verifyQRToken } from './security';
+import { verificarQR, verifyQRToken } from './security';
 
 // Helpers locales solo para manipular el payload de un JWT sin volver a firmarlo.
 // No dependen de ninguna librería externa nueva.
@@ -43,6 +43,7 @@ describe('Security Service: verifyQRToken', () => {
       typ: 'visitante',
       exp: now + 3600, // Expira en 1 hora
       dat: '2026-10-10',
+      egr: '2026-10-10',
     };
 
     // 4. Firmamos un token válido con la clave privada de prueba
@@ -107,5 +108,45 @@ describe('Security Service: verifyQRToken', () => {
     const result = await verifyQRToken(expiredToken);
 
     expect(result).toBeNull();
+  });
+
+  // Issue 28.1: la PWA necesita saber si el QR es falso o si es auténtico pero de una estadía que ya terminó.
+  // Cada test arma su propio par de claves: el test de "expirado" de arriba deja cambiada VITE_PUBLIC_KEY
+  async function firmarConClaveNueva(claims: Record<string, unknown>, claveAjena = false): Promise<string> {
+    const { publicKey, privateKey } = await generateKeyPair('ES256');
+    vi.stubEnv('VITE_PUBLIC_KEY', await exportSPKI(publicKey));
+    const claveDeFirma = claveAjena ? (await generateKeyPair('ES256')).privateKey : privateKey;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return new SignJWT(claims as any).setProtectedHeader({ alg: 'ES256' }).sign(claveDeFirma);
+  }
+
+  it('verificarQR: un token válido devuelve su payload con dat y egr', async () => {
+    const token = await firmarConClaveNueva({ ...testPayload });
+
+    const resultado = await verificarQR(token);
+
+    expect(resultado.ok).toBe(true);
+    if (resultado.ok) {
+      expect(resultado.payload.dat).toBe('2026-10-10');
+      expect(resultado.payload.egr).toBe('2026-10-10');
+    }
+  });
+
+  it('verificarQR: un token con la firma alterada es FIRMA_INVALIDA', async () => {
+    const token = await firmarConClaveNueva({ ...testPayload });
+
+    expect(await verificarQR(token.slice(0, -5) + 'abcde')).toEqual({ ok: false, motivo: 'FIRMA_INVALIDA' });
+  });
+
+  it('verificarQR: un token auténtico pero expirado es VENCIDO, no FIRMA_INVALIDA', async () => {
+    const vencido = await firmarConClaveNueva({ ...testPayload, exp: Math.floor(Date.now() / 1000) - 3600 });
+
+    expect(await verificarQR(vencido)).toEqual({ ok: false, motivo: 'VENCIDO' });
+  });
+
+  it('verificarQR: un token vencido pero firmado con otra clave es FIRMA_INVALIDA (no se confía en su fecha)', async () => {
+    const falso = await firmarConClaveNueva({ ...testPayload, exp: Math.floor(Date.now() / 1000) - 3600 }, true);
+
+    expect(await verificarQR(falso)).toEqual({ ok: false, motivo: 'FIRMA_INVALIDA' });
   });
 });

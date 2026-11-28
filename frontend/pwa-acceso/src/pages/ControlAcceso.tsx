@@ -4,9 +4,10 @@ import { ScannerQR } from '../components/ScannerQR';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCapacidad } from '../hooks/useCapacidad';
+import { validarAccesoQR } from '../services/accessValidationService';
 import { dbService } from '../services/dbService';
 import type { IJwtPayload } from '../types/security';
-import { verifyQRToken } from '../utils/security';
+import { MENSAJE_QR_FUERA_DE_FECHA } from '../utils/vigenciaQR';
 
 interface ResultadoValidacion {
   exito: boolean;
@@ -78,17 +79,23 @@ export default function ControlAcceso() {
   const procesarQR = async (token: string) => {
     navigator.vibrate?.(200);
     setEscaneando(false);
-    const payload = await verifyQRToken(token);
-    if (!payload) {
-      setResultadoValidacion({ exito: false, mensaje: 'Acceso Denegado: Código QR inválido.' });
-      return;
-    }
     try {
-      const estaRevocado = await dbService.verificarAccesoRevocado(payload.reserva_id.toString());
-      if (estaRevocado) {
+      // Firma, vigencia (día de hoy dentro de la estadía) y revocación, todo con lo guardado en el dispositivo
+      const validacion = await validarAccesoQR(token);
+      if (validacion.status === 'INVALID_TOKEN') {
+        setResultadoValidacion({ exito: false, mensaje: 'Acceso Denegado: Código QR inválido.' });
+        return;
+      }
+      if (validacion.status === 'FUERA_DE_FECHA') {
+        setResultadoValidacion({ exito: false, mensaje: MENSAJE_QR_FUERA_DE_FECHA });
+        return;
+      }
+      if (validacion.status === 'REVOKED') {
         setResultadoValidacion({ exito: false, mensaje: 'Reserva Cancelada / Acceso Revocado' });
         return;
       }
+
+      const { payload } = validacion;
       await dbService.registrarIngresoOffline(payload.jti, payload);
       setOcupacion(prev => prev + payload.cantidad_personas);
       setResultadoValidacion({

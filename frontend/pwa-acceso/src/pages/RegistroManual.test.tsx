@@ -15,11 +15,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/db/db';
 import { dbService } from '@/services/dbService';
 import type { IJwtPayload } from '@/types/security';
-import { verifyQRToken } from '@/utils/security';
+import { verificarQR } from '@/utils/security';
+import { diaEnArgentina } from '@/utils/vigenciaQR';
 import RegistroManual from './RegistroManual';
 
 // La firma del QR se prueba en accessValidationService; acá interesa qué hace la pantalla con el resultado
-vi.mock('@/utils/security', () => ({ verifyQRToken: vi.fn() }));
+vi.mock('@/utils/security', () => ({ verificarQR: vi.fn() }));
 
 function simularConexion(enLinea: boolean) {
   Object.defineProperty(navigator, 'onLine', {
@@ -216,7 +217,9 @@ describe('Registro manual con reserva: pedir el código del QR (29.1)', () => {
     exp: 9999999999,
     cantidad_personas: 3,
     typ: 'visitante',
-    dat: '2026-12-01',
+    // Estadía de hoy: la 28.1 rechaza el código de una reserva que no incluye el día de hoy
+    dat: diaEnArgentina(),
+    egr: diaEnArgentina(),
     ...cambios,
   });
 
@@ -253,7 +256,7 @@ describe('Registro manual con reserva: pedir el código del QR (29.1)', () => {
 
   beforeEach(async () => {
     simularConexion(false);
-    vi.mocked(verifyQRToken).mockReset();
+    vi.mocked(verificarQR).mockReset();
     await limpiar();
   });
 
@@ -290,7 +293,7 @@ describe('Registro manual con reserva: pedir el código del QR (29.1)', () => {
   });
 
   it('un código inexistente o inválido muestra un error claro y no guarda', async () => {
-    vi.mocked(verifyQRToken).mockResolvedValue(null);
+    vi.mocked(verificarQR).mockResolvedValue({ ok: false, motivo: 'FIRMA_INVALIDA' });
     mostrar();
     completarConReserva();
 
@@ -303,7 +306,7 @@ describe('Registro manual con reserva: pedir el código del QR (29.1)', () => {
   });
 
   it('un código válido guarda el ingreso vinculado a la reserva, sin conexión', async () => {
-    vi.mocked(verifyQRToken).mockResolvedValue(qrReserva());
+    vi.mocked(verificarQR).mockResolvedValue({ ok: true, payload: qrReserva() });
     mostrar();
     completarConReserva();
 
@@ -327,7 +330,7 @@ describe('Registro manual con reserva: pedir el código del QR (29.1)', () => {
   });
 
   it('un código ya ingresado muestra un error claro y no vuelve a guardar', async () => {
-    vi.mocked(verifyQRToken).mockResolvedValue(qrReserva());
+    vi.mocked(verificarQR).mockResolvedValue({ ok: true, payload: qrReserva() });
     await dbService.registrarIngresoManualConReserva(
       '30111222',
       'Elena Reserva',
@@ -346,7 +349,7 @@ describe('Registro manual con reserva: pedir el código del QR (29.1)', () => {
   });
 
   it('una reserva cancelada (en la lista del dispositivo) no puede ingresar', async () => {
-    vi.mocked(verifyQRToken).mockResolvedValue(qrReserva());
+    vi.mocked(verificarQR).mockResolvedValue({ ok: true, payload: qrReserva() });
     await dbService.agregarABlacklist(RESERVA_ID);
     mostrar();
     completarConReserva();
@@ -355,6 +358,36 @@ describe('Registro manual con reserva: pedir el código del QR (29.1)', () => {
 
     expect((await screen.findByRole('alert')).textContent).toMatch(
       /Reserva cancelada/
+    );
+    expect(await db.ingresos_pendientes.count()).toBe(0);
+  });
+
+  it('un código de otro día muestra "Este QR no es válido para hoy" y no guarda', async () => {
+    vi.mocked(verificarQR).mockResolvedValue({
+      ok: true,
+      payload: qrReserva({ dat: '2020-01-01', egr: '2020-01-03' }),
+    });
+    mostrar();
+    completarConReserva();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar Ingreso' }));
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(
+      /Este QR no es válido para hoy/
+    );
+    expect(await db.ingresos_pendientes.count()).toBe(0);
+    expect(await db.historial.count()).toBe(0);
+  });
+
+  it('un código auténtico pero vencido muestra el mismo mensaje y no guarda', async () => {
+    vi.mocked(verificarQR).mockResolvedValue({ ok: false, motivo: 'VENCIDO' });
+    mostrar();
+    completarConReserva();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar Ingreso' }));
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(
+      /Este QR no es válido para hoy/
     );
     expect(await db.ingresos_pendientes.count()).toBe(0);
   });

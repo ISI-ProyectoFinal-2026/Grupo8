@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, Iterator, Optional
 
@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from core.tiempo import hoy_negocio
 from core.database import Base, SessionLocal, engine, get_db
 from core.dependencies import get_current_user
 from main import app
@@ -148,8 +149,9 @@ def _reserva(db: Session, camping_id: str) -> uuid.UUID:
     reserva = Reserva(
         user_id=usuario.id,
         camping_id=camping_id,
-        fecha_ingreso=date(2099, 12, 20),
-        fecha_egreso=date(2099, 12, 22),
+        # Estadía de ayer a mañana: el QR se escanea ahora y bulk-sync lo exige dentro de la estadía (28.1)
+        fecha_ingreso=hoy_negocio() - timedelta(days=1),
+        fecha_egreso=hoy_negocio() + timedelta(days=1),
         cantidad_personas=2,
         monto_total=10000.0,
         titular=usuario.nombre,

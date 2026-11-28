@@ -9,6 +9,7 @@ from uuid import UUID
 
 from core.database import get_db
 from core.dependencies import require_role
+from core.tiempo import dia_negocio
 from models.conflictos import ConflictosSincronizacion
 from models.ingreso_fisico import IngresoFisico, TipoIngresoEnum
 from models.reserva import Reserva
@@ -51,6 +52,30 @@ def _resumir_validacion(exc: ValidationError) -> str:
 
 def _buscar_por_jti(db: Session, jti: str) -> Optional[IngresoFisico]:
     return db.query(IngresoFisico).filter(IngresoFisico.jti == jti).first()
+
+
+def _validar_vigencia_qr(reserva: Reserva, item: ItemIngreso) -> None:
+    """
+    Rechaza el ingreso de una reserva si se hizo fuera de su estadía (28.1). Vale para el QR
+    escaneado y para el manual con reserva (29.1), que carga el código del QR a mano.
+
+    Se compara el día de Buenos Aires de `fecha_escaneo` (la hora real del escaneo, no la de
+    llegada del lote) con las fechas de la reserva guardada en la base, con los dos extremos
+    incluidos. No se usan las fechas del token: la PWA no es de confianza y el lote puede llegar
+    horas o días después del escaneo.
+    """
+    dia_escaneo = dia_negocio(item.fecha_escaneo)
+    if reserva.fecha_ingreso <= dia_escaneo <= reserva.fecha_egreso:
+        return
+
+    logger.warning(
+        "QR fuera de fecha: jti=%s reserva=%s dispositivo=%s escaneado el %s (estadía %s a %s)",
+        item.jti, reserva.id, item.dispositivo_id, dia_escaneo, reserva.fecha_ingreso, reserva.fecha_egreso,
+    )
+    raise IngresoInvalidoError(
+        f"QR fuera de fecha: se escaneó el {dia_escaneo.isoformat()} y la reserva es del "
+        f"{reserva.fecha_ingreso.isoformat()} al {reserva.fecha_egreso.isoformat()}."
+    )
 
 
 def _registrar_clonacion(db: Session, item: ItemIngreso, reserva_id: UUID) -> None:
@@ -96,6 +121,9 @@ def _procesar_item(db: Session, item: ItemIngreso) -> ResultadoItem:
         reserva = db.query(Reserva).filter(Reserva.id == item.reserva_id).first()
         if reserva is None:
             raise IngresoInvalidoError(f"Reserva {item.reserva_id} no encontrada en el sistema.")
+
+        # Antes de buscar duplicados: un ingreso fuera de fecha se rechaza por eso y no como "duplicado"
+        _validar_vigencia_qr(reserva, item)
 
         ingreso_previo = db.query(IngresoFisico).filter(
             IngresoFisico.reserva_id == item.reserva_id

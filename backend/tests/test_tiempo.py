@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 import core.tiempo as tiempo
-from core.tiempo import a_utc, a_zona_negocio, limites_dias_negocio
+from core.tiempo import a_utc, a_zona_negocio, dia_negocio, limites_dias_negocio
 from security.sync_schemas import ingreso_item_adapter
 
 
@@ -76,3 +76,25 @@ def test_hoy_negocio_ya_es_el_dia_anterior_a_utc_despues_de_las_21(monkeypatch):
     monkeypatch.setattr(tiempo, "ahora_utc", lambda: datetime(2026, 11, 17, 1, 30, tzinfo=timezone.utc))
 
     assert tiempo.hoy_negocio() == date(2026, 11, 16)
+
+
+@pytest.mark.parametrize(
+    "instante, dia_esperado",
+    [
+        # 21:00 en Argentina ya es medianoche UTC: la fecha UTC se adelanta un día
+        (datetime(2026, 11, 27, 0, 0, tzinfo=timezone.utc), date(2026, 11, 26)),
+        (datetime(2026, 11, 27, 1, 30, tzinfo=timezone.utc), date(2026, 11, 26)),   # 22:30 en Argentina
+        (datetime(2026, 11, 27, 2, 59, 59, tzinfo=timezone.utc), date(2026, 11, 26)),  # 23:59:59
+        (datetime(2026, 11, 27, 3, 0, tzinfo=timezone.utc), date(2026, 11, 27)),    # medianoche argentina
+        (datetime(2026, 11, 27, 14, 0, tzinfo=timezone.utc), date(2026, 11, 27)),
+    ],
+)
+def test_dia_negocio_es_el_dia_de_buenos_aires_y_no_el_de_utc(instante, dia_esperado):
+    assert dia_negocio(instante) == dia_esperado
+
+
+def test_dia_negocio_no_cambia_si_el_mismo_instante_llega_con_otro_offset():
+    en_utc = datetime(2026, 11, 27, 1, 30, tzinfo=timezone.utc)
+    en_buenos_aires = datetime.fromisoformat("2026-11-26T22:30:00-03:00")
+
+    assert dia_negocio(en_utc) == dia_negocio(en_buenos_aires) == date(2026, 11, 26)

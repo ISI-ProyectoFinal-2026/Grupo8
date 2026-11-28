@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useConexion } from '@/hooks/useConexion';
 import { validarAccesoQR } from '@/services/accessValidationService';
+import { MENSAJE_QR_FUERA_DE_FECHA } from '@/utils/vigenciaQR';
 import { dbService } from '@/services/dbService';
 
 /** Lo que muestra la confirmación (pantalla 4 del documento). */
@@ -99,6 +100,10 @@ export default function RegistroManual() {
           setError(
             'Código inválido: no corresponde a ninguna reserva, fue modificado o está vencido.'
           );
+          return;
+        }
+        if (validacion.status === 'FUERA_DE_FECHA') {
+          setError(MENSAJE_QR_FUERA_DE_FECHA);
           return;
         }
         if (validacion.status === 'REVOKED') {
