@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto';
+
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, TOKEN_KEY } from '@/context/AuthContext';
+import { db } from '@/db/db';
+import { dbService } from '@/services/dbService';
 import { Header } from './Header';
 
 function base64Url(objeto: object) {
@@ -17,7 +21,8 @@ function crearToken(rol: string) {
 }
 
 function mostrar(rol?: string) {
-  if (rol) localStorage.setItem(TOKEN_KEY, crearToken(rol));
+  // El guardia guarda su sesión en IndexedDB (28.2): se carga antes con `abrirComoGuardia`
+  if (rol && rol !== 'SEGURIDAD') localStorage.setItem(TOKEN_KEY, crearToken(rol));
   return render(
     <MemoryRouter initialEntries={['/']}>
       <AuthProvider>
@@ -51,7 +56,8 @@ describe('Menú del encabezado por rol (Issue 15.2)', () => {
       }
     );
   });
-  afterEach(() => {
+  afterEach(async () => {
+    await db.configuracion.clear();
     cleanup();
     vi.unstubAllGlobals();
     localStorage.clear();
@@ -70,7 +76,10 @@ describe('Menú del encabezado por rol (Issue 15.2)', () => {
     ['SEGURIDAD', ['Control de acceso']],
     ['ADMIN', ['Panel de administración']],
   ])('el rol %s ve solo sus opciones', async (rol, esperadas) => {
+    if (rol === 'SEGURIDAD') await dbService.guardarSesion(crearToken(rol), rol);
     mostrar(rol);
+    // La sesión del guardia se lee de IndexedDB: se espera a que aparezca su menú
+    if (rol === 'SEGURIDAD') await screen.findByRole('button', { name: /mi cuenta/i });
     expect(screen.queryByRole('link', { name: /iniciar sesión/i })).toBeNull();
 
     await abrirMenu();

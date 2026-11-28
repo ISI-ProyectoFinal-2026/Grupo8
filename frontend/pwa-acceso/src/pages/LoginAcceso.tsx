@@ -11,8 +11,10 @@ import { RUTA_POR_ROL } from '@/lib/auth';
  * barra verde, campos y botón grandes y alto contraste para usarla en la entrada.
  */
 export default function LoginAcceso() {
-  const { rol, avisoSesion } = useAuth();
+  const { rol, avisoSesion, cargando } = useAuth();
 
+  // Si el guardia ya tiene sesión guardada, no hay que mostrarle el formulario ni por un instante
+  if (!rol && cargando) return null;
   if (rol === 'SEGURIDAD') return <Navigate to={RUTA_POR_ROL.SEGURIDAD} replace />;
   if (rol) return <AccesoDenegado />;
 

@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto';
+
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TOKEN_KEY } from '@/context/AuthContext';
+import { db } from '@/db/db';
+import { dbService } from '@/services/dbService';
 import App from '../App';
 
 // ControlAcceso arrastra Dexie/IndexedDB, jose y html5-qrcode; no es parte
@@ -46,8 +50,15 @@ function simularBackend(usuario: object) {
   );
 }
 
-function abrir(ruta: string, rol?: string) {
-  if (rol) localStorage.setItem(TOKEN_KEY, crearToken(rol));
+// La sesión del guardia vive en IndexedDB (28.2); la de los demás roles, en localStorage
+async function guardarSesion(rol: string, exp?: number) {
+  const token = crearToken(rol, exp);
+  if (rol === 'SEGURIDAD') await dbService.guardarSesion(token, rol);
+  else localStorage.setItem(TOKEN_KEY, token);
+}
+
+async function abrir(ruta: string, rol?: string, exp?: number) {
+  if (rol) await guardarSesion(rol, exp);
   window.history.pushState({}, '', ruta);
   return render(<App />);
 }
@@ -63,21 +74,23 @@ function simularConexion(conectado: boolean) {
 }
 
 describe('Rutas protegidas por rol', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear();
+    await db.configuracion.clear();
   });
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
     simularConexion(true);
     vi.unstubAllGlobals();
     localStorage.clear();
+    await db.configuracion.clear();
     window.history.pushState({}, '', '/');
   });
 
-  it.each(['/acceso', '/acceso/manual', '/acceso/historial', '/acceso/sincronizacion', '/perfil', '/mis-reservas'])('sin sesión, %s redirige al login', (ruta) => {
-    abrir(ruta);
+  it.each(['/acceso', '/acceso/manual', '/acceso/historial', '/acceso/sincronizacion', '/perfil', '/mis-reservas'])('sin sesión, %s redirige al login', async (ruta) => {
+    await abrir(ruta);
 
-    expect(formularioLogin()).toBeTruthy();
+    await waitFor(() => expect(formularioLogin()).toBeTruthy());
   });
 
   // ---------- Las cuatro pantallas de la app del guardia (26.4) ----------
@@ -88,10 +101,10 @@ describe('Rutas protegidas por rol', () => {
     ['/acceso/sincronizacion', () => screen.queryByRole('heading', { level: 1, name: 'Estado de sincronización' })],
   ];
 
-  it.each(PANTALLAS_GUARDIA)('el guardia entra a %s, dentro del marco con la barra inferior', (ruta, pantalla) => {
-    abrir(ruta, 'SEGURIDAD');
+  it.each(PANTALLAS_GUARDIA)('el guardia entra a %s, dentro del marco con la barra inferior', async (ruta, pantalla) => {
+    await abrir(ruta, 'SEGURIDAD');
 
-    expect(pantalla()).toBeTruthy();
+    await waitFor(() => expect(pantalla()).toBeTruthy());
     expect(screen.getByRole('navigation', { name: 'Navegación de la app del guardia' })).toBeTruthy();
   });
 
@@ -100,20 +113,19 @@ describe('Rutas protegidas por rol', () => {
       [ruta, 'ADMIN'],
       [ruta, 'CLIENTE'],
     ])
-  )('%s no es para el rol %s: ve acceso denegado', (ruta, rol) => {
-    abrir(ruta, rol);
+  )('%s no es para el rol %s: ve acceso denegado', async (ruta, rol) => {
+    await abrir(ruta, rol);
 
     expect(accesoDenegado()).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: 'Navegación de la app del guardia' })).toBeNull();
   });
 
-  it.each(PANTALLAS_GUARDIA)('sin conexión y con el token vencido, el guardia sigue entrando a %s', (ruta, pantalla) => {
+  it.each(PANTALLAS_GUARDIA)('sin conexión y con el token vencido, el guardia sigue entrando a %s', async (ruta, pantalla) => {
     simularConexion(false);
-    localStorage.setItem(TOKEN_KEY, crearToken('SEGURIDAD', AYER()));
 
-    abrir(ruta);
+    await abrir(ruta, 'SEGURIDAD', AYER());
 
-    expect(pantalla()).toBeTruthy();
+    await waitFor(() => expect(pantalla()).toBeTruthy());
     expect(formularioLogin()).toBeNull();
   });
 
@@ -125,56 +137,56 @@ describe('Rutas protegidas por rol', () => {
     ['/admin/socios', 'ADMIN', 'Socios | Qamp Panel'],
   ])('App pone el título de la pestaña en %s', async (ruta, rol, titulo) => {
     simularBackend(SOCIO);
-    abrir(ruta, rol);
+    await abrir(ruta, rol);
 
     await waitFor(() => expect(document.title).toBe(titulo));
   });
 
-  it('el guardia entra a /acceso', () => {
-    abrir('/acceso', 'SEGURIDAD');
+  it('el guardia entra a /acceso', async () => {
+    await abrir('/acceso', 'SEGURIDAD');
 
-    expect(pantallaAcceso()).toBeTruthy();
+    await waitFor(() => expect(pantallaAcceso()).toBeTruthy());
   });
 
-  it('/acceso no muestra el encabezado ni el pie de la web de reservas', () => {
-    abrir('/acceso', 'SEGURIDAD');
+  it('/acceso no muestra el encabezado ni el pie de la web de reservas', async () => {
+    await abrir('/acceso', 'SEGURIDAD');
 
-    expect(pantallaAcceso()).toBeTruthy();
+    await waitFor(() => expect(pantallaAcceso()).toBeTruthy());
     expect(screen.queryByRole('link', { name: /^beneficios$/i })).toBeNull();
     // "Cerrar sesión" está en la barra inferior de la app del guardia (26.4)
     expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeTruthy();
   });
 
-  it.each(['CLIENTE', 'ADMIN'])('el rol %s no entra a /acceso y ve acceso denegado', (rol) => {
-    abrir('/acceso', rol);
+  it.each(['CLIENTE', 'ADMIN'])('el rol %s no entra a /acceso y ve acceso denegado', async (rol) => {
+    await abrir('/acceso', rol);
 
     expect(pantallaAcceso()).toBeNull();
     expect(formularioLogin()).toBeNull();
     expect(accesoDenegado()).toBeTruthy();
   });
 
-  it('sin sesión, /admin redirige al login', () => {
-    abrir('/admin');
+  it('sin sesión, /admin redirige al login', async () => {
+    await abrir('/admin');
 
     expect(formularioLogin()).toBeTruthy();
   });
 
-  it.each(['CLIENTE', 'SEGURIDAD'])('el rol %s no entra a /admin y ve acceso denegado', (rol) => {
-    abrir('/admin/socios', rol);
+  it.each(['CLIENTE', 'SEGURIDAD'])('el rol %s no entra a /admin y ve acceso denegado', async (rol) => {
+    await abrir('/admin/socios', rol);
 
-    expect(accesoDenegado()).toBeTruthy();
+    await waitFor(() => expect(accesoDenegado()).toBeTruthy());
     expect(screen.queryByRole('navigation', { name: /navegación del panel de administración/i })).toBeNull();
   });
 
-  it('el administrador entra a /admin', () => {
-    abrir('/admin', 'ADMIN');
+  it('el administrador entra a /admin', async () => {
+    await abrir('/admin', 'ADMIN');
 
     expect(screen.getByRole('navigation', { name: /navegación del panel de administración/i })).toBeTruthy();
     expect(accesoDenegado()).toBeNull();
   });
 
-  it('el acceso denegado ofrece volver a la pantalla del propio rol', () => {
-    abrir('/acceso', 'ADMIN');
+  it('el acceso denegado ofrece volver a la pantalla del propio rol', async () => {
+    await abrir('/acceso', 'ADMIN');
 
     expect(screen.getByRole('link', { name: /ir a mi pantalla/i }).getAttribute('href')).toBe('/admin');
   });
@@ -182,31 +194,33 @@ describe('Rutas protegidas por rol', () => {
   // Token del guardia vencido (Issue 13.5)
   const AYER = () => Math.floor(Date.now() / 1000) - 86400;
 
-  it('con conexión, un token vencido del guardia se descarta y pide iniciar sesión', () => {
-    localStorage.setItem(TOKEN_KEY, crearToken('SEGURIDAD', AYER()));
+  it('con conexión, un token vencido del guardia se descarta y pide iniciar sesión', async () => {
+    await abrir('/acceso', 'SEGURIDAD', AYER());
 
-    abrir('/acceso');
-
-    expect(formularioLogin()).toBeTruthy();
+    await waitFor(() => expect(formularioLogin()).toBeTruthy());
     expect(pantallaAcceso()).toBeNull();
-    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    // La sesión se borra de IndexedDB y el login explica por qué
+    expect(await dbService.obtenerSesion()).toBeNull();
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Tu sesión venció/);
   });
 
-  it('sin conexión, el guardia con el token vencido sigue en /acceso', () => {
+  it('sin conexión, el guardia con el token vencido sigue en /acceso', async () => {
     simularConexion(false);
-    localStorage.setItem(TOKEN_KEY, crearToken('SEGURIDAD', AYER()));
 
-    abrir('/acceso');
+    await abrir('/acceso', 'SEGURIDAD', AYER());
 
-    expect(pantallaAcceso()).toBeTruthy();
+    await waitFor(() => expect(pantallaAcceso()).toBeTruthy());
     expect(formularioLogin()).toBeNull();
+    // Sin conexión no se borra nada: sigue pudiendo escanear, con el aviso en el marco
+    expect(await dbService.obtenerSesion()).not.toBeNull();
+    expect(screen.getByText(/Tu sesión venció/)).toBeTruthy();
   });
 
-  it.each(['ADMIN', 'CLIENTE'])('sin conexión, un token vencido del rol %s no se conserva', (rol) => {
+  it.each(['ADMIN', 'CLIENTE'])('sin conexión, un token vencido del rol %s no se conserva', async (rol) => {
     simularConexion(false);
     localStorage.setItem(TOKEN_KEY, crearToken(rol, AYER()));
 
-    abrir('/login');
+    await abrir('/login');
 
     expect(formularioLogin()).toBeTruthy();
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
@@ -215,7 +229,7 @@ describe('Rutas protegidas por rol', () => {
   it('el socio entra a /perfil y ve sus datos reales', async () => {
     simularBackend(SOCIO);
 
-    abrir('/perfil', 'CLIENTE');
+    await abrir('/perfil', 'CLIENTE');
 
     expect(await screen.findByRole('heading', { level: 1, name: /mi perfil/i })).toBeTruthy();
     expect(screen.getByText('Ana Pérez')).toBeTruthy();
@@ -224,7 +238,7 @@ describe('Rutas protegidas por rol', () => {
   it('el socio entra a /mis-reservas', async () => {
     simularBackend(SOCIO);
 
-    abrir('/mis-reservas', 'CLIENTE');
+    await abrir('/mis-reservas', 'CLIENTE');
 
     expect(await screen.findByRole('heading', { level: 1, name: /mis reservas/i })).toBeTruthy();
   });
@@ -232,16 +246,16 @@ describe('Rutas protegidas por rol', () => {
   it.each(['/perfil', '/mis-reservas'])('un cliente que no es socio no entra a %s', async (ruta) => {
     simularBackend(NO_SOCIO);
 
-    abrir(ruta, 'CLIENTE');
+    await abrir(ruta, 'CLIENTE');
 
     expect(await avisoSoloSocios()).toBeTruthy();
     expect(tituloPerfil()).toBeNull();
   });
 
-  it.each(['SEGURIDAD', 'ADMIN'])('el rol %s no entra a /perfil y ve acceso denegado', (rol) => {
-    abrir('/perfil', rol);
+  it.each(['SEGURIDAD', 'ADMIN'])('el rol %s no entra a /perfil y ve acceso denegado', async (rol) => {
+    await abrir('/perfil', rol);
 
+    await waitFor(() => expect(accesoDenegado()).toBeTruthy());
     expect(tituloPerfil()).toBeNull();
-    expect(accesoDenegado()).toBeTruthy();
   });
 });

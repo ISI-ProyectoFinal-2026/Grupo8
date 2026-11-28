@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { LogoQamp } from '@/components/marca/LogoQamp';
 import { useAuth } from '@/context/AuthContext';
@@ -24,7 +24,7 @@ function textoPendientes(pendientes: number | null | undefined, sincronizando: b
  * los pendientes, y barra inferior con las cinco opciones del documento (26.4).
  */
 export function LayoutAcceso() {
-  const { cerrarSesion } = useAuth();
+  const { cerrarSesion, sesionVencidaOffline } = useAuth();
   const { pathname } = useLocation();
   const { enLinea, pendientes, sincronizando } = useConexion();
   // Al tocar una opción de la barra inferior el foco pasa a la pantalla nueva (27.4)
@@ -70,6 +70,18 @@ export function LayoutAcceso() {
           {textoPendientes(pendientes, sincronizando)}
         </p>
       </header>
+
+      {/* Sesión vencida sin conexión (28.2): puede seguir escaneando, pero no sincronizar. Texto e ícono, no solo color */}
+      {sesionVencidaOffline && (
+        <p
+          role="status"
+          className="mx-auto flex w-full max-w-3xl items-start gap-2 bg-amber-100 px-4 py-3 text-base font-semibold text-amber-900"
+        >
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          Tu sesión venció. Podés seguir escaneando: los ingresos quedan guardados en este dispositivo.
+          Cuando vuelva Internet vas a tener que iniciar sesión de nuevo para enviarlos.
+        </p>
+      )}
 
       {/* tabIndex={-1}: recibe el foco al cambiar de pantalla. No hace falta "Saltar al
           contenido": la barra superior no tiene nada que se use con Tab */}

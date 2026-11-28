@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto';
+
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TOKEN_KEY } from '@/context/AuthContext';
+import { db } from '@/db/db';
+import { dbService } from '@/services/dbService';
 import App from '../App';
 import manifestAdminTexto from '../../public/manifest-admin.webmanifest?raw';
 
@@ -44,13 +48,17 @@ function simularLogin(rol: string) {
   return token;
 }
 
-function abrir(ruta: string, rolConSesion?: string) {
-  if (rolConSesion) localStorage.setItem(TOKEN_KEY, crearToken(rolConSesion));
+// La sesión del guardia vive en IndexedDB (28.2); la de los demás roles, en localStorage
+async function abrir(ruta: string, rolConSesion?: string) {
+  if (rolConSesion === 'SEGURIDAD') await dbService.guardarSesion(crearToken(rolConSesion), rolConSesion);
+  else if (rolConSesion) localStorage.setItem(TOKEN_KEY, crearToken(rolConSesion));
   window.history.pushState({}, '', ruta);
   return render(<App />);
 }
 
-function ingresar() {
+async function ingresar() {
+  // El login del guardia espera a leer IndexedDB antes de mostrarse
+  await screen.findByLabelText(/dni o email/i);
   fireEvent.change(screen.getByLabelText(/dni o email/i), { target: { value: '41234567' } });
   fireEvent.change(screen.getByLabelText(/contraseña/i), { target: { value: 'clave1234' } });
   fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }));
@@ -65,19 +73,21 @@ const manifestActual = () =>
   document.querySelector('link[rel="manifest"]')?.getAttribute('href') ?? null;
 
 describe('Inicio de sesión por app (Issue 23.1)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear();
+    await db.configuracion.clear();
   });
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
     vi.unstubAllGlobals();
     localStorage.clear();
+    await db.configuracion.clear();
     window.history.pushState({}, '', '/');
   });
 
   describe('cada app tiene su propio login y su diseño', () => {
-    it('/login es el de los socios, dentro de la web de reservas', () => {
-      abrir('/login');
+    it('/login es el de los socios, dentro de la web de reservas', async () => {
+      await abrir('/login');
 
       expect(loginWeb()).toBeTruthy();
       expect(encabezadoWeb()).toBeTruthy();
@@ -85,43 +95,43 @@ describe('Inicio de sesión por app (Issue 23.1)', () => {
       expect(loginAcceso()).toBeNull();
     });
 
-    it('/admin/login es el del panel, sin el encabezado de la web', () => {
-      abrir('/admin/login');
+    it('/admin/login es el del panel, sin el encabezado de la web', async () => {
+      await abrir('/admin/login');
 
       expect(loginPanel()).toBeTruthy();
       expect(encabezadoWeb()).toBeNull();
       expect(loginWeb()).toBeNull();
     });
 
-    it('/acceso/login es el del guardia, sin el encabezado de la web', () => {
-      abrir('/acceso/login');
+    it('/acceso/login es el del guardia, sin el encabezado de la web', async () => {
+      await abrir('/acceso/login');
 
-      expect(loginAcceso()).toBeTruthy();
+      await waitFor(() => expect(loginAcceso()).toBeTruthy());
       expect(encabezadoWeb()).toBeNull();
       expect(loginWeb()).toBeNull();
     });
   });
 
   describe('sin sesión, cada ruta protegida lleva al login de su app', () => {
-    it('/mis-reservas lleva a /login', () => {
-      abrir('/mis-reservas');
+    it('/mis-reservas lleva a /login', async () => {
+      await abrir('/mis-reservas');
 
       expect(window.location.pathname).toBe('/login');
       expect(loginWeb()).toBeTruthy();
     });
 
-    it('/admin/socios lleva a /admin/login', () => {
-      abrir('/admin/socios');
+    it('/admin/socios lleva a /admin/login', async () => {
+      await abrir('/admin/socios');
 
       expect(window.location.pathname).toBe('/admin/login');
       expect(loginPanel()).toBeTruthy();
     });
 
-    it('/acceso lleva a /acceso/login', () => {
-      abrir('/acceso');
+    it('/acceso lleva a /acceso/login', async () => {
+      await abrir('/acceso');
 
-      expect(window.location.pathname).toBe('/acceso/login');
-      expect(loginAcceso()).toBeTruthy();
+      await waitFor(() => expect(window.location.pathname).toBe('/acceso/login'));
+      await waitFor(() => expect(loginAcceso()).toBeTruthy());
     });
   });
 
@@ -132,11 +142,17 @@ describe('Inicio de sesión por app (Issue 23.1)', () => {
   ])('en %s, un usuario %s entra y va a %s', async (ruta, rol, destino) => {
     const token = simularLogin(rol);
 
-    abrir(ruta);
-    ingresar();
+    await abrir(ruta);
+    await ingresar();
 
     await waitFor(() => expect(window.location.pathname).toBe(destino));
-    expect(localStorage.getItem(TOKEN_KEY)).toBe(token);
+    // El guardia guarda la sesión en IndexedDB; los demás roles, en localStorage
+    if (rol === 'SEGURIDAD') {
+      expect((await dbService.obtenerSesion())?.token).toBe(token);
+      expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    } else {
+      expect(localStorage.getItem(TOKEN_KEY)).toBe(token);
+    }
   });
 
   it.each([
@@ -149,8 +165,8 @@ describe('Inicio de sesión por app (Issue 23.1)', () => {
   ])('en %s, un usuario %s recibe acceso denegado y no abre sesión', async (ruta, rol) => {
     simularLogin(rol);
 
-    abrir(ruta);
-    ingresar();
+    await abrir(ruta);
+    await ingresar();
 
     const alerta = await screen.findByRole('alert');
     expect(alerta.textContent).toMatch(/acceso denegado/i);
@@ -162,22 +178,22 @@ describe('Inicio de sesión por app (Issue 23.1)', () => {
     ['/login', 'ADMIN'],
     ['/admin/login', 'SEGURIDAD'],
     ['/acceso/login', 'CLIENTE'],
-  ])('con sesión de otra app, %s muestra acceso denegado (rol %s)', (ruta, rol) => {
-    abrir(ruta, rol);
+  ])('con sesión de otra app, %s muestra acceso denegado (rol %s)', async (ruta, rol) => {
+    await abrir(ruta, rol);
 
-    expect(accesoDenegado()).toBeTruthy();
+    await waitFor(() => expect(accesoDenegado()).toBeTruthy());
     expect(screen.queryByLabelText(/dni o email/i)).toBeNull();
   });
 
   describe('manifest del panel', () => {
-    it('el panel usa su propio manifest', () => {
-      abrir('/admin/login');
+    it('el panel usa su propio manifest', async () => {
+      await abrir('/admin/login');
 
       expect(manifestActual()).toBe('/manifest-admin.webmanifest');
     });
 
-    it('la PWA del guardia no usa el manifest del panel', () => {
-      abrir('/acceso/login');
+    it('la PWA del guardia no usa el manifest del panel', async () => {
+      await abrir('/acceso/login');
 
       expect(manifestActual()).not.toBe('/manifest-admin.webmanifest');
     });

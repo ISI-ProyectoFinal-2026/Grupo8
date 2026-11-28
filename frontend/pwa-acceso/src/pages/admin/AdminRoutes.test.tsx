@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto';
+
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
 import { AuthProvider, TOKEN_KEY } from '@/context/AuthContext';
+import { db } from '@/db/db';
+import { dbService } from '@/services/dbService';
 import AdminRoutes from './AdminRoutes';
 
 // ControlAcceso arrastra Dexie/IndexedDB, jose y html5-qrcode; no es parte
@@ -59,7 +63,8 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
     // prueba la navegación: los pedidos quedan pendientes y nunca salen al backend real
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
   });
-  afterEach(() => {
+  afterEach(async () => {
+    await db.configuracion.clear();
     cleanup();
     vi.unstubAllGlobals();
     localStorage.clear();
@@ -161,13 +166,15 @@ describe('Shell del panel de administración (Issue 15.1)', () => {
 
     it.each(['CLIENTE', 'SEGURIDAD'])(
       'el rol %s no accede al panel y ve "Acceso denegado"',
-      (rol) => {
-        localStorage.setItem(TOKEN_KEY, crearToken(rol));
+      async (rol) => {
+        // El guardia guarda su sesión en IndexedDB (28.2); los demás roles, en localStorage
+        if (rol === 'SEGURIDAD') await dbService.guardarSesion(crearToken(rol), rol);
+        else localStorage.setItem(TOKEN_KEY, crearToken(rol));
 
         renderizarEn('/admin/alertas');
 
         expect(
-          screen.getByRole('heading', { level: 1, name: /acceso denegado/i })
+          await screen.findByRole('heading', { level: 1, name: /acceso denegado/i })
         ).toBeTruthy();
         expect(
           screen.queryByRole('navigation', { name: NOMBRE_NAV })
