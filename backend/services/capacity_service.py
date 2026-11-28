@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import Dict, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_
@@ -72,6 +72,35 @@ class CapacityService:
             Reserva.fecha_ingreso <= fecha_egreso,
             Reserva.fecha_egreso >= fecha_ingreso,
         ).scalar() or 0
+
+    def lugares_ocupados_por_dia(
+        self,
+        db: Session,
+        desde: date,
+        hasta: date,
+        ahora: Optional[datetime] = None,
+    ) -> Dict[date, int]:
+        """
+        Lugares ocupados en cada día del rango (ambos extremos incluidos), con una sola consulta.
+
+        Es lo mismo que llamar a lugares_ocupados(dia, dia) para cada día: usa la misma regla de
+        qué reservas ocupan lugar y el mismo solape, que cuenta el día de ingreso y el de egreso.
+        """
+        reservas = db.query(
+            Reserva.fecha_ingreso, Reserva.fecha_egreso, Reserva.cantidad_personas
+        ).filter(
+            _ocupa_lugar(ahora),
+            Reserva.fecha_ingreso <= hasta,
+            Reserva.fecha_egreso >= desde,
+        ).all()
+
+        ocupados: Dict[date, int] = {}
+        for numero in range((hasta - desde).days + 1):
+            dia = desde + timedelta(days=numero)
+            ocupados[dia] = sum(
+                personas for ingreso, egreso, personas in reservas if ingreso <= dia <= egreso
+            )
+        return ocupados
 
     def unidades_ocupadas(
         self,

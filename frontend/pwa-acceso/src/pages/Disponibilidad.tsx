@@ -31,7 +31,7 @@ function contarNoches(ingreso: string, egreso: string): number {
 }
 
 // Resumen de lo elegido en el inicio, con el precio del tipo que vino del backend.
-// No hay consulta de disponibilidad: el cupo y las unidades se confirman al crear la reserva.
+// El cupo de los días se ve en el inicio (lib/disponibilidad); el cupo y las unidades se confirman al crear la reserva.
 export default function Disponibilidad() {
   const location = useLocation();
   const navigate = useNavigate();
