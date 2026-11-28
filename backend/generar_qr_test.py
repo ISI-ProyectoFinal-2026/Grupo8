@@ -23,7 +23,8 @@ def generar_qr_prueba():
         "cantidad_personas": 4,
         "typ": "visitante",
         "exp": fecha_actual + (60 * 60 * 24),
-        "dat": "2026-07-30" 
+        "dat": "2026-07-30",
+        "egr": "2026-07-30",
     }
     
     try:

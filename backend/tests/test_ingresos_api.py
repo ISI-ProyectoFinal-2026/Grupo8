@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from main import app
 from core.database import SessionLocal, engine, Base
+from core.tiempo import hoy_negocio
 from models.user import User
 from models.reserva import Reserva, EstadoPagoEnum, EstadoReservaEnum
 from services.camping_service import obtener_o_crear_camping
@@ -65,12 +66,13 @@ def _crear_reserva_de_prueba() -> str:
         db.refresh(usuario)
 
         camping = obtener_o_crear_camping(db)
-        manana = (datetime.now(timezone.utc) + timedelta(days=1)).date()
+        # Estos tests escanean ahora: la reserva tiene que incluir el día de hoy (28.1)
+        hoy = hoy_negocio()
         reserva = Reserva(
             user_id=usuario.id,
             camping_id=camping.camping_id,
-            fecha_ingreso=manana,
-            fecha_egreso=manana,
+            fecha_ingreso=hoy,
+            fecha_egreso=hoy,
             cantidad_personas=2,
             monto_total=10000.0,
             titular=usuario.nombre,

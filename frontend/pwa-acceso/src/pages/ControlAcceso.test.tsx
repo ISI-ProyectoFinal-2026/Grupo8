@@ -9,7 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db';
 import { dbService } from '../services/dbService';
 import type { IJwtPayload } from '../types/security';
-import { verifyQRToken } from '../utils/security';
+import { verificarQR } from '../utils/security';
+import { diaEnArgentina } from '../utils/vigenciaQR';
 import ControlAcceso from './ControlAcceso';
 
 // La pantalla vive dentro del router de la app
@@ -24,7 +25,7 @@ vi.mock('../components/ScannerQR', () => ({
   ),
 }));
 // La firma del QR se prueba en accessValidationService; acá interesa qué pasa después
-vi.mock('../utils/security', () => ({ verifyQRToken: vi.fn() }));
+vi.mock('../utils/security', () => ({ verificarQR: vi.fn() }));
 
 const bootstrapCon = (capacidad: number) => ({
   ok: true,
@@ -131,7 +132,9 @@ const payloadDe = (reservaId: string): IJwtPayload => ({
   exp: 0,
   cantidad_personas: 2,
   typ: 'visitante',
-  dat: '2026-11-09',
+  // Estadía de un día que incluye hoy: la 28.1 rechaza los QR que no sirven para el día del escaneo
+  dat: diaEnArgentina(),
+  egr: diaEnArgentina(),
 });
 
 const bootstrapConBlacklist = (blacklist: string[]) => ({
@@ -146,7 +149,7 @@ const bootstrapConBlacklist = (blacklist: string[]) => ({
 });
 
 async function escanear(reservaId: string) {
-  vi.mocked(verifyQRToken).mockResolvedValue(payloadDe(reservaId));
+  vi.mocked(verificarQR).mockResolvedValue({ ok: true, payload: payloadDe(reservaId) });
   fireEvent.click(await screen.findByRole('button', { name: /Escanear QR/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Leer código de prueba' }));
 }
@@ -260,7 +263,7 @@ describe('ControlAcceso — foco al abrir y cerrar el escáner (27.4)', () => {
   });
 
   it('al abrir el escáner el foco va a la indicación, y al leer un código vuelve a "Escanear QR"', async () => {
-    vi.mocked(verifyQRToken).mockResolvedValue(null);
+    vi.mocked(verificarQR).mockResolvedValue({ ok: false, motivo: 'FIRMA_INVALIDA' });
     renderizar(<ControlAcceso />);
 
     fireEvent.click(await screen.findByRole('button', { name: /Escanear QR/ }));
@@ -286,5 +289,89 @@ describe('ControlAcceso — foco al abrir y cerrar el escáner (27.4)', () => {
     await waitFor(() =>
       expect(document.activeElement).toBe(screen.getByRole('button', { name: /Escanear QR/ }))
     );
+  });
+});
+
+describe('ControlAcceso — QR fuera de fecha, aun sin internet (Issue 28.1)', () => {
+  // Estadía del 27 al 29/11/2026. Se simula solo Date: Dexie y fake-indexeddb necesitan los timers reales
+  const ESTADIA = { dat: '2026-11-27', egr: '2026-11-29' };
+  const MENSAJE = 'Este QR no es válido para hoy';
+
+  beforeEach(async () => {
+    await db.configuracion.clear();
+    await db.ingresos_pendientes.clear();
+    await db.historial.clear();
+    await db.blacklist.clear();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.stubGlobal('fetch', sinRed()); // sin internet
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    await db.configuracion.clear();
+    await db.ingresos_pendientes.clear();
+    await db.historial.clear();
+    await db.blacklist.clear();
+  });
+
+  async function escanearEn(momento: string, qr: Awaited<ReturnType<typeof verificarQR>>) {
+    vi.setSystemTime(new Date(momento));
+    vi.mocked(verificarQR).mockResolvedValue(qr);
+    renderizar(<ControlAcceso />);
+    fireEvent.click(await screen.findByRole('button', { name: /Escanear QR/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Leer código de prueba' }));
+  }
+  const qrDeLaEstadia = (): Awaited<ReturnType<typeof verificarQR>> => ({
+    ok: true,
+    payload: { ...payloadDe('1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d'), ...ESTADIA },
+  });
+
+  // Las horas son de Buenos Aires (-03:00)
+  it.each([
+    ['día anterior', '2026-11-26T23:59:59-03:00'],
+    ['día posterior', '2026-11-30T00:00:00-03:00'],
+    ['día anterior a las 22:30 (en UTC ya es el 27/11)', '2026-11-26T22:30:00-03:00'],
+  ])('%s: muestra el mensaje y no guarda nada', async (_nombre, momento) => {
+    await escanearEn(momento, qrDeLaEstadia());
+
+    expect((await screen.findByRole('alert')).textContent).toContain(MENSAJE);
+    expect(screen.queryByText(/INGRESO CONFIRMADO/)).toBeNull();
+    // Ni en la cola de sincronización ni en el historial del guardia
+    expect(await db.ingresos_pendientes.count()).toBe(0);
+    expect(await db.historial.count()).toBe(0);
+    expect(await dbService.obtenerOcupacion()).toBe(0);
+  });
+
+  it.each([
+    ['primer día', '2026-11-27T00:00:00-03:00'],
+    ['último día', '2026-11-29T23:59:59-03:00'],
+    ['último día a las 22:30 (en UTC ya es el 30/11)', '2026-11-29T22:30:00-03:00'],
+  ])('%s: acepta el ingreso y lo deja para sincronizar', async (_nombre, momento) => {
+    await escanearEn(momento, qrDeLaEstadia());
+
+    expect(await screen.findByText(/INGRESO CONFIRMADO/)).toBeTruthy();
+    expect(screen.queryByText(MENSAJE)).toBeNull();
+    expect(await db.ingresos_pendientes.count()).toBe(1);
+    expect(await db.historial.count()).toBe(1);
+  });
+
+  it('un QR auténtico pero vencido (exp ya pasó) muestra el mismo mensaje y no guarda nada', async () => {
+    await escanearEn('2026-12-05T12:00:00-03:00', { ok: false, motivo: 'VENCIDO' });
+
+    expect((await screen.findByRole('alert')).textContent).toContain(MENSAJE);
+    expect(await db.ingresos_pendientes.count()).toBe(0);
+    expect(await db.historial.count()).toBe(0);
+  });
+
+  it('un QR falso sigue mostrando "Código QR inválido", no el mensaje de fecha', async () => {
+    await escanearEn('2026-11-28T12:00:00-03:00', { ok: false, motivo: 'FIRMA_INVALIDA' });
+
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toContain('Código QR inválido');
+    expect(alerta.textContent).not.toContain(MENSAJE);
   });
 });

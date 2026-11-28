@@ -20,7 +20,7 @@ from models.user import RoleEnum, User
 from services.payment_service import payment_service
 from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import inspect
-from core.tiempo import ZONA_NEGOCIO
+from core.tiempo import ZONA_NEGOCIO, hoy_negocio
 
 Base.metadata.create_all(bind=engine)
 
@@ -83,7 +83,15 @@ def crear_reserva(camping_de_prueba: str) -> Iterator[Callable[..., str]]:
     """Factory: crea usuario + reserva confirmada y pagada, y los borra al terminar el test."""
     creados: List[Tuple[uuid.UUID, uuid.UUID]] = []
 
-    def _crear(titular: str = "Titular Prueba") -> str:
+    def _crear(
+        titular: str = "Titular Prueba",
+        ingreso: Optional[date] = None,
+        egreso: Optional[date] = None,
+    ) -> str:
+        # Por defecto la estadía va de ayer a mañana: incluye cualquier escaneo "de hoy", aun uno
+        # de hace unas horas que cae en el día anterior de Buenos Aires (28.1 rechaza el resto)
+        ingreso = ingreso or hoy_negocio() - timedelta(days=1)
+        egreso = egreso or hoy_negocio() + timedelta(days=1)
         db = SessionLocal()
         try:
             usuario = User(
@@ -99,8 +107,8 @@ def crear_reserva(camping_de_prueba: str) -> Iterator[Callable[..., str]]:
             reserva = Reserva(
                 user_id=usuario.id,
                 camping_id=camping_de_prueba,
-                fecha_ingreso=date(2099, 12, 20),
-                fecha_egreso=date(2099, 12, 22),
+                fecha_ingreso=ingreso,
+                fecha_egreso=egreso,
                 cantidad_personas=2,
                 monto_total=10000.0,
                 titular=titular,
@@ -603,7 +611,7 @@ def test_un_escaneo_de_hace_3_horas_conserva_su_hora_original(tokens, crear_rese
     ],
 )
 def test_el_mismo_instante_se_guarda_igual_sin_importar_como_llegue(fecha_enviada, tokens, crear_reserva):
-    item = _item_qr(crear_reserva())
+    item = _item_qr(crear_reserva(ingreso=date(2026, 10, 25), egreso=date(2026, 10, 25)))
     item["fecha_escaneo"] = fecha_enviada
 
     _sincronizar(tokens, [item])

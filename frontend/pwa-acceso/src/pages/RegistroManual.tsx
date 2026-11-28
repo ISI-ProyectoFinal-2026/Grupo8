@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useConexion } from '@/hooks/useConexion';
+import { validarAccesoQR } from '@/services/accessValidationService';
+import { MENSAJE_QR_FUERA_DE_FECHA } from '@/utils/vigenciaQR';
 import { dbService } from '@/services/dbService';
 
 /** Lo que muestra la confirmación (pantalla 4 del documento). */
@@ -15,16 +17,22 @@ interface IngresoRegistrado {
   monto: number;
 }
 
+const TIPO_ESPONTANEO = 'Espontaneo';
+const TIPO_CON_RESERVA = 'Manual con Reserva';
+
 const FORMULARIO_VACIO = {
   dni: '',
   nombre: '',
   acompanantes: 0,
-  tipo: 'Espontaneo',
+  tipo: TIPO_ESPONTANEO,
+  codigo: '', // texto del QR de la reserva; solo se pide en "Manual con Reserva"
   monto: '',
 };
 
 /**
  * Registro manual de la app del guardia (/acceso/manual), con cobro en efectivo.
+ * Con "Manual con Reserva" se pide el código del QR: se verifica con la clave pública del
+ * dispositivo (sirve sin conexión) y el ingreso queda vinculado a esa reserva (29.1).
  * Tiene dos vistas en el mismo componente: el formulario y, al guardar, la confirmación
  * con el ID local. No es otra ruta a propósito: si se recarga o se vuelve atrás, aparece
  * el formulario vacío y no una confirmación de un ingreso que ya quedó guardado.
@@ -48,6 +56,7 @@ export default function RegistroManual() {
   }, []);
   const campingLleno =
     cupo?.capacidad != null && cupo.ocupacion >= cupo.capacidad;
+  const conReserva = form.tipo === TIPO_CON_RESERVA;
 
   // Al cambiar de vista, el foco va al título de la confirmación: el lector la anuncia
   // y el foco no queda perdido en el botón "Guardar ingreso", que ya no existe
@@ -74,21 +83,64 @@ export default function RegistroManual() {
       return;
     }
 
+    if (conReserva && !form.codigo.trim()) {
+      setError('Ingresá el código de la reserva (el texto del QR).');
+      return;
+    }
+
     setGuardando(true);
     try {
-      const idLocal = await dbService.registrarIngresoManual(
-        form.dni.trim(),
-        form.nombre.trim(),
-        form.acompanantes,
-        form.tipo,
-        monto
-      );
-      setRegistrado({ idLocal, personas: form.acompanantes + 1, monto });
+      let idLocal: string;
+      let personas = form.acompanantes + 1;
+
+      if (conReserva) {
+        // El código se verifica contra la firma y la lista de cancelaciones guardadas en el dispositivo
+        const validacion = await validarAccesoQR(form.codigo.trim());
+        if (validacion.status === 'INVALID_TOKEN') {
+          setError(
+            'Código inválido: no corresponde a ninguna reserva, fue modificado o está vencido.'
+          );
+          return;
+        }
+        if (validacion.status === 'FUERA_DE_FECHA') {
+          setError(MENSAJE_QR_FUERA_DE_FECHA);
+          return;
+        }
+        if (validacion.status === 'REVOKED') {
+          setError('Reserva cancelada: no se puede registrar el ingreso.');
+          return;
+        }
+        idLocal = await dbService.registrarIngresoManualConReserva(
+          form.dni.trim(),
+          form.nombre.trim(),
+          validacion.payload,
+          monto
+        );
+        // La cantidad de personas la define la reserva
+        personas = validacion.payload.cantidad_personas;
+      } else {
+        idLocal = await dbService.registrarIngresoManual(
+          form.dni.trim(),
+          form.nombre.trim(),
+          form.acompanantes,
+          form.tipo,
+          monto
+        );
+      }
+
+      setRegistrado({ idLocal, personas, monto });
       setForm(FORMULARIO_VACIO);
     } catch (e) {
-      setError(
-        `No se pudo registrar el ingreso: ${e instanceof Error ? e.message : String(e)}`
-      );
+      const mensaje = e instanceof Error ? e.message : String(e);
+      // El mismo QR (jti) o la misma reserva ya registrados en este dispositivo
+      if (
+        mensaje.startsWith('QR_DUPLICADO') ||
+        mensaje.startsWith('RESERVA_YA_INGRESADA')
+      ) {
+        setError('Esta reserva ya ingresó: el código ya fue registrado.');
+      } else {
+        setError(`No se pudo registrar el ingreso: ${mensaje}`);
+      }
     } finally {
       setGuardando(false);
     }
@@ -196,25 +248,28 @@ export default function RegistroManual() {
             required
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="manual-acompanantes" className="text-base">
-              Acompañantes
-            </Label>
-            <Input
-              id="manual-acompanantes"
-              type="number"
-              min="0"
-              value={form.acompanantes}
-              onChange={(e) =>
-                cambiar(
-                  'acompanantes',
-                  Math.max(0, parseInt(e.target.value, 10) || 0)
-                )
-              }
-              className="h-12 text-base"
-            />
-          </div>
+        <div className={conReserva ? 'grid gap-3' : 'grid grid-cols-2 gap-3'}>
+          {/* Con reserva, la cantidad de personas viene en el QR */}
+          {!conReserva && (
+            <div className="space-y-2">
+              <Label htmlFor="manual-acompanantes" className="text-base">
+                Acompañantes
+              </Label>
+              <Input
+                id="manual-acompanantes"
+                type="number"
+                min="0"
+                value={form.acompanantes}
+                onChange={(e) =>
+                  cambiar(
+                    'acompanantes',
+                    Math.max(0, parseInt(e.target.value, 10) || 0)
+                  )
+                }
+                className="h-12 text-base"
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="manual-tipo" className="text-base">
               Tipo de Ingreso
@@ -225,11 +280,37 @@ export default function RegistroManual() {
               onChange={(e) => cambiar('tipo', e.target.value)}
               className="flex h-12 w-full rounded-xl border border-input bg-white px-3 text-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <option value="Espontaneo">Espontáneo (Sin reserva)</option>
-              <option value="Manual con Reserva">Manual con Reserva</option>
+              <option value={TIPO_ESPONTANEO}>Espontáneo (Sin reserva)</option>
+              <option value={TIPO_CON_RESERVA}>Manual con Reserva</option>
             </select>
           </div>
         </div>
+        {conReserva && (
+          <div className="space-y-2">
+            <Label htmlFor="manual-codigo" className="text-base">
+              Código de la reserva (QR)
+            </Label>
+            <Input
+              id="manual-codigo"
+              type="text"
+              value={form.codigo}
+              onChange={(e) => cambiar('codigo', e.target.value)}
+              aria-describedby="ayuda-codigo-reserva"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="h-12 text-base"
+              required
+            />
+            <p
+              id="ayuda-codigo-reserva"
+              className="text-sm text-muted-foreground"
+            >
+              Pegá o escribí el texto del QR que tiene el visitante. Se verifica
+              en este dispositivo, aun sin Internet.
+            </p>
+          </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor="manual-monto" className="text-base">
             Monto cobrado en efectivo ($)

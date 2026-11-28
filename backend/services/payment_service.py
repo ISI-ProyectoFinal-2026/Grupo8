@@ -238,6 +238,7 @@ def generar_token_qr(reserva: Reserva) -> str:
         typ=tipo_qr(reserva),
         exp=int(vencimiento.timestamp()),
         dat=reserva.fecha_ingreso.isoformat(),
+        egr=reserva.fecha_egreso.isoformat(),
     )
     return SecurityService().generate_offline_qr_token(payload)
 

@@ -31,6 +31,13 @@ def a_zona_negocio(valor: datetime) -> datetime:
         valor = valor.replace(tzinfo=timezone.utc)
     return valor.astimezone(ZONA_NEGOCIO)
 
+def dia_negocio(instante: datetime) -> date:
+    """El día de Buenos Aires al que pertenece un instante.
+    Ej: 2026-11-27 01:30 UTC es el 26 a las 22:30 en Argentina, así que devuelve el 26.
+    Es lo que hay que comparar con las fechas de una reserva; la fecha UTC no sirve desde las 21:00."""
+    return a_zona_negocio(instante).date()
+
+
 def hoy_negocio() -> date:
     """El día de hoy en Buenos Aires (en UTC ya puede ser mañana desde las 21:00)."""
     return ahora_utc().astimezone(ZONA_NEGOCIO).date()

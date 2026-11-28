@@ -112,7 +112,8 @@ def run_seed_con_qrs():
             "cantidad_personas": reserva.cantidad_personas,
             "typ": "visitante",
             "exp": fecha_actual + (60 * 60 * 24),  # vence en 24 horas
-            "dat": reserva.fecha_ingreso.strftime("%Y-%m-%d") 
+            "dat": reserva.fecha_ingreso.strftime("%Y-%m-%d"),
+            "egr": reserva.fecha_egreso.strftime("%Y-%m-%d"),
         }
         
         try:
