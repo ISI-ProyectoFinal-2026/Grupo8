@@ -47,6 +47,11 @@ export interface ReservaAdmin {
   fecha_egreso: string; // AAAA-MM-DD
   cantidad_personas: number;
   monto_total: number;
+  // Cuánto se descontó en total, calculado por el backend (0 si no hubo descuento)
+  descuento_total?: number;
+  // Cabaña reservada con el DNI de un socio: ese DNI y el porcentaje de descuento que se aplicó
+  dni_titular?: string | null;
+  descuento_pct?: number | null;
   estado_reserva: EstadoReserva;
   estado_pago: EstadoPago;
   // Vacío en las reservas por unidad, que solo guardan el titular

@@ -18,6 +18,7 @@ from services.capacity_service import CapacityService
 # tests no dependan del día en que se ejecutan
 INGRESO = hoy_argentina() + timedelta(days=30)
 EGRESO = INGRESO + timedelta(days=2)
+NOCHES = (EGRESO - INGRESO).days  # cada persona paga el precio por las noches
 
 Base.metadata.create_all(bind=engine)
 
@@ -155,7 +156,7 @@ def test_crear_reserva_guarda_los_datos_normalizados(reservas_creadas):
     assert data["telefono"] is None  # las reservas nuevas no guardan teléfono
     assert data["estado_reserva"] == EstadoReservaEnum.PENDIENTE.value
     assert data["estado_pago"] == EstadoPagoEnum.PENDIENTE.value
-    assert data["monto_total"] == pytest.approx(2 * settings.PRECIO_BASE_POR_PERSONA)
+    assert data["monto_total"] == pytest.approx(2 * NOCHES * settings.PRECIO_BASE_POR_PERSONA)
     assert data["cantidad_personas"] == 2
     assert [p["nombre"] for p in data["personas"]] == ["Ana Pérez", "Luis Pérez"]
 
@@ -189,7 +190,7 @@ def test_crear_reserva_aplica_descuento_solo_a_las_personas_socias(reservas_crea
     data = response.json()
     reservas_creadas.append(data["id"])
     base = settings.PRECIO_BASE_POR_PERSONA
-    esperado = base + base * (1 - descuentos_fijos / 100) + base
+    esperado = NOCHES * (base + base * (1 - descuentos_fijos / 100) + base)
     assert data["monto_total"] == pytest.approx(esperado)
 
 
@@ -206,7 +207,7 @@ def test_el_descuento_depende_de_la_condicion_de_cada_persona_y_no_del_usuario(r
     assert response.status_code == 201
     data = response.json()
     reservas_creadas.append(data["id"])
-    assert data["monto_total"] == pytest.approx(3 * settings.PRECIO_BASE_POR_PERSONA)
+    assert data["monto_total"] == pytest.approx(3 * NOCHES * settings.PRECIO_BASE_POR_PERSONA)
 
 
 def test_crear_reserva_con_egreso_anterior_al_ingreso_devuelve_422(reservas_creadas):

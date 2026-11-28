@@ -104,6 +104,13 @@ export default function DetalleReserva({ reservaId, onCerrar }: Props) {
               </Dato>
               <Dato etiqueta="Personas">{detalle.cantidad_personas}</Dato>
               <Dato etiqueta="Monto">{formatearMonto(detalle.monto_total)}</Dato>
+              {(detalle.descuento_total ?? 0) > 0 && (
+                <Dato etiqueta="Descuento">
+                  -{formatearMonto(detalle.descuento_total ?? 0)}
+                  {detalle.descuento_pct ? ` (${detalle.descuento_pct}%)` : ''}
+                </Dato>
+              )}
+              {detalle.dni_titular && <Dato etiqueta="DNI del titular">{detalle.dni_titular}</Dato>}
               <Dato etiqueta="Estado">
                 <span className="flex flex-wrap gap-1">
                   <Badge variant="outline">{detalle.estado_reserva}</Badge>

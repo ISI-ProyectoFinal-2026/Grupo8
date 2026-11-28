@@ -8,17 +8,19 @@ import { Separator } from "@/components/ui/separator";
 import {
   cotizarPorUnidad,
   cotizarReserva,
+  etiquetaJornadas,
   ERROR_COTIZACION_GENERICO,
   formatearMonto,
   personasParaCotizar,
   type Cotizacion,
+  type FechasCotizacion,
   type PedidoPorUnidad,
   type PersonaCotizar,
 } from "@/lib/cotizacion";
 import { obtenerUsuarioActual, type UsuarioSesion } from "@/lib/auth";
 import { atributosDeError, enfocarPrimerError } from "@/lib/errorDeCampo";
 import { formatearFecha } from "@/lib/fechas";
-import { mensajeMotivoSocio } from "@/lib/validacionSocio";
+import { mensajeMotivoSocio, mensajeMotivoSocioUnidad } from "@/lib/validacionSocio";
 import { useValidacionSocios, type Verificacion } from "@/lib/useValidacionSocios";
 import {
   limpiarNombre,
@@ -48,7 +50,7 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
 
 // Lo que se cotiza: por persona (con la edad y condición de cada una) o por unidad
 type PedidoCotizacion =
-  | { forma: "persona"; tipoId: string; personas: PersonaCotizar[] }
+  | { forma: "persona"; tipoId: string; personas: PersonaCotizar[]; fechas: FechasCotizacion }
   | { forma: "unidad"; pedido: PedidoPorUnidad };
 
 // Obtiene un mensaje legible de una respuesta de error del backend
@@ -70,7 +72,15 @@ const extraerMensajeError = async (response: Response): Promise<string> => {
 
 // Resultado de verificar el DNI de un socio contra el backend. Si es un error, usa el mismo id
 // que el error del campo, así el campo de DNI lo tiene como descripción
-const EstadoDni = ({ idCampo, verificacion }: { idCampo: string; verificacion?: Verificacion }) => {
+const EstadoDni = ({
+  idCampo,
+  verificacion,
+  mensajeMotivo = mensajeMotivoSocio,
+}: {
+  idCampo: string;
+  verificacion?: Verificacion;
+  mensajeMotivo?: typeof mensajeMotivoSocio;
+}) => {
   if (!verificacion) return null;
   switch (verificacion.estado) {
     case "verificando":
@@ -82,7 +92,7 @@ const EstadoDni = ({ idCampo, verificacion }: { idCampo: string; verificacion?: 
         </p>
       );
     case "rechazado":
-      return <ErrorDeCampo idCampo={idCampo} mensaje={mensajeMotivoSocio(verificacion.motivo)} className="mt-2" />;
+      return <ErrorDeCampo idCampo={idCampo} mensaje={mensajeMotivo(verificacion.motivo)} className="mt-2" />;
     case "error":
       return (
         <ErrorDeCampo
@@ -123,6 +133,8 @@ export default function Reservas() {
   const porUnidad = tipo?.id ? esPorUnidad(tipo) : false;
   const [titular, setTitular] = useState("");
   const [cantidadUnidad, setCantidadUnidad] = useState(String(personas ?? ""));
+  // DNI del titular de la cabaña, opcional: si es de un socio vigente se aplica el descuento de socio
+  const [dniUnidad, setDniUnidad] = useState("");
 
   const cantidadPersonas = porUnidad ? Number(cantidadUnidad) || 0 : parseInt(personas ?? "") || 1;
 
@@ -168,6 +180,8 @@ export default function Reservas() {
       )
     );
     setTitular((previo) => previo || usuario.nombre);
+    // Un socio con sesión y la cuota al día ya trae su DNI en la cabaña
+    if (vigente) setDniUnidad((previo) => previo || usuario.dni);
     setEmailContacto((previo) => previo || usuario.email);
     // El email de la cuenta no se tipea, así que no hace falta volver a confirmarlo
     setConfirmacionEmail((previo) => previo || usuario.email);
@@ -187,6 +201,15 @@ export default function Reservas() {
   const esSocioConfirmado = (v: Visitante, indice: number) =>
     v.condicion === "socio" &&
     (esTitularPrecargado(indice) || resultados[v.dni.trim()]?.estado === "ok");
+
+  // Cabaña: el descuento de socio se pide solo con el DNI del titular ya verificado como socio vigente
+  // (el de un socio con sesión ya viene validado por /auth/me). Mientras no lo esté, se cotiza sin descuento
+  const dniUnidadLimpio = dniUnidad.trim();
+  const dniUnidadDeSesion =
+    usuario !== null && usuario.is_socio && usuario.membresia_vigente && usuario.dni === dniUnidadLimpio;
+  const verificacionUnidad = porUnidad && dniUnidadLimpio ? resultados[dniUnidadLimpio] : undefined;
+  const socioUnidadConfirmado =
+    porUnidad && dniUnidadLimpio !== "" && (dniUnidadDeSesion || verificacionUnidad?.estado === "ok");
 
   // El precio lo calcula el backend: acá solo se pide la cotización cuando cambia la edad
   // o la condición de alguien. Mientras falte alguna edad no hay nada que cotizar.
@@ -210,11 +233,18 @@ export default function Reservas() {
             cantidad_personas: Number(cantidadUnidad),
             fecha_ingreso: fecha,
             fecha_egreso: fechaEgreso || fecha,
+            ...(socioUnidadConfirmado ? { dni_titular: dniUnidadLimpio } : {}),
           },
         };
       }
     } else if (personasACotizar) {
-      pedidoCotizacion = { forma: "persona", tipoId: tipo.id, personas: personasACotizar };
+      pedidoCotizacion = {
+        forma: "persona",
+        tipoId: tipo.id,
+        personas: personasACotizar,
+        // Las mismas fechas que se mandan al reservar: sin ellas el precio no incluiría las noches
+        fechas: { fecha_ingreso: fecha, fecha_egreso: fechaEgreso || fecha },
+      };
     }
   }
   const claveCotizacion = JSON.stringify(pedidoCotizacion);
@@ -232,7 +262,7 @@ export default function Reservas() {
     const pedido =
       aCotizar.forma === "unidad"
         ? cotizarPorUnidad(aCotizar.pedido, controlador.signal)
-        : cotizarReserva(aCotizar.personas, controlador.signal, aCotizar.tipoId);
+        : cotizarReserva(aCotizar.personas, controlador.signal, aCotizar.tipoId, aCotizar.fechas);
     pedido
       .then(setCotizacion)
       .catch((error: unknown) => {
@@ -276,6 +306,11 @@ export default function Reservas() {
       if (eTitular) nuevos.titular = eTitular;
       const eCantidad = validarCantidadParaTipo(cantidadUnidad, tipo);
       if (eCantidad) nuevos.cantidad = eCantidad;
+      // El DNI es opcional: sin él se reserva como visitante, pero si se escribe tiene que ser válido
+      if (dniUnidadLimpio !== "") {
+        const eDni = validarDni(dniUnidadLimpio);
+        if (eDni) nuevos["dni-titular"] = eDni;
+      }
     } else {
       const eCantidad = validarCantidadParaTipo(String(cantidadPersonas), tipo);
       if (eCantidad) nuevos.cantidad = eCantidad;
@@ -327,7 +362,10 @@ export default function Reservas() {
       // 0. ANTES DE COBRAR: cada socio tiene que tener el DNI verificado con la cuota al día.
       // El resultado queda a la vista bajo el campo de DNI correspondiente.
       const sociosAVerificar = visitantes.filter((v, i) => v.condicion === "socio" && !esTitularPrecargado(i));
-      const verificaciones = await Promise.all(sociosAVerificar.map((v) => verificar(v.dni.trim())));
+      const dnisAVerificar = sociosAVerificar.map((v) => v.dni.trim());
+      // Cabaña: si el titular puso su DNI también se verifica antes de cobrar (el de la sesión ya viene validado)
+      if (porUnidad && dniUnidadLimpio !== "" && !dniUnidadDeSesion) dnisAVerificar.push(dniUnidadLimpio);
+      const verificaciones = await Promise.all(dnisAVerificar.map((dni) => verificar(dni)));
       if (verificaciones.some((v) => v.estado !== "ok")) {
         enfocarPrimerError();
         return;
@@ -337,7 +375,12 @@ export default function Reservas() {
       // Si hay sesión mandamos el token y el backend asocia la reserva al usuario;
       // el user_id nunca viaja desde acá. El precio lo calcula el backend
       const datosSegunForma = porUnidad
-        ? { titular: titular.trim(), cantidad_personas: Number(cantidadUnidad) }
+        ? {
+            titular: titular.trim(),
+            cantidad_personas: Number(cantidadUnidad),
+            // Solo viaja un DNI ya verificado; el backend lo valida otra vez antes de descontar
+            dni_titular: dniUnidadLimpio !== "" ? dniUnidadLimpio : undefined,
+          }
         : {
             // El titular es la primera persona
             personas: visitantes.map((v) => ({
@@ -476,6 +519,37 @@ export default function Reservas() {
                     onChange={(e) => setCantidadUnidad(soloDigitos(e.target.value))}
                   />
                   <ErrorDeCampo idCampo="cantidad-personas" mensaje={errores.cantidad} />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="dni-titular">DNI del titular si es socio (opcional)</Label>
+                  <Input
+                    id="dni-titular"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={8}
+                    value={dniUnidad}
+                    {...atributosDeError(
+                      "dni-titular",
+                      Boolean(errores["dni-titular"]) ||
+                        verificacionUnidad?.estado === "rechazado" ||
+                        verificacionUnidad?.estado === "error"
+                    )}
+                    onChange={(e) => {
+                      const dni = soloDigitos(e.target.value);
+                      setDniUnidad(dni);
+                      // Con 8 dígitos el DNI está completo; los de 7 se verifican al salir del campo
+                      if (dni.length === 8) verificarDni(dni);
+                    }}
+                    onBlur={() => verificarDni(dniUnidad)}
+                  />
+                  <ErrorDeCampo idCampo="dni-titular" mensaje={errores["dni-titular"]} />
+                  {!errores["dni-titular"] && !dniUnidadDeSesion && (
+                    <EstadoDni
+                      idCampo="dni-titular"
+                      verificacion={verificacionUnidad}
+                      mensajeMotivo={mensajeMotivoSocioUnidad}
+                    />
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -618,7 +692,9 @@ export default function Reservas() {
                     ? cotizacion?.noches
                       ? `${formatearMonto(cotizacion.precio_unitario ?? tipo.precio)} × ${cotizacion.noches} ${cotizacion.noches === 1 ? "noche" : "noches"}`
                       : "Subtotal"
-                    : `Subtotal (${cantidadPersonas} pers.)`}
+                    : cotizacion?.jornadas
+                      ? `${formatearMonto(cotizacion.precio_unitario ?? tipo.precio)} × ${cantidadPersonas} ${cantidadPersonas === 1 ? "persona" : "personas"} × ${etiquetaJornadas(cotizacion.jornadas, fecha === (fechaEgreso || fecha))}`
+                      : `Subtotal (${cantidadPersonas} pers.)`}
                 </span>
                 <span>{cotizacion ? formatearMonto(cotizacion.subtotal) : "—"}</span>
               </div>
@@ -626,7 +702,11 @@ export default function Reservas() {
 
               {cotizacion && cotizacion.descuento_total > 0 && (
                 <div className="flex justify-between text-bosque-600 font-medium">
-                  <span>Descuentos</span>
+                  <span>
+                    {porUnidad
+                      ? `Descuento de socio${cotizacion.descuento_pct ? ` (${cotizacion.descuento_pct}%)` : ""}`
+                      : "Descuentos"}
+                  </span>
                   <span>-{formatearMonto(cotizacion.descuento_total)}</span>
                 </div>
               )}

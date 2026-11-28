@@ -153,6 +153,18 @@ describe('Mis reservas', () => {
     await waitFor(() => expect(screen.getByText(/2 personas \(1 socio\)/)).toBeTruthy());
   });
 
+  it('muestra el descuento de la reserva solo si lo tiene', async () => {
+    localStorage.setItem(TOKEN_KEY, crearToken());
+    const conDescuento = reserva({ id: 'descuent-0000', monto_total: 60000, descuento_total: 15000 });
+    vi.stubGlobal('fetch', vi.fn(async () => respuesta(200, [conDescuento, PENDIENTE])));
+
+    mostrar();
+
+    await waitFor(() => expect(screen.getByText(/\$60\.000/)).toBeTruthy());
+    expect(screen.getAllByText(/Descuento:/)).toHaveLength(1);
+    expect(screen.getByText('Descuento: -$15.000')).toBeTruthy();
+  });
+
   it('si falla la carga avisa y permite reintentar', async () => {
     localStorage.setItem(TOKEN_KEY, crearToken());
     const fetchFalso = vi

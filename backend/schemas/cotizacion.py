@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.reserva import CondicionPersonaEnum
 from models.tipo_reserva import FormaCobroEnum
-from schemas.reserva import EDAD_MAXIMA
+from schemas.reserva import EDAD_MAXIMA, DniOpcional
 
 
 class PersonaCotizar(BaseModel):
@@ -22,10 +22,13 @@ class CotizarRequest(BaseModel):
     tipo_reserva_id: Optional[UUID] = None
     # Por persona (o sin tipo)
     personas: Optional[List[PersonaCotizar]] = None
-    # Por unidad: cuántas personas van y las fechas, porque se cobra por noche
+    # Por unidad: cuántas personas van, y las fechas porque se cobra por noche. Por persona las fechas
+    # también cuentan (precio × personas × noches); sin ellas se cotiza una jornada
     cantidad_personas: Optional[int] = Field(default=None, strict=True, ge=1)
     fecha_ingreso: Optional[date] = None
     fecha_egreso: Optional[date] = None
+    # Por unidad (cabaña): DNI del titular si reserva como socio. Si valida, se descuenta
+    dni_titular: DniOpcional = None
 
     @field_validator("personas")
     @classmethod
@@ -39,6 +42,8 @@ class CotizarRequest(BaseModel):
     def validar_datos_segun_forma(self):
         if self.personas is not None and self.cantidad_personas is not None:
             raise ValueError("Enviá las personas o la cantidad de personas, pero no las dos cosas.")
+        if self.personas is not None and self.dni_titular is not None:
+            raise ValueError("El DNI del titular es solo para reservas por unidad.")
         if self.tipo_reserva_id is None and self.personas is None:
             raise ValueError("Debe haber al menos 1 persona en la reserva.")
         return self
@@ -66,3 +71,7 @@ class CotizarResponse(BaseModel):
     forma_cobro: Optional[FormaCobroEnum] = None
     precio_unitario: Optional[float] = None
     noches: Optional[int] = None
+    # Solo por unidad: porcentaje de descuento de socio aplicado (nulo si el titular no es socio)
+    descuento_pct: Optional[float] = None
+    # Solo por persona: las noches que se cobraron a cada una (0 noches, visita por el día, cuenta 1)
+    jornadas: Optional[int] = None

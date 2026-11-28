@@ -1,11 +1,14 @@
 import enum
 import re
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Annotated, List, Optional
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator, model_validator
+from pydantic import (
+    AfterValidator, BaseModel, BeforeValidator, ConfigDict, EmailStr, Field, computed_field,
+    field_validator, model_validator,
+)
 
 from core.config import settings
 from models.reserva import CondicionPersonaEnum, EstadoPagoEnum, EstadoReservaEnum
@@ -19,6 +22,25 @@ NOMBRE_REGEX = re.compile(r"^[^\W\d_]+(?:[ .'’\-]+[^\W\d_]+)*\.?$")
 DNI_REGEX = re.compile(r"^\d{7,8}$")
 
 EDAD_MAXIMA = 120
+
+
+def _dni_en_blanco_a_none(valor):
+    # Un DNI vacío se trata como si no se hubiera enviado
+    if isinstance(valor, str) and not valor.strip():
+        return None
+    return valor
+
+
+def _validar_formato_dni(valor: Optional[str]) -> Optional[str]:
+    if valor is not None and not DNI_REGEX.match(valor):
+        raise ValueError("El DNI debe tener 7 u 8 dígitos, sin puntos.")
+    return valor
+
+
+# DNI opcional con las mismas reglas que el de cada persona: en blanco es None y si viene, 7 u 8 dígitos
+DniOpcional = Annotated[
+    Optional[str], BeforeValidator(_dni_en_blanco_a_none), AfterValidator(_validar_formato_dni)
+]
 
 
 def hoy_argentina() -> date:
@@ -99,6 +121,8 @@ class ReservaCreate(BaseModel):
     # Reserva por unidad (cabaña): solo el titular y cuántas personas van
     titular: Optional[str] = None
     cantidad_personas: Optional[int] = Field(default=None, strict=True, ge=1)
+    # Reserva por unidad: DNI del titular si reserva como socio. El backend lo valida y aplica el descuento
+    dni_titular: DniOpcional = None
     # EmailStr usa email-validator (sin chequeo DNS por defecto)
     email: EmailStr
 
@@ -141,7 +165,9 @@ class ReservaCreate(BaseModel):
     def validar_datos_segun_forma(self):
         # Qué datos corresponden lo decide la forma de cobro del tipo, que se conoce en el endpoint.
         # Acá solo se controla que no se mezclen las dos formas y que sin tipo vengan las personas
-        por_unidad = self.titular is not None or self.cantidad_personas is not None
+        por_unidad = (
+            self.titular is not None or self.cantidad_personas is not None or self.dni_titular is not None
+        )
         if self.personas is not None and por_unidad:
             raise ValueError(
                 "Enviá las personas, o el titular y la cantidad de personas, pero no las dos cosas."
@@ -193,10 +219,27 @@ class ReservaResponse(BaseModel):
     # Nulos en las reservas creadas antes de los tipos de reserva
     tipo_reserva_id: Optional[UUID] = None
     precio_tipo: Optional[float] = None
+    # Solo las reservas por unidad (cabaña) hechas por un socio: su DNI y el descuento que se le aplicó
+    dni_titular: Optional[str] = None
+    descuento_pct: Optional[float] = None
     # Vacío en las reservas por unidad, que solo guardan el titular
     personas: List[PersonaOut] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def descuento_total(self) -> float:
+        """
+        Cuánto se descontó en total, calculado en el backend. Por persona es la suma de lo descontado
+        a cada una; por unidad, el precio de la unidad por las noches menos lo que se cobró.
+        """
+        if self.personas:
+            return round(sum(p.precio_base - p.precio_final for p in self.personas), 2)
+        if self.descuento_pct and self.precio_tipo is not None:
+            noches = (self.fecha_egreso - self.fecha_ingreso).days
+            return round(max(self.precio_tipo * noches - self.monto_total, 0), 2)
+        return 0.0
 
     @computed_field
     @property
